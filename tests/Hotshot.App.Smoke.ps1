@@ -5,7 +5,9 @@ param(
 
     [switch]$VerifyStartup,
 
-    [switch]$ThemeSearchOnly
+    [switch]$ThemeSearchOnly,
+
+    [switch]$SettingsControlsOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,6 +59,8 @@ public static class HotshotSmokeNative {
     public static extern uint GetDpiForWindow(IntPtr hwnd);
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetDlgItem(IntPtr hwnd, int id);
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int width, int height, uint flags);
     [StructLayout(LayoutKind.Sequential)]
@@ -178,6 +182,34 @@ function App-Control([string]$Name) {
     }
 }
 
+function Select-NamingToken([IntPtr]$Hwnd, [string]$Id, [string]$Label) {
+    $combo = Element-ById $Hwnd $Id
+    $combo.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+    $item = Wait-For {
+        $root = [System.Windows.Automation.AutomationElement]::RootElement
+        $owner = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $process.Id)
+        $name = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $Label)
+        foreach ($window in $root.FindAll([System.Windows.Automation.TreeScope]::Children, $owner)) {
+            $found = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $name)
+            if ($found) { return $found }
+        }
+    } "token with example: $Label"
+    if ($item.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsScrollItemPatternAvailableProperty)) {
+        $item.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern).ScrollIntoView()
+    }
+    $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+}
+
+function Set-Pattern([IntPtr]$Hwnd, [string]$Id, [string]$Value) {
+    $input = Element-ById $Hwnd $Id
+    $input.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Value)
+    $input.SetFocus()
+    $range = $input.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange
+    $range.MoveEndpointByRange([System.Windows.Automation.Text.TextPatternRangeEndpoint]::Start,
+        $range, [System.Windows.Automation.Text.TextPatternRangeEndpoint]::End)
+    $range.Select()
+}
+
 function Control-Key([byte]$Key) {
     try {
         [HotshotSmokeNative]::keybd_event(0x11, 0, 0, [UIntPtr]::Zero)
@@ -232,6 +264,57 @@ try {
     if ($savedSettings.general.showPreview -or $savedSettings.general.openEditorAfterCapture) { throw 'Legacy profile still opens capture windows.' }
     if (Element $settings 'Save settings') { throw 'Settings still require a manual Save button.' }
     Write-Host 'PASS adaptive settings modules, automatic persistence and legacy silent-capture migration'
+
+    if ($SettingsControlsOnly) {
+        if (Element $settings 'Captures folder' ([System.Windows.Automation.ControlType]::Edit)) {
+            throw 'Captures folder still uses an editable textbox.'
+        }
+        $browse = Element-ById $settings 'CapturesFolderPicker'
+        Click $browse
+        $picker = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Choose captures folder') } 'native folder picker'
+        # PowerShell's managed UIA exposes native picker buttons as panes without InvokePattern.
+        $cancel = Wait-For { [HotshotSmokeNative]::GetDlgItem($picker, 2) } 'native picker Cancel control'
+        if (-not [HotshotSmokeNative]::PostMessage($picker, 0x111, [IntPtr]2, $cancel)) { throw 'Could not cancel the folder picker.' }
+        Wait-For { $browse.Current.IsEnabled } 'folder picker cancellation' | Out-Null
+        if ((Read-AppJson $settingsFile).general.saveFolder -ne $output) { throw 'Canceling changed the captures folder.' }
+        Write-Host 'PASS native folder picker and cancellation without changing the saved folder'
+
+        $chosenFolder = Join-Path $output 'chosen'
+        [IO.Directory]::CreateDirectory($chosenFolder) | Out-Null
+        Click $browse
+        $picker = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Choose captures folder') } 'native folder picker selection'
+        $folder = Wait-For { Element $picker 'chosen' ([System.Windows.Automation.ControlType]::ListItem) } 'folder picker directory entry'
+        $folder.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+        [HotshotSmokeNative]::SetForegroundWindow($picker) | Out-Null
+        $commit = Wait-For { [HotshotSmokeNative]::GetDlgItem($picker, 1) } 'folder picker commit button'
+        if (-not [HotshotSmokeNative]::PostMessage($picker, 0x111, [IntPtr]1, $commit)) { throw 'Could not select the chosen folder.' }
+        Wait-For { (Read-AppJson $settingsFile).general.saveFolder -eq $chosenFolder } 'selected folder automatic save' | Out-Null
+        if ((Element-ById $settings 'CapturesFolderPath').Current.Name -ne $chosenFolder) { throw 'Selected folder is not displayed.' }
+        Write-Host 'PASS selected captures folder is displayed and saved automatically'
+
+        Select-SettingsPage $settings 'Naming'
+        $year = Get-Date -Format yyyy
+        Set-Pattern $settings 'NamingRegionPattern' 'capture_'
+        Select-NamingToken $settings 'NamingRegionTokens' "{yyyy} - Year. Example: $year"
+        Wait-For { (Read-AppJson $settingsFile).naming.screenshotPattern -eq 'capture_{yyyy}' } 'year token inserted at cursor' | Out-Null
+        if ((Element-ById $settings 'NamingRegionPreview').Current.Name -ne "Example: capture_$year.png") {
+            throw 'Screenshot preview does not match the inserted token example.'
+        }
+        Set-Pattern $settings 'NamingRegionPattern' 'capture_{yyyy}_'
+        Select-NamingToken $settings 'NamingRegionTokens' '{counter:4} - Incrementing number, 4 digits. Example: 0042'
+        Wait-For { (Read-AppJson $settingsFile).naming.screenshotPattern -eq 'capture_{yyyy}_{counter:4}' } 'padded counter insertion' | Out-Null
+        if ((Element-ById $settings 'NamingRegionPreview').Current.Name -ne "Example: capture_$($year)_0042.png") {
+            throw 'Padded counter preview does not match its dropdown example.'
+        }
+        Set-Pattern $settings 'NamingRecordingPattern' 'video_'
+        Select-NamingToken $settings 'NamingRecordingTokens' '{type} - Capture type. Example: recording'
+        Wait-For { (Read-AppJson $settingsFile).naming.recordingPattern -eq 'video_{type}' } 'recording type token insertion' | Out-Null
+        if ((Element-ById $settings 'NamingRecordingPreview').Current.Name -ne 'Example: video_recording.mp4') {
+            throw 'Recording token preview has the wrong capture type or extension.'
+        }
+        Write-Host 'PASS token dropdown examples, cursor insertion, padded counters and capture-specific filename previews'
+        return
+    }
 
     if ($ThemeSearchOnly) {
         $search = Wait-For { Element-ById $settings 'SettingsSearch' } 'title bar settings search'
@@ -445,6 +528,9 @@ try {
         }
     }
     Write-Host 'PASS native history and GIF conversion with original MP4 preserved'
+} catch {
+    Write-Host $_.ScriptStackTrace
+    throw
 } finally {
     $shutdownFailed = $false
     if ($process -and -not $process.HasExited) {

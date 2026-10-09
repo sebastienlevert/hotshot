@@ -43,7 +43,7 @@ Use **Convert to GIF** on an MP4 in history, enable automatic GIF creation, or b
 
 ## Output naming
 
-The default captures folder is `Pictures\Hotshot`. The default pattern, `{yyyy}\{MM}\{timestamp}`, produces paths such as `2026\10\2026-10-09_09-15-30.png`. Configure separate screenshot and recording/GIF patterns, with a live preview and token list, under **File naming**.
+The default captures folder is `Pictures\Hotshot`; change it using the native folder picker under **General > Captures folder**. Canceling leaves the current folder unchanged. The default pattern, `{yyyy}\{MM}\{timestamp}`, produces paths such as `2026\10\2026-10-09_09-15-30.png`. Configure separate screenshot and recording/GIF patterns under **File naming**, with a live preview and token dropdowns showing example results. Choosing a token inserts it at the cursor or replaces the selected text.
 
 Supported tokens include date/time (`{yyyy}`, `{MM}`, `{dd}`, `{HH}`, `{mm}`, `{ss}`, `{fff}`, `{timestamp}`, `{date}`, `{time}`, `{unix}`, `{now:yyyyMMdd}`), context (`{type}`, `{app}`, `{title}`, `{monitor}`, `{width}`, `{height}`), and identifiers (`{counter:4}`, `{rand:8}`, `{guid}`, `{computer}`, `{user}`). Separators create folders, extensions are automatic, invalid filename characters are sanitized, and collisions receive numeric suffixes.
 
@@ -86,3 +86,4 @@ The update harness calls the actual static GitHub release source for both archit
 
 The app smoke test exercises native settings, global shortcuts, capture selection, filename tokens, recording controls, history and GIF conversion. It temporarily replaces and then restores settings/history, captures the real desktop locally into its own temporary directory, and changes the clipboard. Close Hotshot before running it and use a desktop that is safe to capture. Use an unmanaged Debug/publish build for this smoke so automatic updates cannot restart a fixture.
 Pass `-VerifyStartup` only with a Release build to additionally exercise Start with Windows; the original Hotshot Run entry is restored afterward.
+Pass `-SettingsControlsOnly` to exercise folder selection/cancellation and filename-token dropdown examples/insertion without taking captures or changing the clipboard.

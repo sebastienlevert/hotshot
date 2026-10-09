@@ -10,6 +10,8 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Windowing;
+using Microsoft.Windows.Storage.Pickers;
+using System.Runtime.InteropServices;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace Hotshot.Views;
@@ -53,6 +55,7 @@ internal sealed class SettingsWindow : Window
     private bool _closed;
     private bool _allowClose;
     private bool _closing;
+    private bool _pickingFolder;
 
     public SettingsWindow(AppServices app, HotkeyManager hotkeys)
     {
@@ -177,7 +180,7 @@ internal sealed class SettingsWindow : Window
     }
 
     public Task SavePendingAsync() => PersistAsync();
-    public bool HasPendingChanges => _editVersion != _savedVersion || _closing;
+    public bool HasPendingChanges => _editVersion != _savedVersion || _closing || _pickingFolder;
 
     private void UpdateSearchLayout(double width)
     {
@@ -318,7 +321,7 @@ internal sealed class SettingsWindow : Window
                     Enum.GetValues<AppTheme>(), _draft.General.Theme, v => _draft.General.Theme = v);
                 Toggle(panel, "Start with Windows", "Run in the tray when you sign in.", _draft.General.StartWithWindows, v => _draft.General.StartWithWindows = v);
                 Section(panel, "Output");
-                Text(panel, "Captures folder", "The root folder for all saved screenshots and recordings.", _draft.General.SaveFolder, v => _draft.General.SaveFolder = v);
+                CapturesFolder(panel);
                 Toggle(panel, "Copy captures to clipboard", "PNG images for screenshots; files for recordings and GIFs.", _draft.General.CopyToClipboard, v => _draft.General.CopyToClipboard = v);
                 Toggle(panel, "Save captures to files", "Keep captures on disk as well as in recent history.", _draft.General.SaveToFile, v => _draft.General.SaveToFile = v);
                 Section(panel, "History and editor");
@@ -360,7 +363,9 @@ internal sealed class SettingsWindow : Window
                 Pattern(panel, "Recordings and GIFs", _draft.Naming.RecordingPattern, CaptureKind.Recording, v => _draft.Naming.RecordingPattern = v);
                 Note(panel, @"Use \ for subfolders. Extensions are automatic and collisions receive a numeric suffix.");
                 var tokens = new StackPanel { Spacing = 8 };
-                foreach (var token in FileNameTemplate.Tokens) tokens.Children.Add(UiStyles.Description($"{token.Token}  -  {token.Description}"));
+                var sample = NamingContext.Sample();
+                foreach (var token in FileNameTemplate.Tokens)
+                    tokens.Children.Add(UiStyles.Description($"{token.Token}  -  {token.Description}\nExample: {FileNameTemplate.Expand(token.Token, sample)}"));
                 panel.Children.Add(new Expander { Header = "Available tokens", Content = tokens, HorizontalAlignment = HorizontalAlignment.Stretch });
                 break;
             case SettingsPage.Recording:
@@ -501,30 +506,104 @@ internal sealed class SettingsWindow : Window
         Card(panel, title, UiStyles.Description(description), input);
     }
 
-    private TextBox Text(StackPanel panel, string title, string description, string current, Action<string> changed)
+    private void CapturesFolder(StackPanel panel)
     {
-        var input = new TextBox { Text = current, Margin = new Thickness(0, 10, 0, 0) };
-        AutomationProperties.SetName(input, title);
-        input.TextChanged += (_, _) => { changed(input.Text); Changed(); };
-        var body = new StackPanel { Spacing = 4 };
-        body.Children.Add(UiStyles.Description(description));
-        body.Children.Add(input);
-        Card(panel, title, body);
-        return input;
+        var path = UiStyles.Description(_draft.General.SaveFolder);
+        path.IsTextSelectionEnabled = true;
+        AutomationProperties.SetAutomationId(path, "CapturesFolderPath");
+        var browse = new Button { Content = "Choose folder...", HorizontalAlignment = HorizontalAlignment.Left };
+        AutomationProperties.SetName(browse, "Choose captures folder");
+        AutomationProperties.SetAutomationId(browse, "CapturesFolderPicker");
+        browse.Click += async (_, _) =>
+        {
+            if (_pickingFolder) return;
+            _pickingFolder = true;
+            browse.IsEnabled = false;
+            try
+            {
+                var picker = new FolderPicker(AppWindow.Id)
+                {
+                    Title = "Choose captures folder",
+                    CommitButtonText = "Use this folder",
+                    SuggestedStartLocation = PickerLocationId.PicturesLibrary,
+                    SuggestedFolder = _draft.General.SaveFolder,
+                };
+                var folder = await picker.PickSingleFolderAsync();
+                if (_closed || folder is null) return;
+                _draft.General.SaveFolder = folder.Path;
+                path.Text = folder.Path;
+                Changed();
+            }
+            catch (Exception ex) when (ex is COMException or UnauthorizedAccessException)
+            {
+                Log.Error("Could not select the captures folder", ex);
+                if (_closed) return;
+                _error.Title = "Could not select the captures folder";
+                _error.Message = ex.Message;
+                _error.IsOpen = true;
+            }
+            finally
+            {
+                _pickingFolder = false;
+                browse.IsEnabled = true;
+            }
+        };
+        var body = new StackPanel { Spacing = 8 };
+        body.Children.Add(UiStyles.Description("Choose the root folder for all saved screenshots and recordings."));
+        body.Children.Add(path);
+        body.Children.Add(browse);
+        Card(panel, "Captures folder", body);
     }
 
     private void Pattern(StackPanel panel, string title, string current, CaptureKind kind, Action<string> changed)
     {
+        var sample = NamingContext.Sample(kind);
+        var input = new TextBox { Text = current };
+        AutomationProperties.SetName(input, title);
+        AutomationProperties.SetAutomationId(input, $"Naming{kind}Pattern");
         var preview = UiStyles.Description(string.Empty);
+        AutomationProperties.SetAutomationId(preview, $"Naming{kind}Preview");
         void Update(string value)
         {
             changed(value);
             var invalid = FileNameTemplate.FindInvalidTokens(value);
-            preview.Text = invalid.Count == 0 ? "Example: " + FileNameTemplate.BuildRelativePath(value, NamingContext.Sample(kind))
+            preview.Text = invalid.Count == 0 ? "Example: " + FileNameTemplate.BuildRelativePath(value, sample)
                 : "Unknown tokens: " + string.Join(", ", invalid);
         }
-        Text(panel, title, "Tokens expand when the capture is saved.", current, Update);
-        panel.Children.Add(preview);
+        input.TextChanged += (_, _) => { Update(input.Text); Changed(); };
+        var tokens = new ComboBox
+        {
+            PlaceholderText = "Insert a token",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+        };
+        AutomationProperties.SetName(tokens, $"Insert token into {title}");
+        AutomationProperties.SetAutomationId(tokens, $"Naming{kind}Tokens");
+        foreach (var token in FileNameTemplate.Tokens)
+        {
+            var example = FileNameTemplate.Expand(token.Token, sample);
+            var label = new StackPanel { Spacing = 4, MaxWidth = 360 };
+            label.Children.Add(new TextBlock { Text = $"{token.Token} - {token.Description}", TextWrapping = TextWrapping.Wrap });
+            label.Children.Add(UiStyles.Description($"Example: {example}"));
+            var item = new ComboBoxItem { Content = label, Tag = token.Token };
+            AutomationProperties.SetName(item, $"{token.Token} - {token.Description}. Example: {example}");
+            tokens.Items.Add(item);
+        }
+        tokens.SelectionChanged += (_, _) =>
+        {
+            if (tokens.SelectedItem is not ComboBoxItem { Tag: string token }) return;
+            var start = input.SelectionStart;
+            input.SelectedText = token;
+            tokens.SelectedIndex = -1;
+            input.Focus(FocusState.Programmatic);
+            input.Select(start + token.Length, 0);
+        };
+        var body = new StackPanel { Spacing = 8 };
+        body.Children.Add(UiStyles.Description("Type a pattern or insert a token at the cursor. Examples show how each token expands."));
+        body.Children.Add(input);
+        body.Children.Add(tokens);
+        body.Children.Add(preview);
+        Card(panel, title, body);
         Update(current);
     }
 

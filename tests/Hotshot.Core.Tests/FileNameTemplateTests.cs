@@ -126,4 +126,25 @@ public sealed class FileNameTemplateTests
         Assert.True(FileNameTemplate.UsesCounter("x{counter:3}"));
         Assert.False(FileNameTemplate.UsesCounter("{timestamp}"));
     }
+
+    [Fact]
+    public void TokenCatalog_ContainsValidInsertableTokens()
+    {
+        Assert.All(FileNameTemplate.Tokens, token =>
+        {
+            Assert.Empty(FileNameTemplate.FindInvalidTokens(token.Token));
+            Assert.False(string.IsNullOrWhiteSpace(token.Example));
+        });
+        Assert.Equal(FileNameTemplate.Tokens.Count, FileNameTemplate.Tokens.Select(token => token.Token).Distinct().Count());
+    }
+
+    [Theory]
+    [InlineData("{now:yyyyMMdd}")]
+    [InlineData("{counter}")]
+    [InlineData("{counter:4}")]
+    public void TokenCatalog_ExamplesMatchExpansion(string token)
+    {
+        var item = Assert.Single(FileNameTemplate.Tokens, item => item.Token == token);
+        Assert.Equal(item.Example, FileNameTemplate.Expand(item.Token, Ctx(counter: 42)));
+    }
 }
