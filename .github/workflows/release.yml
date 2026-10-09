@@ -1,0 +1,120 @@
+name: Release Please and publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing tagged version to package (bootstrap or repair)
+        required: true
+        type: string
+
+concurrency:
+  group: hotshot-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.please.outputs.release_created || github.event_name == 'workflow_dispatch' }}
+      version: ${{ steps.please.outputs.version || inputs.version }}
+      tag: ${{ steps.please.outputs.tag_name || format('v{0}', inputs.version) }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: please
+        if: github.event_name == 'push'
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  package:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [win-x64, win-arm64]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ needs.release.outputs.version }}
+      RELEASE_TAG: ${{ needs.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw 'Invalid release version.'
+          }
+          if ((Get-Content version.txt -Raw).Trim() -ne $env:RELEASE_VERSION) {
+            throw 'Tag version does not match version.txt.'
+          }
+      - name: Restore pinned packaging tool
+        run: dotnet tool restore
+      - name: Download previous release for deltas
+        shell: pwsh
+        env:
+          CHANNEL: ${{ matrix.runtime }}
+        run: |
+          $previous = gh release list --repo "$env:GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect previous releases.' }
+          if ($previous.Count -gt 0 -and $previous[0].tagName -ne $env:RELEASE_TAG) {
+            dotnet tool run vpk -- download github --repoUrl "https://github.com/$env:GITHUB_REPOSITORY" --channel $env:CHANNEL --outputDir "artifacts\releases\$env:CHANNEL"
+            if ($LASTEXITCODE -ne 0) { throw 'Previous update feed could not be downloaded.' }
+          }
+      - name: Tests
+        if: matrix.runtime == 'win-x64'
+        shell: pwsh
+        run: |
+          foreach ($project in 'Core', 'Editor', 'Gif') {
+            dotnet test --project "tests\Hotshot.$project.Tests\Hotshot.$project.Tests.csproj" --output Detailed
+            if ($LASTEXITCODE -ne 0) { throw "$project tests failed." }
+          }
+      - name: Package installer, portable and update feed
+        shell: pwsh
+        run: .\build\package.ps1 -Version $env:RELEASE_VERSION -Runtime '${{ matrix.runtime }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.runtime }}
+          path: artifacts/releases/${{ matrix.runtime }}/*
+          if-no-files-found: error
+
+  publish:
+    needs: [release, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.release.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish complete release atomically
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes --title "Hotshot $RELEASE_VERSION"
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

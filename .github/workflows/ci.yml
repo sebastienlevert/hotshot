@@ -1,0 +1,41 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Validate version sources
+        shell: pwsh
+        run: |
+          $version = (Get-Content version.txt -Raw).Trim()
+          $props = [xml](Get-Content Directory.Build.props -Raw)
+          if ($props.SelectSingleNode('/Project/PropertyGroup/Version').InnerText -ne $version) {
+            throw 'version.txt and Directory.Build.props disagree.'
+          }
+      - name: Build native app
+        run: dotnet build src\Hotshot.App\Hotshot.App.csproj -c Release -p:Platform=${{ matrix.platform }} --nologo
+      - name: Unit tests
+        if: matrix.platform == 'x64'
+        shell: pwsh
+        run: |
+          foreach ($project in 'Core', 'Editor', 'Gif') {
+            dotnet test --project "tests\Hotshot.$project.Tests\Hotshot.$project.Tests.csproj" --output Detailed
+            if ($LASTEXITCODE -ne 0) { throw "$project tests failed." }
+          }

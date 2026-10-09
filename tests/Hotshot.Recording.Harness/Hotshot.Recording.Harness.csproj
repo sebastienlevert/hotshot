@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(WindowsTargetFramework)</TargetFramework>
+    <TargetPlatformMinVersion>$(WindowsMinVersion)</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>$(WindowsMinVersion)</SupportedOSPlatformVersion>
+    <RootNamespace>Hotshot.Recording.Harness</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Hotshot.Recording\Hotshot.Recording.csproj" />
+    <ProjectReference Include="..\..\src\Hotshot.Capture\Hotshot.Capture.csproj" />
+    <ProjectReference Include="..\..\src\Hotshot.Gif\Hotshot.Gif.csproj" />
+  </ItemGroup>
+
+</Project>
