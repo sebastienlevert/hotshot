@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/sebastienlevert/hotshot/compare/v0.1.1...v0.1.2) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** authenticate release feed downloads on hosted runners ([7ef6b1a](https://github.com/sebastienlevert/hotshot/commit/7ef6b1af5d196cb10ecbdeb499e37d1078a75b76))
+* use quota-free release feeds and guard every update restart ([cbc8d15](https://github.com/sebastienlevert/hotshot/commit/cbc8d15f2db77ae40b8b802ab377e51f6c85c86f))
+
 ## [0.1.1](https://github.com/sebastienlevert/hotshot/compare/v0.1.0...v0.1.1) (2026-10-09)
 
 
