@@ -83,7 +83,7 @@ internal sealed partial class AppController : IDisposable
         {
             Execute(commandLine.Command, secondInstance: false);
         }
-        else if (firstRun || PrintScreenNeedsAttention())
+        else if (firstRun || (!commandLine.Background && PrintScreenNeedsAttention()))
         {
             ShowSettings(firstRun ? SettingsPage.General : SettingsPage.Hotkeys);
         }
