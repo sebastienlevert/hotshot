@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/sebastienlevert/hotshot/compare/v0.1.2...v0.1.3) (2026-10-09)
+
+
+### Features
+
+* add themed window chrome and persistent settings search ([0f675d1](https://github.com/sebastienlevert/hotshot/commit/0f675d1f9d88cbef5d4dfb5fd067ef2f0ed1e80d))
+
 ## [0.1.2](https://github.com/sebastienlevert/hotshot/compare/v0.1.1...v0.1.2) (2026-10-09)
 
 
