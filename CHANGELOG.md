@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/sebastienlevert/hotshot/compare/v0.1.5...v0.1.6) (2026-10-09)
+
+
+### Bug Fixes
+
+* **editor:** browse captures by filename with automatic preview ([c5d9925](https://github.com/sebastienlevert/hotshot/commit/c5d9925ec1edc7e373160244dd169a8b77e7ee4d))
+
 ## [0.1.5](https://github.com/sebastienlevert/hotshot/compare/v0.1.4...v0.1.5) (2026-10-09)
 
 
