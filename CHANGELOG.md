@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/sebastienlevert/hotshot/compare/v0.1.4...v0.1.5) (2026-10-09)
+
+
+### Bug Fixes
+
+* **settings:** add folder picking and token examples ([04e5995](https://github.com/sebastienlevert/hotshot/commit/04e599513337da25cc97f1f0c7d6f28289707903))
+
 ## [0.1.4](https://github.com/sebastienlevert/hotshot/compare/v0.1.3...v0.1.4) (2026-10-09)
 
 
