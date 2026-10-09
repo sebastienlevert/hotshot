@@ -25,3 +25,16 @@ public static class UpdateChannel
         _ => throw new PlatformNotSupportedException($"Hotshot updates do not support {architecture}."),
     };
 }
+
+public static class ReleaseDownloads
+{
+    public const string RepositoryUrl = "https://github.com/sebastienlevert/hotshot";
+    public static string FeedBaseUrl => RepositoryUrl + "/releases/latest/download";
+
+    public static string PackageUrl(string version, string fileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(version);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        return $"{RepositoryUrl}/releases/download/{Uri.EscapeDataString("v" + version)}/{Uri.EscapeDataString(fileName)}";
+    }
+}

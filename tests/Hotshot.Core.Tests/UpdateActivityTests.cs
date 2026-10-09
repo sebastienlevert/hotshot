@@ -29,4 +29,19 @@ public sealed class UpdateActivityTests
     [Fact]
     public void UnsupportedArchitecturesAreExplicit() =>
         Assert.Throws<PlatformNotSupportedException>(() => UpdateChannel.ForArchitecture(Architecture.X86));
+
+    [Fact]
+    public void FeedUsesStaticLatestReleaseAndPackagesUsePinnedVersion()
+    {
+        Assert.Equal("https://github.com/sebastienlevert/hotshot/releases/latest/download", ReleaseDownloads.FeedBaseUrl);
+        Assert.Equal("https://github.com/sebastienlevert/hotshot/releases/download/v0.1.1/Hotshot-0.1.1-win-x64-full.nupkg",
+            ReleaseDownloads.PackageUrl("0.1.1", "Hotshot-0.1.1-win-x64-full.nupkg"));
+        Assert.DoesNotContain("/latest/", ReleaseDownloads.PackageUrl("0.1.1", "Hotshot-0.1.1-win-x64-full.nupkg"));
+    }
+
+    [Fact]
+    public void PackageUrlsEscapeUntrustedPathComponents()
+    {
+        Assert.EndsWith("/a%2Fb%3Ffile.nupkg", ReleaseDownloads.PackageUrl("0.1.1", "a/b?file.nupkg"));
+    }
 }

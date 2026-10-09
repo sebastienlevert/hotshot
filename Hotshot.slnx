@@ -12,5 +12,6 @@
     <Project Path="tests/Hotshot.Editor.Tests/Hotshot.Editor.Tests.csproj" />
     <Project Path="tests/Hotshot.Gif.Tests/Hotshot.Gif.Tests.csproj" />
     <Project Path="tests/Hotshot.Recording.Harness/Hotshot.Recording.Harness.csproj" />
+    <Project Path="tests/Hotshot.Updates.Harness/Hotshot.Updates.Harness.csproj" />
   </Folder>
 </Solution>

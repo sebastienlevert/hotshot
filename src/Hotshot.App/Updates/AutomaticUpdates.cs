@@ -8,7 +8,7 @@ namespace Hotshot.Updates;
 
 internal sealed class AutomaticUpdates : IDisposable
 {
-    public const string RepositoryUrl = "https://github.com/sebastienlevert/hotshot";
+    public const string RepositoryUrl = ReleaseDownloads.RepositoryUrl;
     private readonly DispatcherQueue _dispatcher;
     private readonly Func<bool> _canRestart;
     private readonly Func<VelopackAsset, Task<bool>> _apply;
@@ -27,7 +27,7 @@ internal sealed class AutomaticUpdates : IDisposable
         _canRestart = canRestart;
         _apply = apply;
         Channel = UpdateChannel.ForArchitecture(RuntimeInformation.ProcessArchitecture);
-        _manager = new UpdateManager(new GithubSource(RepositoryUrl, string.Empty, prerelease: false),
+        _manager = new UpdateManager(new GithubReleaseSource(),
             new UpdateOptions { ExplicitChannel = Channel, AllowVersionDowngrade = false });
         _checkTimer = dispatcher.CreateTimer();
         _checkTimer.Interval = TimeSpan.FromHours(1);

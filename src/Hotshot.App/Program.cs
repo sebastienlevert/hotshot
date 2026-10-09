@@ -16,7 +16,7 @@ public static class Program
     {
         // Must run first: handles installer/uninstaller hooks and exits the process when invoked by them.
         VelopackApp.Build()
-            .SetAutoApplyOnStartup(true)
+            .SetAutoApplyOnStartup(false)
             .OnAfterInstallFastCallback(_ => StartupManager.Apply(true))
             .OnBeforeUninstallFastCallback(_ => StartupManager.Remove())
             .Run();
