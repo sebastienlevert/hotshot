@@ -28,6 +28,7 @@ internal sealed class WorkspaceWindow : Window
     private readonly AppBarButton _folder = new() { Label = "Show in folder", Icon = new SymbolIcon(Symbol.Folder), IsEnabled = false };
     private readonly AppBarButton _convert = new() { Label = "Convert to GIF", Icon = new SymbolIcon(Symbol.Video), IsEnabled = false };
     private HistoryItem? _current;
+    private HistoryItem? _pendingHistorySelection;
     private EditorSavedEventArgs? _lastSave;
     private Task? _operation;
     private bool _rendering;
@@ -94,6 +95,7 @@ internal sealed class WorkspaceWindow : Window
         Grid.SetRow(_search, 1);
         historyPane.Children.Add(_search);
         AutomationProperties.SetName(_history, "Capture history");
+        AutomationProperties.SetAutomationId(_history, "CaptureHistory");
         Grid.SetRow(_history, 2);
         historyPane.Children.Add(_history);
         main.Children.Add(historyPane);
@@ -113,11 +115,8 @@ internal sealed class WorkspaceWindow : Window
         _history.SelectionChanged += (_, _) =>
         {
             if (_rendering || _history.SelectedItem is not ListViewItem { Tag: HistoryItem item }) return;
-            _ = RunAsync(async () =>
-            {
-                if (!await ConfirmDiscardAsync()) { RenderHistory(); return; }
-                await LoadAsync(item);
-            });
+            _pendingHistorySelection = item;
+            _ = RunAsync(LoadHistorySelectionAsync, keepHistoryEnabled: true);
         };
         _save.Click += (_, _) => _ = RunAsync(async () => await SaveCurrentAsync());
         _copy.Click += (_, _) => _ = RunAsync(async () =>
@@ -186,8 +185,25 @@ internal sealed class WorkspaceWindow : Window
         {
             if (!await ConfirmDiscardAsync()) return;
             await LoadAsync(item);
-            RenderHistory();
+            RenderHistory(restoreCurrent: true);
         });
+    }
+
+    private async Task LoadHistorySelectionAsync()
+    {
+        while (_pendingHistorySelection is { } item && !_closed)
+        {
+            _pendingHistorySelection = null;
+            if (_current?.Id == item.Id) continue;
+            if (!await ConfirmDiscardAsync())
+            {
+                _pendingHistorySelection = null;
+                RenderHistory(restoreCurrent: true);
+                return;
+            }
+            if (_pendingHistorySelection is not null) continue;
+            await LoadAsync(item);
+        }
     }
 
     public async Task<bool> PrepareToCloseAsync()
@@ -266,10 +282,10 @@ internal sealed class WorkspaceWindow : Window
         return true;
     }
 
-    private async Task RunAsync(Func<Task> action)
+    private async Task RunAsync(Func<Task> action, bool keepHistoryEnabled = false)
     {
         if (_operation is not null) return;
-        _history.IsEnabled = false;
+        _history.IsEnabled = keepHistoryEnabled;
         _save.IsEnabled = _copy.IsEnabled = _convert.IsEnabled = false;
         try
         {
@@ -284,7 +300,13 @@ internal sealed class WorkspaceWindow : Window
         finally
         {
             _operation = null;
-            if (!_closed) { _history.IsEnabled = true; UpdateActions(); }
+            if (!_closed)
+            {
+                _history.IsEnabled = true;
+                UpdateActions();
+                if (_pendingHistorySelection is not null)
+                    _ = RunAsync(LoadHistorySelectionAsync, keepHistoryEnabled: true);
+            }
         }
     }
 
@@ -307,23 +329,21 @@ internal sealed class WorkspaceWindow : Window
 
     private void HistoryChanged(object? sender, EventArgs args) => _app.Post(() => { if (!_closed) RenderHistory(); });
 
-    private void RenderHistory()
+    private void RenderHistory(bool restoreCurrent = false)
     {
+        var selectedId = restoreCurrent ? _current?.Id
+            : (_history.SelectedItem as ListViewItem)?.Tag is HistoryItem selected ? selected.Id : _current?.Id;
         _rendering = true;
         _history.Items.Clear();
         foreach (var item in _app.History.Items.Where(i => string.IsNullOrWhiteSpace(_search.Text) ||
                      i.FileName.Contains(_search.Text, StringComparison.OrdinalIgnoreCase) || i.Kind.DisplayName().Contains(_search.Text, StringComparison.OrdinalIgnoreCase)))
         {
-            var body = new StackPanel { Spacing = 6, Margin = new Thickness(0, 4, 0, 8) };
-            if (item.ThumbnailPath is { } thumbnail && File.Exists(thumbnail))
-                body.Children.Add(new Image { Source = new BitmapImage(new Uri(thumbnail)) { DecodePixelWidth = 180, CreateOptions = BitmapCreateOptions.IgnoreImageCache }, Height = 96 });
-            body.Children.Add(new TextBlock { Text = item.FileName, TextWrapping = TextWrapping.Wrap });
-            body.Children.Add(UiStyles.Description($"{item.Kind.DisplayName()} - {item.CreatedAt.LocalDateTime:t}"));
+            var body = new TextBlock { Text = item.FileName, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 4) };
             var row = new ListViewItem { Content = body, Tag = item, HorizontalContentAlignment = HorizontalAlignment.Stretch };
             AutomationProperties.SetName(row, $"Capture {item.FileName}");
             ToolTipService.SetToolTip(row, item.Path);
             _history.Items.Add(row);
-            if (_current?.Id == item.Id) _history.SelectedItem = row;
+            if (selectedId == item.Id) _history.SelectedItem = row;
         }
         _rendering = false;
     }

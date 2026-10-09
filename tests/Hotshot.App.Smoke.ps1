@@ -7,7 +7,9 @@ param(
 
     [switch]$ThemeSearchOnly,
 
-    [switch]$SettingsControlsOnly
+    [switch]$SettingsControlsOnly,
+
+    [switch]$HistoryNavigationOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -248,7 +250,59 @@ try {
     }
     [IO.File]::WriteAllText($settingsFile, ($fixture | ConvertTo-Json -Depth 5))
     [IO.File]::WriteAllText($historyFile, '[]')
-    $process = Start-Process -FilePath $Exe -ArgumentList '--settings' -PassThru
+    if ($HistoryNavigationOnly) {
+        Add-Type -AssemblyName System.Drawing
+        $fixtures = @()
+        foreach ($size in 64, 80, 96) {
+            $path = Join-Path $output "capture-$size.png"
+            $bitmap = [Drawing.Bitmap]::new($size, [int]($size * 0.75))
+            $graphics = [Drawing.Graphics]::FromImage($bitmap)
+            try {
+                $graphics.Clear([Drawing.Color]::CornflowerBlue)
+                $bitmap.Save($path, [Drawing.Imaging.ImageFormat]::Png)
+            } finally { $graphics.Dispose(); $bitmap.Dispose() }
+            $fixtures += @{
+                id = [Guid]::NewGuid().ToString('N'); path = $path; kind = 'Region'
+                width = $size; height = [int]($size * 0.75); createdAt = [DateTimeOffset]::Now.ToString('o')
+                fileSize = (Get-Item -LiteralPath $path).Length; thumbnailPath = $path
+            }
+        }
+        [IO.File]::WriteAllText($historyFile, (ConvertTo-Json -InputObject $fixtures -Depth 4))
+    }
+    $startupCommand = if ($HistoryNavigationOnly) { '--history' } else { '--settings' }
+    $process = Start-Process -FilePath $Exe -ArgumentList $startupCommand -PassThru
+    if ($HistoryNavigationOnly) {
+        $workspace = Wait-For {
+            $owner = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $process.Id)
+            foreach ($window in [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $owner)) {
+                if ($window.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'CaptureHistory'))) {
+                    return [IntPtr]$window.Current.NativeWindowHandle
+                }
+            }
+        } 'filename history workspace'
+        $list = Element-ById $workspace 'CaptureHistory'
+        if ($list.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                [System.Windows.Automation.ControlType]::Image))) { throw 'History still displays thumbnail previews.' }
+        $rows = @{}
+        foreach ($size in 64, 80, 96) {
+            $rows[$size] = Element $workspace "Capture capture-$size.png" ([System.Windows.Automation.ControlType]::ListItem)
+            if (-not $rows[$size]) { throw "Filename history row is missing: capture-$size.png" }
+            $rows[$size].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            Wait-For { Element $workspace "$size x $([int]($size * 0.75)) pixels" } "automatic editor preview for capture-$size.png" | Out-Null
+            if (-not $list.Current.IsEnabled) { throw 'Filename history was disabled while browsing.' }
+        }
+        foreach ($size in 80, 96, 80, 64) {
+            $rows[$size].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+        }
+        Wait-For { Element $workspace '64 x 48 pixels' } 'latest selection wins during rapid navigation' | Out-Null
+        if (-not $rows[64].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected) {
+            throw 'The selected filename and editor preview are out of sync.'
+        }
+        Write-Host 'PASS filename-only history, automatic editor previews, enabled navigation and latest-selection consistency'
+        return
+    }
     $settings = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot settings') } 'native settings window'
     foreach ($page in 'General', 'Hotkeys', 'Naming', 'Capture', 'Recording', 'Gif', 'About') {
         Select-SettingsPage $settings $page
