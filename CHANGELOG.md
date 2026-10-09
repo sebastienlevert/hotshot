@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/sebastienlevert/hotshot/compare/v0.1.3...v0.1.4) (2026-10-09)
+
+
+### Bug Fixes
+
+* **settings:** keep search usable on narrow windows ([587a4c8](https://github.com/sebastienlevert/hotshot/commit/587a4c8b107062ba4d71302d144f9c3d2d4af5ba))
+
 ## [0.1.3](https://github.com/sebastienlevert/hotshot/compare/v0.1.2...v0.1.3) (2026-10-09)
 
 
