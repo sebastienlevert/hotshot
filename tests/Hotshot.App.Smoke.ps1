@@ -57,6 +57,18 @@ public static class HotshotSmokeNative {
     public static extern uint GetDpiForWindow(IntPtr hwnd);
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int width, int height, uint flags);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetClientRect(IntPtr hwnd, out Rect rect);
+    public static int ClientWidth(IntPtr hwnd) {
+        if (!GetClientRect(hwnd, out var rect)) {
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        }
+        return rect.Right - rect.Left;
+    }
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(IntPtr hwnd, uint attribute, out int value, uint size);
 }
@@ -225,7 +237,12 @@ try {
         $search = Wait-For { Element-ById $settings 'SettingsSearch' } 'title bar settings search'
         if ($search.Current.IsOffscreen) { throw 'Search is hidden when the sidebar collapses.' }
         $windowBounds = [System.Windows.Automation.AutomationElement]::FromHandle($settings).Current.BoundingRectangle
-        if ($search.Current.BoundingRectangle.Top - $windowBounds.Top -gt 140) { throw 'Search is not in the window header.' }
+        $dpi = [HotshotSmokeNative]::GetDpiForWindow($settings) / 96.0
+        if (($search.Current.BoundingRectangle.Top - $windowBounds.Top) / $dpi -gt 100) { throw 'Search is not in the window header.' }
+        if ([HotshotSmokeNative]::ClientWidth($settings) / $dpi -lt 760 -and
+            $search.Current.BoundingRectangle.Width -lt $windowBounds.Width * 0.85) {
+            throw 'Compact header search does not use at least 85% of the narrow window width.'
+        }
         $theme = Element $settings 'App theme' ([System.Windows.Automation.ControlType]::ComboBox)
         foreach ($choice in 'Dark', 'Light', 'Dark') {
             $theme.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
@@ -241,6 +258,45 @@ try {
             [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::IsValuePatternAvailableProperty, $true))
         if (-not $editableSearch) { throw 'Title bar search has no accessible editable input.' }
         $editableSearch.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('microphone')
+        $editableSearch.SetFocus()
+        $compactWidths = @()
+        $inlineWidths = @()
+        foreach ($width in 520, 900, 750, 780, 400, 900, 520) {
+            $pixels = [int]($width * $dpi)
+            if (-not [HotshotSmokeNative]::SetWindowPos($settings, [IntPtr]::Zero, 0, 0,
+                $pixels, [int]$windowBounds.Height, 0x16)) { throw 'Settings window resize failed.' }
+            Start-Sleep -Milliseconds 250
+            $bounds = [System.Windows.Automation.AutomationElement]::FromHandle($settings).Current.BoundingRectangle
+            $searchBounds = (Element-ById $settings 'SettingsSearch').Current.BoundingRectangle
+            Write-Host ("Search layout at {0} DIPs: window={1:N0}, search={2:N0}, left={3:N0}, top={4:N0}" -f
+                $width, ($bounds.Width / $dpi), ($searchBounds.Width / $dpi),
+                (($searchBounds.Left - $bounds.Left) / $dpi), (($searchBounds.Top - $bounds.Top) / $dpi))
+            Wait-For {
+                $search = Element-ById $settings 'SettingsSearch'
+                $bounds = [System.Windows.Automation.AutomationElement]::FromHandle($settings).Current.BoundingRectangle
+                $searchBounds = $search.Current.BoundingRectangle
+                if ([HotshotSmokeNative]::ClientWidth($settings) / $dpi -lt 760) {
+                    return $searchBounds.Width -ge $bounds.Width * 0.85 -and
+                        ($searchBounds.Left - $bounds.Left) / $dpi -le 32
+                }
+                return ($searchBounds.Top - $bounds.Top) / $dpi -lt 48 -and
+                    $searchBounds.Width -ge 150 * $dpi
+            } "responsive search at $width DIPs" | Out-Null
+            $actualWidth = [int]($bounds.Width / $dpi)
+            if ([HotshotSmokeNative]::ClientWidth($settings) / $dpi -lt 760) { $compactWidths += $actualWidth }
+            else { $inlineWidths += $actualWidth }
+            $search = Element-ById $settings 'SettingsSearch'
+            $editableSearch = $search.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::IsValuePatternAvailableProperty, $true))
+            if ($search.Current.IsOffscreen -or
+                $editableSearch.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value -ne 'microphone') {
+                throw 'Resizing hid search or lost the query.'
+            }
+            Wait-For { $editableSearch.Current.HasKeyboardFocus } 'search focus preserved after resize' | Out-Null
+        }
+        Write-Host "PASS full-width compact search at $($compactWidths | Sort-Object -Unique) DIPs and preserved query/focus"
+        if ($inlineWidths.Count -gt 0) { Write-Host "PASS inline search at $($inlineWidths | Sort-Object -Unique) DIPs" }
+        else { Write-Host 'SKIP inline search resizing: this desktop clamps the window below the wide-layout breakpoint.' }
         $query = Element-ById $settings 'QueryButton'
         if (-not $query -and $search.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsInvokePatternAvailableProperty)) { $query = $search }
         if (-not $query) {

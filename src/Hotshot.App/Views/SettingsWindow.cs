@@ -39,6 +39,11 @@ internal sealed class SettingsWindow : Window
         MaxWidth = 480, MinWidth = 150, HorizontalAlignment = HorizontalAlignment.Stretch,
     };
     private readonly TitleBar _titleBar = new() { Title = "Hotshot", Subtitle = "Settings" };
+    private readonly Border _compactSearchHost = new()
+    {
+        Margin = new Thickness(16, 4, 16, 8), Visibility = Visibility.Collapsed,
+    };
+    private bool? _compactSearch;
     private SearchResult[] _searchResults = [];
     private string _searchQuery = string.Empty;
     private readonly DispatcherQueueTimer _saveTimer;
@@ -119,12 +124,17 @@ internal sealed class SettingsWindow : Window
         _navigation.Content = content;
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         _titleBar.IconSource = new ImageIconSource { ImageSource = Logo() };
         _titleBar.Content = _search;
         root.Children.Add(_titleBar);
-        Grid.SetRow(_navigation, 1);
+        Grid.SetRow(_compactSearchHost, 1);
+        root.Children.Add(_compactSearchHost);
+        Grid.SetRow(_navigation, 2);
         root.Children.Add(_navigation);
+        root.SizeChanged += (_, args) => UpdateSearchLayout(args.NewSize.Width);
+        root.Loaded += (_, _) => UpdateSearchLayout(root.ActualWidth);
         Content = root;
         var find = new Microsoft.UI.Xaml.Input.KeyboardAccelerator
         {
@@ -168,6 +178,41 @@ internal sealed class SettingsWindow : Window
 
     public Task SavePendingAsync() => PersistAsync();
     public bool HasPendingChanges => _editVersion != _savedVersion || _closing;
+
+    private void UpdateSearchLayout(double width)
+    {
+        if (width <= 0) return;
+        var compact = width < 760;
+        if (_compactSearch == compact) return;
+        var focused = false;
+        for (var element = _search.XamlRoot is { } root
+            ? Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) as DependencyObject : null;
+            element is not null; element = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(element))
+        {
+            if (element != _search) continue;
+            focused = true;
+            break;
+        }
+        _search.IsSuggestionListOpen = false;
+        if (compact)
+        {
+            _titleBar.Content = null;
+            _search.MinWidth = 0;
+            _search.MaxWidth = double.PositiveInfinity;
+            _compactSearchHost.Child = _search;
+            _compactSearchHost.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            _compactSearchHost.Child = null;
+            _compactSearchHost.Visibility = Visibility.Collapsed;
+            _search.MinWidth = 150;
+            _search.MaxWidth = 480;
+            _titleBar.Content = _search;
+        }
+        _compactSearch = compact;
+        if (focused) _app.Post(() => { if (!_closed) _search.Focus(FocusState.Programmatic); });
+    }
 
     private void AddPage(SettingsPage page, string title, Symbol icon, bool footer = false)
     {
