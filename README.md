@@ -27,7 +27,7 @@ Settings, history and originals stay in `%AppData%\Hotshot`, outside the install
 | Shift+Print Screen | Capture the full virtual screen (all monitors) |
 | Ctrl+Shift+Print Screen | Start/stop screen recording |
 
-Settings use a PowerToys-inspired adaptive sidebar, searchable modules, grouped setting cards, and automatic saving. Choose Windows default, light or dark under **General > App theme**. Invalid edits remain unapplied with an inline explanation; there is no global Save button.
+Settings use a PowerToys-inspired adaptive sidebar, grouped setting cards, and automatic saving. The title bar and caption buttons follow **General > App theme** (Windows default, light or dark), including inactive windows. Settings search is always visible in the title bar, even when navigation collapses; **Ctrl+F** focuses it. Search individual settings by name or related keywords, choose a suggestion to jump to its highlighted card, or press Enter for all matching results. Invalid edits remain unapplied with an inline explanation; there is no global Save button.
 
 All shortcuts are configurable under **Keyboard shortcuts**: click a shortcut, press the new combination, and Apply or Clear it. Duplicate/invalid shortcuts are rejected, and registration conflicts are shown. If Print Screen launches Snipping Tool, disable that option in Windows keyboard settings or choose another shortcut. In the selection overlay, **Space** captures/selects the monitor under the cursor and **Escape** cancels.
 

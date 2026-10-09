@@ -3,7 +3,9 @@ param(
     [Parameter(Mandatory)]
     [string]$Exe,
 
-    [switch]$VerifyStartup
+    [switch]$VerifyStartup,
+
+    [switch]$ThemeSearchOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -55,6 +57,8 @@ public static class HotshotSmokeNative {
     public static extern uint GetDpiForWindow(IntPtr hwnd);
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(IntPtr hwnd, uint attribute, out int value, uint size);
 }
 '@
 
@@ -216,6 +220,45 @@ try {
     if ($savedSettings.general.showPreview -or $savedSettings.general.openEditorAfterCapture) { throw 'Legacy profile still opens capture windows.' }
     if (Element $settings 'Save settings') { throw 'Settings still require a manual Save button.' }
     Write-Host 'PASS adaptive settings modules, automatic persistence and legacy silent-capture migration'
+
+    if ($ThemeSearchOnly) {
+        $search = Wait-For { Element-ById $settings 'SettingsSearch' } 'title bar settings search'
+        if ($search.Current.IsOffscreen) { throw 'Search is hidden when the sidebar collapses.' }
+        $windowBounds = [System.Windows.Automation.AutomationElement]::FromHandle($settings).Current.BoundingRectangle
+        if ($search.Current.BoundingRectangle.Top - $windowBounds.Top -gt 140) { throw 'Search is not in the window header.' }
+        $theme = Element $settings 'App theme' ([System.Windows.Automation.ControlType]::ComboBox)
+        foreach ($choice in 'Dark', 'Light', 'Dark') {
+            $theme.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+            $item = Wait-For { App-Control $choice } "$choice theme option"
+            $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            Wait-For { (Read-AppJson $settingsFile).general.theme -eq $choice.ToLowerInvariant() } 'theme persistence' | Out-Null
+            [int]$mode = -1
+            if ([HotshotSmokeNative]::DwmGetWindowAttribute($settings, 20, [ref]$mode, 4) -ne 0 -or
+                $mode -ne $(if ($choice -eq 'Dark') { 1 } else { 0 })) { throw 'Window chrome does not follow app theme.' }
+        }
+        Write-Host 'PASS dark/light app theme updates native title bar mode immediately'
+        $editableSearch = $search.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::IsValuePatternAvailableProperty, $true))
+        if (-not $editableSearch) { throw 'Title bar search has no accessible editable input.' }
+        $editableSearch.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('microphone')
+        $query = Element-ById $settings 'QueryButton'
+        if (-not $query -and $search.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsInvokePatternAvailableProperty)) { $query = $search }
+        if (-not $query) {
+            $scope = Element-ById $settings 'SettingsSearch'
+            $query = $scope.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::IsInvokePatternAvailableProperty, $true))
+        }
+        Click $query
+        $result = Wait-For { App-Control 'Record microphone - Screen recording' } 'per-setting microphone search result'
+        Click $result
+        Wait-For { Element $settings 'Record microphone' } 'jump to microphone setting' | Out-Null
+        $editableSearch.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('zzzznonexistent')
+        Click $query
+        Wait-For { Element $settings 'No settings match "zzzznonexistent".' } 'no-match search result' | Out-Null
+        if ((Element-ById $settings 'SettingsSearch').Current.IsOffscreen) { throw 'Search disappeared during navigation.' }
+        Write-Host 'PASS title bar search, setting-specific results/navigation and explicit no-match state'
+        return
+    }
 
     if ($VerifyStartup) {
         Select-SettingsPage $settings 'General'

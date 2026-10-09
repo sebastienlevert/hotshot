@@ -17,6 +17,7 @@ internal static class WindowTools
             monitor.WorkArea.X + (monitor.WorkArea.Width - w) / 2,
             monitor.WorkArea.Y + (monitor.WorkArea.Height - h) / 2, w, h));
         window.AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Hotshot.ico"));
+        UiStyles.BindTitleBarTheme(window);
         if (window.AppWindow.Presenter is OverlappedPresenter presenter && compact)
         {
             presenter.IsMaximizable = false;

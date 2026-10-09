@@ -202,6 +202,7 @@ internal static unsafe partial class Win32
     public const int HTTRANSPARENT = -1;
 
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    public const uint DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     public const int DWMWCP_ROUND = 2;
 
     public static uint Rgb(byte r, byte g, byte b) => (uint)(r | (g << 8) | (b << 16));
@@ -210,6 +211,9 @@ internal static unsafe partial class Win32
 
     [LibraryImport("user32.dll")]
     public static partial nint GetForegroundWindow();
+
+    [LibraryImport("dwmapi.dll")]
+    public static partial int DwmSetWindowAttribute(nint hwnd, uint attribute, in int value, uint size);
 
     [LibraryImport("user32.dll", EntryPoint = "RegisterClassExW", SetLastError = true)]
     public static partial ushort RegisterClassEx(WNDCLASSEXW* wc);

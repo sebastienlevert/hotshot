@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Windowing;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace Hotshot.Views;
@@ -31,6 +32,15 @@ internal sealed class SettingsWindow : Window
     private Button? _checkUpdates;
     private readonly Dictionary<SettingsPage, NavigationViewItem> _pages = [];
     private readonly Dictionary<HotkeyAction, TextBlock> _hotkeyLabels = [];
+    private readonly Dictionary<string, Border> _settingCards = [];
+    private readonly AutoSuggestBox _search = new()
+    {
+        PlaceholderText = "Search settings", QueryIcon = new SymbolIcon(Symbol.Find),
+        MaxWidth = 480, MinWidth = 150, HorizontalAlignment = HorizontalAlignment.Stretch,
+    };
+    private readonly TitleBar _titleBar = new() { Title = "Hotshot", Subtitle = "Settings" };
+    private SearchResult[] _searchResults = [];
+    private string _searchQuery = string.Empty;
     private readonly DispatcherQueueTimer _saveTimer;
     private long _editVersion;
     private long _savedVersion;
@@ -67,19 +77,35 @@ internal sealed class SettingsWindow : Window
             if (args.SelectedItem is NavigationViewItem { Tag: SettingsPage page }) RenderPage(page);
         };
 
-        var search = new AutoSuggestBox { PlaceholderText = "Search settings", QueryIcon = new SymbolIcon(Symbol.Find) };
-        AutomationProperties.SetName(search, "Search settings");
-        search.TextChanged += (_, args) =>
+        AutomationProperties.SetName(_search, "Search settings");
+        AutomationProperties.SetAutomationId(_search, "SettingsSearch");
+        _search.TextChanged += (_, args) =>
         {
             if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
             {
-                search.ItemsSource = _pages.Where(p => SearchText(p.Key).Contains(search.Text, StringComparison.OrdinalIgnoreCase))
-                    .Select(p => p.Value.Content.ToString()).ToArray();
+                _searchQuery = _search.Text;
+                _searchResults = SearchCatalog()
+                    .Select(result => (Result: result, Score: SettingsSearch.Score(_search.Text, result.Title, PageTitle(result.Page), result.Keywords)))
+                    .Where(match => match.Score > 0).OrderByDescending(match => match.Score)
+                    .ThenBy(match => match.Result.Title, StringComparer.OrdinalIgnoreCase).Select(match => match.Result).ToArray();
+                _search.ItemsSource = _searchResults.Take(8).Select(DisplayResult)
+                    .Concat(_searchResults.Length > 0 ? ["Show all results"] : Array.Empty<string>()).ToArray();
             }
         };
-        search.SuggestionChosen += (_, args) => NavigateSearch(args.SelectedItem?.ToString());
-        search.QuerySubmitted += (_, args) => NavigateSearch(args.ChosenSuggestion?.ToString() ?? args.QueryText);
-        _navigation.AutoSuggestBox = search;
+        _search.QuerySubmitted += (_, args) =>
+        {
+            var result = _searchResults.FirstOrDefault(result => DisplayResult(result) == args.ChosenSuggestion?.ToString());
+            if (result is not null) NavigateSearch(result);
+            else ShowSearchResults(args.ChosenSuggestion?.ToString() == "Show all results" ? _searchQuery : args.QueryText);
+            _search.IsSuggestionListOpen = false;
+        };
+        _search.SuggestionChosen += (_, args) =>
+        {
+            if (_searchResults.FirstOrDefault(result => DisplayResult(result) == args.SelectedItem?.ToString()) is { } result)
+                NavigateSearch(result);
+            else if (args.SelectedItem?.ToString() == "Show all results")
+                ShowSearchResults(_searchQuery);
+        };
 
         var content = new Grid { Padding = new Thickness(28, 24, 28, 16), RowSpacing = 12 };
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -91,7 +117,24 @@ internal sealed class SettingsWindow : Window
         Grid.SetRow(_status, 2);
         content.Children.Add(_status);
         _navigation.Content = content;
-        Content = _navigation;
+        var root = new Grid();
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        _titleBar.IconSource = new ImageIconSource { ImageSource = Logo() };
+        _titleBar.Content = _search;
+        root.Children.Add(_titleBar);
+        Grid.SetRow(_navigation, 1);
+        root.Children.Add(_navigation);
+        Content = root;
+        var find = new Microsoft.UI.Xaml.Input.KeyboardAccelerator
+        {
+            Key = VirtualKey.F, Modifiers = Windows.System.VirtualKeyModifiers.Control,
+        };
+        find.Invoked += (_, args) => { _search.Focus(FocusState.Keyboard); args.Handled = true; };
+        root.KeyboardAccelerators.Add(find);
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(_titleBar);
+        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         UiStyles.ApplyTheme(this, _draft.General.Theme);
         _hotkeys.StatusChanged += RefreshHotkeyStatus;
         if (_app.Updates is { } updates) updates.StatusChanged += RefreshUpdateStatus;
@@ -134,29 +177,81 @@ internal sealed class SettingsWindow : Window
         if (footer) _navigation.FooterMenuItems.Add(item); else _navigation.MenuItems.Add(item);
     }
 
-    private static string SearchText(SettingsPage page) => page switch
-    {
-        SettingsPage.General => "general startup windows theme appearance clipboard save folder history",
-        SettingsPage.Capture => "screenshots capture cursor magnifier crosshair windows region",
-        SettingsPage.Hotkeys => "keyboard shortcuts hotkeys print screen",
-        SettingsPage.Naming => "file naming filename tokens timestamp counter folders",
-        SettingsPage.Recording => "screen recording video audio microphone countdown fps quality",
-        SettingsPage.Gif => "gif conversion animation loop colors dithering width",
-        _ => "about hotshot version logs",
-    };
+    private string PageTitle(SettingsPage page) => _pages[page].Content.ToString() ?? page.ToString();
+    private string DisplayResult(SearchResult result) => $"{result.Title} - {PageTitle(result.Page)}";
 
-    private void NavigateSearch(string? query)
+    private static IEnumerable<SearchResult> SearchCatalog()
     {
-        if (string.IsNullOrWhiteSpace(query)) return;
-        var match = _pages.FirstOrDefault(p => p.Value.Content.ToString() == query ||
-            SearchText(p.Key).Contains(query, StringComparison.OrdinalIgnoreCase));
-        if (match.Value is not null) _navigation.SelectedItem = match.Value;
+        yield return new(SettingsPage.General, "App theme", "dark light system appearance color title bar");
+        yield return new(SettingsPage.General, "Start with Windows", "startup sign in launch login");
+        yield return new(SettingsPage.General, "Captures folder", "save output location directory path");
+        yield return new(SettingsPage.General, "Copy captures to clipboard", "png paste image");
+        yield return new(SettingsPage.General, "Save captures to files", "disk output png");
+        yield return new(SettingsPage.General, "Recent captures", "history editor limit size");
+        yield return new(SettingsPage.Capture, "Snap to windows", "region selection screenshot");
+        yield return new(SettingsPage.Capture, "Show magnifier", "zoom pixels selection screenshot");
+        yield return new(SettingsPage.Capture, "Show crosshair", "alignment selection screenshot");
+        yield return new(SettingsPage.Capture, "Include cursor", "mouse pointer screenshot");
+        foreach (var action in Enum.GetValues<HotkeyAction>())
+            yield return new(SettingsPage.Hotkeys, action.DisplayName(), $"shortcut hotkey keyboard {action.Description()}");
+        yield return new(SettingsPage.Hotkeys, "Print Screen and Snipping Tool", "windows shortcut conflict");
+        yield return new(SettingsPage.Naming, "Screenshots", "filename file naming pattern tokens timestamp counter folder");
+        yield return new(SettingsPage.Naming, "Recordings and GIFs", "filename file naming pattern tokens timestamp counter folder");
+        yield return new(SettingsPage.Recording, "Frame rate", "fps frames video");
+        yield return new(SettingsPage.Recording, "Quality", "bitrate video file size");
+        yield return new(SettingsPage.Recording, "Include cursor", "mouse pointer video");
+        yield return new(SettingsPage.Recording, "Countdown", "start seconds delay video");
+        yield return new(SettingsPage.Recording, "Record system audio", "sound playback speakers");
+        yield return new(SettingsPage.Recording, "Record microphone", "audio voice input");
+        yield return new(SettingsPage.Recording, "Also create a GIF", "convert animation mp4");
+        yield return new(SettingsPage.Gif, "Frame rate", "fps frames animation");
+        yield return new(SettingsPage.Gif, "Maximum width", "size scale resize animation");
+        yield return new(SettingsPage.Gif, "Dither colors", "palette gradient animation");
+        yield return new(SettingsPage.Gif, "Loop animation", "repeat gif");
+        yield return new(SettingsPage.About, "Automatic updates", "version releases github download install");
+        yield return new(SettingsPage.About, "Diagnostics", "logs errors troubleshooting");
+    }
+
+    private void NavigateSearch(SearchResult result)
+    {
+        if (ReferenceEquals(_navigation.SelectedItem, _pages[result.Page])) RenderPage(result.Page);
+        else _navigation.SelectedItem = _pages[result.Page];
+        _app.Post(() =>
+        {
+            if (_closed || !_settingCards.TryGetValue(result.Title, out var card)) return;
+            card.BorderThickness = new Thickness(2);
+            card.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 106, 61));
+            card.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = true, VerticalAlignmentRatio = 0.2 });
+        });
+    }
+
+    private void ShowSearchResults(string query)
+    {
+        var results = SearchCatalog()
+            .Select(result => (Result: result, Score: SettingsSearch.Score(query, result.Title, PageTitle(result.Page), result.Keywords)))
+            .Where(match => match.Score > 0).OrderByDescending(match => match.Score).Select(match => match.Result).ToArray();
+        var panel = new StackPanel { Spacing = 10, MaxWidth = 920, Padding = new Thickness(0, 0, 4, 20) };
+        panel.Children.Add(new TextBlock { Text = "Search results", FontSize = 28, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+        panel.Children.Add(UiStyles.Description(results.Length == 0 ? $"No settings match \"{query}\"." : $"{results.Length} settings match \"{query}\"."));
+        foreach (var result in results)
+        {
+            var button = new Button { Content = UiStyles.Card(new StackPanel
+            {
+                Spacing = 4, Children = { new TextBlock { Text = result.Title, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold }, UiStyles.Description(PageTitle(result.Page)) },
+            }), HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(0) };
+            AutomationProperties.SetName(button, DisplayResult(result));
+            button.Click += (_, _) => NavigateSearch(result);
+            panel.Children.Add(button);
+        }
+        _scroll.Content = panel;
+        _scroll.ChangeView(null, 0, null);
     }
 
     private void RenderPage(SettingsPage page)
     {
         _rendering = true;
         _hotkeyLabels.Clear();
+        _settingCards.Clear();
         var panel = new StackPanel { Spacing = 8, MaxWidth = 920, Padding = new Thickness(0, 0, 4, 20) };
         panel.Children.Add(new TextBlock { Text = _pages[page].Content.ToString(), FontSize = 28,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
@@ -404,7 +499,7 @@ internal sealed class SettingsWindow : Window
         Card(panel, title, UiStyles.Description(description), input);
     }
 
-    private static void Card(StackPanel panel, string title, UIElement description, FrameworkElement? control = null)
+    private void Card(StackPanel panel, string title, UIElement description, FrameworkElement? control = null)
     {
         var grid = new Grid { ColumnSpacing = 20 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -414,7 +509,9 @@ internal sealed class SettingsWindow : Window
         body.Children.Add(description);
         grid.Children.Add(body);
         if (control is not null) { Grid.SetColumn(control, 1); grid.Children.Add(control); }
-        panel.Children.Add(UiStyles.Card(grid));
+        var card = UiStyles.Card(grid);
+        _settingCards[title] = card;
+        panel.Children.Add(card);
     }
 
     private static void Section(StackPanel panel, string title) => panel.Children.Add(new TextBlock
@@ -423,4 +520,5 @@ internal sealed class SettingsWindow : Window
     });
     private static void Note(StackPanel panel, string text) => panel.Children.Add(UiStyles.Description(text));
     private static BitmapImage Logo() => new(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Logo.png")));
+    private sealed record SearchResult(SettingsPage Page, string Title, string Keywords);
 }
