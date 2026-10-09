@@ -49,7 +49,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.release.outputs.version }}
       RELEASE_TAG: ${{ needs.release.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release.outputs.tag }}
       - uses: actions/setup-dotnet@v4
