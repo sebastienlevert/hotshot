@@ -74,7 +74,7 @@ jobs:
           $previous = gh release list --repo "$env:GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Could not inspect previous releases.' }
           if ($previous.Count -gt 0 -and $previous[0].tagName -ne $env:RELEASE_TAG) {
-            dotnet tool run vpk -- download github --repoUrl "https://github.com/$env:GITHUB_REPOSITORY" --channel $env:CHANNEL --outputDir "artifacts\releases\$env:CHANNEL"
+            dotnet tool run vpk -- download github --repoUrl "https://github.com/$env:GITHUB_REPOSITORY" --token $env:GH_TOKEN --channel $env:CHANNEL --outputDir "artifacts\releases\$env:CHANNEL"
             if ($LASTEXITCODE -ne 0) { throw 'Previous update feed could not be downloaded.' }
           }
       - name: Tests
