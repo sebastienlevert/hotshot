@@ -257,6 +257,8 @@ internal sealed class WorkspaceWindow : Window
                 ImagePath = item.Path,
                 OriginalBackupPath = Path.Combine(_app.Paths.OriginalsDirectory, item.Id + ".png"),
                 AnnotationsPath = Path.Combine(_app.Paths.OriginalsDirectory, item.Id + ".json"),
+                SaveImageAsync = _app.Descriptions is { } descriptions
+                    ? png => descriptions.SaveEditedImageAsync(item, png) : null,
                 CopyPngToClipboard = async png =>
                 {
                     var image = await Task.Run(() => ImageCodec.DecodePngAsync(png));
@@ -278,7 +280,10 @@ internal sealed class WorkspaceWindow : Window
         item.FileSize = saved.FileSize;
         var thumbnail = Path.Combine(_app.Paths.ThumbnailsDirectory, item.Id + ".png");
         if (await Task.Run(() => ImageCodec.CreateThumbnailAsync(item.Path, thumbnail))) item.ThumbnailPath = thumbnail;
+        item.DescriptionPending = _app.Settings.General.DescribeScreenshots;
         await Task.Run(() => _app.History.Update(item));
+        if (_app.Settings.General.DescribeScreenshots && _app.Descriptions is { } descriptions)
+            _ = descriptions.EnqueueAsync(item);
         return true;
     }
 
@@ -335,13 +340,15 @@ internal sealed class WorkspaceWindow : Window
             : (_history.SelectedItem as ListViewItem)?.Tag is HistoryItem selected ? selected.Id : _current?.Id;
         _rendering = true;
         _history.Items.Clear();
-        foreach (var item in _app.History.Items.Where(i => string.IsNullOrWhiteSpace(_search.Text) ||
-                     i.FileName.Contains(_search.Text, StringComparison.OrdinalIgnoreCase) || i.Kind.DisplayName().Contains(_search.Text, StringComparison.OrdinalIgnoreCase)))
+        foreach (var item in _app.History.Items.Where(i => i.MatchesSearch(_search.Text)))
         {
             var body = new TextBlock { Text = item.FileName, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 4) };
             var row = new ListViewItem { Content = body, Tag = item, HorizontalContentAlignment = HorizontalAlignment.Stretch };
             AutomationProperties.SetName(row, $"Capture {item.FileName}");
-            ToolTipService.SetToolTip(row, item.Path);
+            var details = item.DescriptionError is { } error ? $"AI description failed: {error}"
+                : item.DescriptionPending ? "AI description is pending."
+                : item.Summary is { } summary ? $"{summary}\n{item.Description}" : null;
+            ToolTipService.SetToolTip(row, details is null ? item.Path : $"{item.Path}\n{details}");
             _history.Items.Add(row);
             if (selectedId == item.Id) _history.SelectedItem = row;
         }

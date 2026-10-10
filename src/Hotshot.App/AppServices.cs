@@ -3,6 +3,7 @@ using Hotshot.Core.History;
 using Hotshot.Core.Settings;
 using Microsoft.UI.Dispatching;
 using Hotshot.Updates;
+using Hotshot.Core.Descriptions;
 
 namespace Hotshot;
 
@@ -37,6 +38,7 @@ internal sealed class AppServices
 
     public HistoryStore History { get; }
     public AutomaticUpdates? Updates { get; set; }
+    public ScreenshotDescriptions? Descriptions { get; set; }
     public bool IsSaving => _saveGate.CurrentCount == 0 || _saveTimer.IsRunning;
 
     /// <summary>HWND that owns clipboard data and receives hotkeys/tray messages.</summary>

@@ -240,6 +240,7 @@ internal sealed class SettingsWindow : Window
         yield return new(SettingsPage.Capture, "Show magnifier", "zoom pixels selection screenshot");
         yield return new(SettingsPage.Capture, "Show crosshair", "alignment selection screenshot");
         yield return new(SettingsPage.Capture, "Include cursor", "mouse pointer screenshot");
+        yield return new(SettingsPage.Capture, "Describe screenshots with Copilot", "ai description summary search metadata image properties privacy");
         foreach (var action in Enum.GetValues<HotkeyAction>())
             yield return new(SettingsPage.Hotkeys, action.DisplayName(), $"shortcut hotkey keyboard {action.Description()}");
         yield return new(SettingsPage.Hotkeys, "Print Screen and Snipping Tool", "windows shortcut conflict");
@@ -329,6 +330,11 @@ internal sealed class SettingsWindow : Window
                 Note(panel, "Click the tray icon to open the editor and history. Nothing opens automatically after a screenshot.");
                 break;
             case SettingsPage.Capture:
+                Section(panel, "AI descriptions");
+                Toggle(panel, "Describe screenshots with Copilot",
+                    "Send new screenshots to your signed-in GitHub Copilot account. Descriptions are searchable in history and embedded in PNG metadata. Uses your Copilot quota.",
+                    _draft.General.DescribeScreenshots, value => _draft.General.DescribeScreenshots = value);
+                Note(panel, "Off by default. Screenshots may contain sensitive information; enable only when you are comfortable sending their contents to Copilot. Image analysis runs after saving, without delaying the clipboard.");
                 Section(panel, "Selection");
                 Toggle(panel, "Snap to windows", "Click a window instead of dragging a region.", _draft.Capture.SnapToWindows, v => _draft.Capture.SnapToWindows = v);
                 Toggle(panel, "Show magnifier", "Inspect individual pixels while selecting a region.", _draft.Capture.ShowMagnifier, v => _draft.Capture.ShowMagnifier = v);
@@ -392,7 +398,7 @@ internal sealed class SettingsWindow : Window
                 panel.Children.Add(new Image { Source = Logo(), Width = 96, Height = 96, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 24, 0, 12) });
                 Section(panel, "Hotshot");
                 Note(panel, $"Version {typeof(SettingsWindow).Assembly.GetName().Version?.ToString(3)} - native Windows screenshots, recordings and annotation.");
-                Note(panel, "A PowerToys-inspired experience built with WinUI 3. No accounts, uploads or background services.");
+                Note(panel, "A PowerToys-inspired experience built with WinUI 3. Captures stay local unless you enable Copilot screenshot descriptions.");
                 Section(panel, "Updates");
                 _checkUpdates = new Button { Content = "Check now" };
                 _checkUpdates.Click += async (_, _) => { if (_app.Updates is { } updates) await updates.CheckAsync(); };

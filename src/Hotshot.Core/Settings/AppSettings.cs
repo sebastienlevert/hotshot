@@ -123,6 +123,7 @@ public sealed class GeneralSettings
     public int HistorySize { get; set; } = 60;
     public long Counter { get; set; }
     public bool FirstRunCompleted { get; set; }
+    public bool DescribeScreenshots { get; set; }
 }
 
 public enum AppTheme

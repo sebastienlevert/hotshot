@@ -19,6 +19,14 @@ public sealed class HistoryItem
     public string? ThumbnailPath { get; set; }
     /// <summary>True when the file lives in the temp folder because "save to file" is disabled.</summary>
     public bool IsTemporary { get; set; }
+    public string? Summary { get; set; }
+    public string? Description { get; set; }
+    public string? DescriptionError { get; set; }
+    public bool DescriptionPending { get; set; }
+
+    public bool MatchesSearch(string query) => string.IsNullOrWhiteSpace(query) ||
+        new[] { FileName, Kind.DisplayName(), Summary, Description }.Any(value =>
+            value?.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase) == true);
 
     [JsonIgnore]
     public string FileName => System.IO.Path.GetFileName(Path);
@@ -117,6 +125,37 @@ public sealed class HistoryStore
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public bool UpdateDescription(string id, string? summary, string? description, string? error, long? fileSize = null)
+    {
+        lock (_gate)
+        {
+            var item = _items.FirstOrDefault(item => item.Id == id);
+            if (item is null) return false;
+            if (error is null)
+            {
+                item.Summary = summary;
+                item.Description = description;
+            }
+            item.DescriptionError = error;
+            item.DescriptionPending = false;
+            if (fileSize is { } size) item.FileSize = size;
+            SaveLocked();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    public void SetDescriptionPending(string id, bool pending)
+    {
+        lock (_gate)
+        {
+            var item = _items.FirstOrDefault(item => item.Id == id);
+            if (item is null) return;
+            item.DescriptionPending = pending;
+            SaveLocked();
+        }
     }
 
     public void Remove(string id)

@@ -2,6 +2,8 @@ using Hotshot.CaptureFlow;
 using Hotshot.Core;
 using Hotshot.Core.History;
 using Hotshot.Core.Hotkeys;
+using Hotshot.Core.Descriptions;
+using Hotshot.Descriptions;
 using Hotshot.Shell;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -18,6 +20,7 @@ internal sealed partial class AppController : IDisposable
     private readonly OutputPipeline _pipeline;
     private readonly CaptureCoordinator _capture;
     private readonly CaptureActions _actions;
+    private readonly ScreenshotDescriptions _descriptions;
     private Action? _balloonAction;
     private bool _exiting;
 
@@ -30,6 +33,15 @@ internal sealed partial class AppController : IDisposable
         var assets = Path.Combine(AppContext.BaseDirectory, "Assets");
         _tray = new TrayIcon(_window, Path.Combine(assets, "Hotshot.ico"), Path.Combine(assets, "HotshotRecording.ico"));
         _hotkeys = new HotkeyManager(_window);
+        _descriptions = new ScreenshotDescriptions(_app.History,
+            () => new CopilotDescriptionProvider(Path.Combine(_app.Paths.DataDirectory, "copilot-work")),
+            _app.Settings.General.DescribeScreenshots);
+        _app.Descriptions = _descriptions;
+        _descriptions.Failed += message => _app.Post(() =>
+        {
+            Log.Warn(message);
+            Notify("Screenshot description", message, isError: true);
+        });
         _pipeline = new OutputPipeline(_app);
         _capture = new CaptureCoordinator(_app, _pipeline);
         _actions = new CaptureActions(_app);
@@ -94,6 +106,11 @@ internal sealed partial class AppController : IDisposable
 
         ReportHotkeyConflicts();
         _updates.Start();
+        foreach (var item in _app.History.Items.Where(item => item.DescriptionPending && !item.IsVideo))
+        {
+            if (_app.Settings.General.DescribeScreenshots) _ = _descriptions.EnqueueAsync(item);
+            else _ = Task.Run(() => _app.History.SetDescriptionPending(item.Id, false));
+        }
     }
 
     public void Execute(AppCommand command, bool secondInstance)
@@ -130,6 +147,7 @@ internal sealed partial class AppController : IDisposable
         try
         {
             await ShutdownRecordingAsync();
+            await _descriptions.DisposeAsync();
             CloseViews();
             await _app.SaveAsync();
         }
@@ -245,6 +263,7 @@ internal sealed partial class AppController : IDisposable
         _hotkeys.Apply(_app.Settings.Hotkeys);
         SyncStartupRegistration();
         ApplyViewTheme();
+        _descriptions.SetEnabled(_app.Settings.General.DescribeScreenshots);
     }
 
     private void SyncStartupRegistration()

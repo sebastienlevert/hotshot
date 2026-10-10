@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.IO.Hashing" Version="10.0.0" />
     <InternalsVisibleTo Include="Hotshot.Core.Tests" />
   </ItemGroup>
 

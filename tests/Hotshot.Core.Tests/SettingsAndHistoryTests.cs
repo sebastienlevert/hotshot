@@ -26,6 +26,7 @@ public sealed class SettingsAndHistoryTests : IDisposable
         Assert.True(s.General.SaveToFile);
         Assert.False(s.General.ShowPreview);
         Assert.False(s.General.OpenEditorAfterCapture);
+        Assert.False(s.General.DescribeScreenshots);
         Assert.EndsWith("Hotshot", s.General.SaveFolder);
         Assert.Equal(4, s.Hotkeys.GetBindings().Count());
     }
@@ -137,5 +138,30 @@ public sealed class SettingsAndHistoryTests : IDisposable
         Assert.Equal("test-app", item.AppName);
         Assert.Equal("Synthetic capture", item.WindowTitle);
         Assert.Equal(2, item.MonitorIndex);
+    }
+
+    [Fact]
+    public void Descriptions_AreOptIn_AndSearchableAfterReload()
+    {
+        var settings = SettingsStore.Deserialize("""{"general":{"describeScreenshots":true}}""");
+        Assert.True(settings.General.DescribeScreenshots);
+        Assert.True(SettingsStore.Deserialize(SettingsStore.Serialize(settings)).General.DescribeScreenshots);
+        var path = Path.Combine(_dir, "capture.png");
+        File.WriteAllText(path, "test");
+        var historyPath = Path.Combine(_dir, "history.json");
+        var history = new HistoryStore(historyPath, 10);
+        var item = new HistoryItem { Path = path };
+        history.Add(item);
+        Assert.True(history.UpdateDescription(item.Id, "A chart", "A blue line graph showing revenue growth.", null));
+        var loaded = new HistoryStore(historyPath, 10);
+        loaded.Load();
+        var described = Assert.Single(loaded.Items);
+        Assert.True(described.MatchesSearch("REVENUE"));
+        Assert.True(described.MatchesSearch("chart"));
+        Assert.True(described.MatchesSearch("capture.png"));
+        Assert.False(described.MatchesSearch("unrelated"));
+        Assert.True(loaded.UpdateDescription(item.Id, null, null, "Offline"));
+        Assert.Equal("A chart", described.Summary);
+        Assert.Equal("Offline", described.DescriptionError);
     }
 }

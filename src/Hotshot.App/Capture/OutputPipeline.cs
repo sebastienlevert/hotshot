@@ -47,6 +47,7 @@ internal sealed class OutputPipeline(AppServices app)
                 WindowTitle = source.WindowTitle,
                 MonitorIndex = source.MonitorIndex,
                 IsTemporary = isTemporary,
+                DescriptionPending = general.DescribeScreenshots,
             };
             var thumbnailPath = Path.Combine(app.Paths.ThumbnailsDirectory, item.Id + ".png");
 
@@ -69,6 +70,8 @@ internal sealed class OutputPipeline(AppServices app)
             }
 
             await Task.Run(() => app.History.Add(item));
+            if (general.DescribeScreenshots && app.Descriptions is { } descriptions)
+                _ = descriptions.EnqueueAsync(item);
             Log.Info($"{kind} {image.Width}x{image.Height}: encode {encodeMs} ms, clipboard {clipboardMs} ms, total {timer.ElapsedMilliseconds} ms -> {path}");
             return item;
         }

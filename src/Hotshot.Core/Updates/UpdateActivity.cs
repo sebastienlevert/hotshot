@@ -10,10 +10,11 @@ public readonly record struct UpdateActivity(
     bool EditorBusy = false,
     bool ActiveWindow = false,
     bool UnsavedSettings = false,
-    bool Exiting = false)
+    bool Exiting = false,
+    bool Describing = false)
 {
     public bool CanRestart => !(Capturing || Recording || Converting || UnsavedEdits ||
-        EditorBusy || ActiveWindow || UnsavedSettings || Exiting);
+        EditorBusy || ActiveWindow || UnsavedSettings || Exiting || Describing);
 }
 
 public static class UpdateChannel

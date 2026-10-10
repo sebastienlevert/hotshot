@@ -16,7 +16,7 @@ Managed portable bundles are also available. Extract the entire `Hotshot-win-<ar
 
 Installed and Velopack-managed portable builds check this public repository's stable GitHub Releases shortly after startup and hourly thereafter. New versions download and are verified in the background, using separate `win-x64` and `win-arm64` static release feeds. This avoids GitHub REST API quotas, and package URLs stay pinned to the discovered release version. No GitHub account or token is required.
 
-Once ready, Hotshot updates silently and restarts in the tray when it is safe: no capture, recording, GIF conversion, editor operation, unsaved annotations/settings, or active editor/settings window. Work in progress is never interrupted. Offline/failed checks are logged and retried automatically; prepared updates are reconsidered after startup using those same safety checks. Secondary launches never force-apply an update before the single-instance/idle checks. **About Hotshot > Automatic updates** shows status and offers an optional Check now button.
+Once ready, Hotshot updates silently and restarts in the tray when it is safe: no capture, recording, GIF conversion, AI description, editor operation, unsaved annotations/settings, or active editor/settings window. Work in progress is never interrupted. Offline/failed checks are logged and retried automatically; prepared updates are reconsidered after startup using those same safety checks. Secondary launches never force-apply an update before the single-instance/idle checks. **About Hotshot > Automatic updates** shows status and offers an optional Check now button.
 
 Settings, history and originals stay in `%AppData%\Hotshot`, outside the installer-owned application directory. Release packages are currently unsigned, so Windows may show a first-install SmartScreen warning; no signing credentials are stored in this repository.
 
@@ -40,6 +40,14 @@ Recording produces H.264 MP4 with optional system audio and/or microphone audio.
 Use **Convert to GIF** on an MP4 in history, enable automatic GIF creation, or bind the Record as GIF shortcut. GIF conversion runs in the background, supports frame rate, width, dithering and looping, and keeps the original MP4. GIFs cannot contain audio and are limited to 256 colors per palette, so photographic/complex gradients are necessarily lossy. MP4/GIF clipboard copies are files rather than static images.
 
 **Start with Windows** uses the current user's Run registry entry and is enabled by default in Release builds. Debug builds never modify that entry. Keep a portable installation in its permanent location; moving it requires running the new copy and changing the startup setting to refresh its path. Exit via the tray menu or `Hotshot.exe --exit`.
+
+## AI screenshot descriptions
+
+Enable **Screenshots > Describe screenshots with Copilot** to describe new screenshots after they are saved. This is **off by default**. Enabling it sends screenshot pixels to the signed-in GitHub Copilot account and consumes that account's model quota; screenshots can contain sensitive information. No image is sent while the setting is off. Recordings and GIFs are not submitted.
+
+The SDK's pinned runtime is bundled with Hotshot. An existing GitHub Copilot sign-in and an available image-capable model are required. Hotshot chooses the available vision model with the lowest reported quota multiplier, allows no tools, and does not load workspace instructions, skills, or session-store memory. Each image uses a separate session, which is deleted after processing. Turning the setting off cancels in-flight and queued analysis; unfinished work can resume on the next launch while the setting remains enabled.
+
+Generated summaries and descriptions are searchable in **Editor and history**. PNG files also receive lossless Unicode **Title** (summary) and **Description** metadata; pixels are not re-encoded. Metadata is retained when saving edits, and enabled descriptions are refreshed after an edited screenshot is saved. Windows Explorer does not reliably display these fields for PNG, but metadata-aware image tools can read them. Failed/offline descriptions do not lose the saved screenshot and are reported visibly.
 
 ## Output naming
 
@@ -77,12 +85,14 @@ dotnet test --project tests\Hotshot.Gif.Tests\Hotshot.Gif.Tests.csproj
 dotnet test --project tests\Hotshot.Editor.Tests\Hotshot.Editor.Tests.csproj
 dotnet run --project tests\Hotshot.Recording.Harness\Hotshot.Recording.Harness.csproj -- --window-only
 dotnet run --project tests\Hotshot.Updates.Harness\Hotshot.Updates.Harness.csproj
+dotnet run --project tests\Hotshot.Descriptions.Harness\Hotshot.Descriptions.Harness.csproj
 pwsh tests\Hotshot.App.Smoke.ps1 -Exe <path-to-built-Hotshot.exe>
 ```
 
 Tests use xUnit and Microsoft Testing Platform. The window-only harness records its own synthetic windows, verifies PNG/clipboard, pause, target closing, GPU/CPU encoding and MP4-to-GIF, and writes media under `%TEMP%\hotshot-harness`. It changes the clipboard to a synthetic test screenshot. Omitting `--window-only` additionally records the monitor and exercises microphone capture; only do that when the desktop/audio are safe to capture.
 
 The update harness calls the actual static GitHub release source for both architectures and validates version-pinned full/delta URLs using headers only. It requires internet access but does not install, apply an update or touch user data.
+The description harness verifies Windows PNG metadata and pixel preservation with a generated image. Add `-- --copilot` to submit only that generated image through the production SDK provider; this requires Copilot sign-in and uses model quota, but never reads or submits a real screenshot.
 
 The app smoke test exercises native settings, global shortcuts, capture selection, filename tokens, recording controls, history and GIF conversion. It temporarily replaces and then restores settings/history, captures the real desktop locally into its own temporary directory, and changes the clipboard. Close Hotshot before running it and use a desktop that is safe to capture. Use an unmanaged Debug/publish build for this smoke so automatic updates cannot restart a fixture.
 Pass `-VerifyStartup` only with a Release build to additionally exercise Start with Windows; the original Hotshot Run entry is restored afterward.

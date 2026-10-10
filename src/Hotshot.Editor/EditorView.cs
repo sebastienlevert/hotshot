@@ -137,7 +137,13 @@ public sealed class EditorView : UserControl, IDisposable
             var device = _canvas.Device;
             var hasDocument = File.Exists(options.OriginalBackupPath) && File.Exists(options.AnnotationsPath);
             var source = hasDocument ? options.OriginalBackupPath : options.ImagePath;
-            var bytes = await File.ReadAllBytesAsync(source);
+            byte[] bytes;
+            using (var file = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096, useAsync: true))
+            using (var buffer = new MemoryStream())
+            {
+                await file.CopyToAsync(buffer);
+                bytes = buffer.ToArray();
+            }
             var bitmap = await ImageExporter.LoadBitmapAsync(device, bytes);
             AnnotationDocument document;
             try
@@ -184,18 +190,20 @@ public sealed class EditorView : UserControl, IDisposable
             var png = await Task.Run(() => ImageExporter.EncodeAsync(renderer, state.Document));
             var json = state.Document.ToJson();
             var original = _sourceBytes!;
+            long fileSize = png.LongLength;
             await Task.Run(async () =>
             {
                 if (!File.Exists(options.OriginalBackupPath))
                     await ImageExporter.WriteFileAtomicAsync(options.OriginalBackupPath, original);
-                await ImageExporter.WriteFileAtomicAsync(options.ImagePath, png);
+                if (options.SaveImageAsync is { } save) fileSize = await save(png);
+                else await ImageExporter.WriteFileAtomicAsync(options.ImagePath, png);
                 await ImageExporter.WriteFileAtomicAsync(options.AnnotationsPath, System.Text.Encoding.UTF8.GetBytes(json));
             });
             state.Document.MarkSaved();
             var crop = CropMath.OutputRect(state.Document.Crop, renderer.Width, renderer.Height);
             Saved?.Invoke(this, new EditorSavedEventArgs
             {
-                Path = options.ImagePath, IsSaveAs = false, Width = crop.Width, Height = crop.Height, FileSize = png.Length,
+                Path = options.ImagePath, IsSaveAs = false, Width = crop.Width, Height = crop.Height, FileSize = fileSize,
             });
             _status.Text = "Image saved. Your original and editable annotations are kept.";
             return true;

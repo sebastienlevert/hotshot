@@ -265,6 +265,8 @@ try {
                 id = [Guid]::NewGuid().ToString('N'); path = $path; kind = 'Region'
                 width = $size; height = [int]($size * 0.75); createdAt = [DateTimeOffset]::Now.ToString('o')
                 fileSize = (Get-Item -LiteralPath $path).Length; thumbnailPath = $path
+                summary = if ($size -eq 96) { 'Synthetic geometry' } else { $null }
+                description = if ($size -eq 96) { 'Blue geometry on a generated image.' } else { $null }
             }
         }
         [IO.File]::WriteAllText($historyFile, (ConvertTo-Json -InputObject $fixtures -Depth 4))
@@ -300,7 +302,28 @@ try {
         if (-not $rows[64].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected) {
             throw 'The selected filename and editor preview are out of sync.'
         }
+        $search = Element $workspace 'Search captures' ([System.Windows.Automation.ControlType]::Edit)
+        $search.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('blue geometry')
+        Wait-For {
+            (Element $workspace 'Capture capture-96.png' ([System.Windows.Automation.ControlType]::ListItem)) -and
+                -not (Element $workspace 'Capture capture-64.png' ([System.Windows.Automation.ControlType]::ListItem))
+        } 'description matches in history search' | Out-Null
+        $describedRow = Element $workspace 'Capture capture-96.png' ([System.Windows.Automation.ControlType]::ListItem)
+        $describedRow.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+        Wait-For { Element $workspace '96 x 72 pixels' } 'described screenshot ready to save' | Out-Null
+        Click (Element $workspace 'Save')
+        Wait-For {
+            $saved = @(Read-CaptureHistory) | Where-Object path -eq (Join-Path $output 'capture-96.png')
+            Test-Path -LiteralPath (Join-Path $data ("originals\" + $saved.id + '.json'))
+        } 'editor save with embedded description' | Out-Null
+        $storedMetadata = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes((Join-Path $output 'capture-96.png')))
+        if (-not $storedMetadata.Contains('Synthetic geometry') -or -not $storedMetadata.Contains('Blue geometry on a generated image.')) {
+            throw 'Editor saving discarded the screenshot description metadata.'
+        }
+        $search.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('')
         Write-Host 'PASS filename-only history, automatic editor previews, enabled navigation and latest-selection consistency'
+        Write-Host 'PASS stored AI descriptions participate in capture search without thumbnail previews'
+        Write-Host 'PASS editor saves preserve embedded summary/description metadata'
         return
     }
     $settings = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot settings') } 'native settings window'

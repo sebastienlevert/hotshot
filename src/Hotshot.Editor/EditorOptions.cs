@@ -15,6 +15,9 @@ public sealed class EditorOptions
     /// <summary>Host clipboard implementation (receives PNG bytes). The Copy command is hidden when null.</summary>
     public Func<byte[], Task>? CopyPngToClipboard { get; init; }
 
+    /// <summary>Optional host save implementation; returns the stored PNG's size after preserving metadata.</summary>
+    public Func<byte[], Task<long>>? SaveImageAsync { get; init; }
+
     /// <summary>Optional .ico used for the window.</summary>
     public string? IconPath { get; init; }
 }
