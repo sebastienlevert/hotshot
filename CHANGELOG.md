@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/sebastienlevert/hotshot/compare/v0.1.6...v0.1.7) (2026-10-10)
+
+
+### Features
+
+* **capture:** add opt-in Copilot descriptions and PNG metadata ([0d792df](https://github.com/sebastienlevert/hotshot/commit/0d792df7346818688ea98e38c8fc656c85eae67b))
+
 ## [0.1.6](https://github.com/sebastienlevert/hotshot/compare/v0.1.5...v0.1.6) (2026-10-09)
 
 
