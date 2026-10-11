@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/sebastienlevert/hotshot/compare/v0.1.9...v0.1.10) (2026-10-11)
+
+
+### Features
+
+* add settings-controlled coding agent ecosystem ([bc689b8](https://github.com/sebastienlevert/hotshot/commit/bc689b85d15d7766d9afd7e6ba0885938d9b8281))
+
 ## [0.1.9](https://github.com/sebastienlevert/hotshot/compare/v0.1.8...v0.1.9) (2026-10-11)
 
 
