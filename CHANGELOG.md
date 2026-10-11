@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/sebastienlevert/hotshot/compare/v0.1.7...v0.1.8) (2026-10-11)
+
+
+### Features
+
+* **workbench:** add local OCR, library filters and styled exports ([3b553cc](https://github.com/sebastienlevert/hotshot/commit/3b553ccac673fed2cec9d66a29136563bbf90d3c))
+
 ## [0.1.7](https://github.com/sebastienlevert/hotshot/compare/v0.1.6...v0.1.7) (2026-10-10)
 
 
