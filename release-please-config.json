@@ -14,7 +14,9 @@
           "type": "xml",
           "path": "Directory.Build.props",
           "xpath": "/Project/PropertyGroup/Version"
-        }
+        },
+        { "type": "json", "path": "agents/hotshot/plugin.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "agents/hotshot/.claude-plugin/plugin.json", "jsonpath": "$.version" }
       ]
     }
   }

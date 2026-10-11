@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "hotshot",
+  "version": "0.1.9",
+  "description": "Native Windows screenshots, visual verification and capture-library search through Hotshot.",
+  "author": { "name": "Sebastien Levert" },
+  "homepage": "https://github.com/sebastienlevert/hotshot",
+  "repository": "https://github.com/sebastienlevert/hotshot",
+  "license": "MIT",
+  "keywords": ["screenshots", "windows", "winui", "mcp", "visual-verification"]
+}

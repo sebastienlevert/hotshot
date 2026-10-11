@@ -15,6 +15,7 @@ public sealed class AppSettings
     public CaptureSettings Capture { get; set; } = new();
     public RecordingSettings Recording { get; set; } = new();
     public GifSettings Gif { get; set; } = new();
+    public AgentSettings Agents { get; set; } = new();
 
     /// <summary>Clamps values to supported ranges and fills missing sections after deserialization.</summary>
     public AppSettings Normalize()
@@ -25,6 +26,7 @@ public sealed class AppSettings
         Capture ??= new();
         Recording ??= new();
         Gif ??= new();
+        Agents ??= new();
 
         if (string.IsNullOrWhiteSpace(General.SaveFolder))
         {
@@ -126,6 +128,12 @@ public sealed class GeneralSettings
     public bool FirstRunCompleted { get; set; }
     public bool DescribeScreenshots { get; set; }
     public bool RecognizeScreenshotText { get; set; }
+}
+
+public sealed class AgentSettings
+{
+    public bool Enabled { get; set; }
+    public bool AllowHistoryAccess { get; set; }
 }
 
 public enum AppTheme

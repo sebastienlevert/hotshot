@@ -1,0 +1,12 @@
+{
+  "name": "hotshot",
+  "owner": { "name": "Sebastien Levert" },
+  "metadata": { "description": "Hotshot native Windows tools and skills for coding agents." },
+  "plugins": [
+    {
+      "name": "hotshot",
+      "description": "Capture, inspect and search screenshots with a settings-controlled local MCP bridge.",
+      "source": "./agents/hotshot"
+    }
+  ]
+}

@@ -11,7 +11,9 @@ param(
 
     [switch]$SettingsControlsOnly,
 
-    [switch]$HistoryNavigationOnly
+    [switch]$HistoryNavigationOnly,
+
+    [switch]$AgentSettingsOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -390,6 +392,42 @@ try {
         return
     }
     $settings = Wait-For { Settings-Window } 'native settings window'
+    if ($AgentSettingsOnly) {
+        Select-SettingsPage $settings 'Agents'
+        $saved = Read-AppJson $settingsFile
+        if ($saved.agents.enabled -or $saved.agents.allowHistoryAccess) { throw 'Agent permissions must default to off.' }
+        $access = Toggle-Control $settings 'Agent access'
+        $access.Toggle()
+        Wait-For { (Read-AppJson $settingsFile).agents.enabled } 'native agent access persistence' | Out-Null
+        $historyAccess = Toggle-Control $settings 'Allow history access'
+        $historyAccess.Toggle()
+        Wait-For { (Read-AppJson $settingsFile).agents.allowHistoryAccess } 'separate native history permission' | Out-Null
+        $historyAccess.Toggle()
+        $access.Toggle()
+        Wait-For {
+            $saved = Read-AppJson $settingsFile
+            -not $saved.agents.enabled -and -not $saved.agents.allowHistoryAccess
+        } 'native permission disable persistence' | Out-Null
+        $picker = Element $settings 'Coding agent' ([System.Windows.Automation.ControlType]::ComboBox)
+        foreach ($name in 'GitHub Copilot CLI', 'Claude Code', 'VS Code', 'Cursor', 'Codex') {
+            $picker.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+            (Wait-For { App-Control $name } "$name connection option").GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            $scroll = Wait-For { Element-ById $settings 'SettingsContentScroll' } 'settings content after picker closes'
+            $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 50)
+            $preview = Wait-For { Element-ById $settings 'AgentMcpConfiguration' } "$name configuration preview"
+            $value = $preview.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
+            if ($name -eq 'Codex') {
+                if (-not $value.StartsWith('[mcp_servers.hotshot]')) { throw 'Codex connection is not TOML.' }
+            } else {
+                $json = $value | ConvertFrom-Json
+                $server = if ($name -eq 'VS Code') { $json.servers.hotshot } else { $json.mcpServers.hotshot }
+                if ($server.command -ne (Join-Path (Split-Path $Exe -Parent) 'Mcp\Hotshot.Mcp.exe')) { throw "Wrong $name MCP executable." }
+            }
+        }
+        Assert-EmbeddedSettingsSearch $settings
+        Write-Host 'PASS native agent permissions autosave independently, remain off, and five client configurations resolve the bundled companion.'
+        return
+    }
     if (-not $HeaderSearchOnly) {
         foreach ($page in 'General', 'Hotkeys', 'Naming', 'Capture', 'Recording', 'Gif', 'About') {
             Select-SettingsPage $settings $page

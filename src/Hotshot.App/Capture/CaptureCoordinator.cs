@@ -17,6 +17,35 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
     public event Action<HistoryItem>? Captured;
     public event Action<string>? Failed;
 
+    public async Task<(HistoryItem Item, CapturedImage Image, string[] Warnings)> CaptureForAgentAsync(PixelRect bounds, CaptureKind kind, CaptureSource source,
+        Func<bool> accessAllowed, CancellationToken token)
+    {
+        if (_busy) throw new InvalidOperationException("Another capture is in progress.");
+        _busy = true;
+        var warnings = new List<string>();
+        void Warning(string message) => warnings.Add(message);
+        pipeline.Failed += Warning;
+        try
+        {
+            if (app.Settings.Capture.DelaySeconds > 0)
+                await Task.Delay(TimeSpan.FromSeconds(app.Settings.Capture.DelaySeconds), token);
+            token.ThrowIfCancellationRequested();
+            if (!accessAllowed()) throw new InvalidOperationException("Agent access was disabled or the app became busy.");
+            CapturedImage image;
+            using (var snapshot = ScreenSnapshot.Take(bounds, app.Settings.Capture.IncludeCursor))
+                image = snapshot.ToImage();
+            var item = await pipeline.SaveScreenshotAsync(image, kind, source)
+                ?? throw new IOException("Hotshot could not save the agent screenshot. See the diagnostic log.");
+            Captured?.Invoke(item);
+            return (item, image, warnings.ToArray());
+        }
+        finally
+        {
+            pipeline.Failed -= Warning;
+            _busy = false;
+        }
+    }
+
     public Task CaptureRegionAsync() => RunAsync(async () =>
     {
         var started = Stopwatch.GetTimestamp();

@@ -153,7 +153,13 @@ public sealed class ScreenSnapshot : IDisposable
         var screen = Native.GetDC(0);
         try
         {
-            Native.BitBlt(bitmap.Dc, 0, 0, bounds.Width, bounds.Height, screen, bounds.X, bounds.Y, Native.SRCCOPY | Native.CAPTUREBLT);
+            if (screen == 0 || !Native.BitBlt(bitmap.Dc, 0, 0, bounds.Width, bounds.Height, screen, bounds.X, bounds.Y, Native.SRCCOPY | Native.CAPTUREBLT))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError(), "The screen pixels could not be captured.");
+        }
+        catch
+        {
+            bitmap.Dispose();
+            throw;
         }
         finally
         {

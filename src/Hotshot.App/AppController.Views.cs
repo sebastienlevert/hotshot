@@ -13,6 +13,7 @@ internal enum SettingsPage
     Recording,
     Gif,
     About,
+    Agents,
 }
 
 internal sealed partial class AppController

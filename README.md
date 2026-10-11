@@ -64,6 +64,12 @@ The SDK's pinned runtime is bundled with Hotshot. An existing GitHub Copilot sig
 
 Generated summaries and descriptions are searchable in **Editor and history**. PNG files also receive lossless Unicode **Title** (summary) and **Description** metadata; pixels are not re-encoded. Metadata is retained when saving edits, and enabled descriptions are refreshed after an edited screenshot is saved. Windows Explorer does not reliably display these fields for PNG, but metadata-aware image tools can read them. Failed/offline descriptions do not lose the saved screenshot and are reported visibly.
 
+## Coding agents
+
+**Settings > Coding agents** offers opt-in native screenshot tools through a bundled local stdio MCP server, plus ready-to-copy configurations for Copilot CLI, Claude Code, VS Code, Cursor and Codex. Agent access and historical-capture access are separately disabled by default. Enabled agents use Hotshot's existing capture/output/analysis settings; they cannot change settings, execute commands, or control the mouse/keyboard.
+
+The repository marketplace includes capture, visual-verification and history-search skills. Returned screenshots may be sent to the requesting coding agent's model provider. See the [agent integration guide](agents/README.md) for permissions, installation commands, tools and limits.
+
 ## Output naming
 
 The default captures folder is `Pictures\Hotshot`; change it using the native folder picker under **General > Captures folder**. Canceling leaves the current folder unchanged. The default pattern, `{yyyy}\{MM}\{timestamp}`, produces paths such as `2026\10\2026-10-09_09-15-30.png`. Configure separate screenshot and recording/GIF patterns under **File naming**, with a live preview and token dropdowns showing example results. Choosing a token inserts it at the cursor or replaces the selected text.
@@ -88,7 +94,7 @@ The pinned local `vpk` tool creates installers, managed portable ZIPs, full/delt
 
 ## Release management
 
-[Release Please](https://github.com/googleapis/release-please) opens version/changelog pull requests from Conventional Commits on `main`: use `feat:`, `fix:`, and `BREAKING CHANGE:` where appropriate. It keeps `version.txt`, `Directory.Build.props`, `CHANGELOG.md` and `.release-please-manifest.json` in sync.
+[Release Please](https://github.com/googleapis/release-please) opens version/changelog pull requests from Conventional Commits on `main`: use `feat:`, `fix:`, and `BREAKING CHANGE:` where appropriate. It keeps `version.txt`, `Directory.Build.props`, `CHANGELOG.md`, `.release-please-manifest.json` and both agent plugin manifests in sync.
 
 Merge the release PR to create a tagged draft release. The same workflow tests the code, builds both architectures, generates Velopack delta packages when a previous release exists, uploads all installers/portable/update-feed assets, and only then publishes the release as latest. Clients never discover an incomplete draft. This combined workflow works with the repository's `GITHUB_TOKEN` without requiring a personal token to trigger a second release workflow.
 

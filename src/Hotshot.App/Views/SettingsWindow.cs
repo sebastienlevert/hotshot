@@ -13,6 +13,8 @@ using Microsoft.UI.Windowing;
 using Microsoft.Windows.Storage.Pickers;
 using CommunityToolkit.WinUI.Controls;
 using System.Runtime.InteropServices;
+using Hotshot.Core.Agents;
+using Hotshot.Capture;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace Hotshot.Views;
@@ -32,6 +34,7 @@ internal sealed class SettingsWindow : Window
     private readonly InfoBar _error = new() { IsClosable = true, Severity = InfoBarSeverity.Error };
     private readonly TextBlock _status = UiStyles.Description("Changes are saved automatically.");
     private readonly TextBlock _updateStatus = UiStyles.Description(string.Empty);
+    private readonly TextBlock _agentStatus = UiStyles.Description(string.Empty);
     private Button? _checkUpdates;
     private readonly Dictionary<SettingsPage, NavigationViewItem> _pages = [];
     private readonly Dictionary<HotkeyAction, TextBlock> _hotkeyLabels = [];
@@ -80,6 +83,7 @@ internal sealed class SettingsWindow : Window
         AddPage(SettingsPage.Gif, "GIF conversion", Symbol.RepeatAll);
         AddPage(SettingsPage.Hotkeys, "Keyboard shortcuts", Symbol.Keyboard);
         AddPage(SettingsPage.Naming, "File naming", Symbol.Folder);
+        AddPage(SettingsPage.Agents, "Coding agents", Symbol.Remote);
         AddPage(SettingsPage.About, "About Hotshot", Symbol.Help, footer: true);
         _navigation.SelectionChanged += (_, args) =>
         {
@@ -88,6 +92,7 @@ internal sealed class SettingsWindow : Window
 
         AutomationProperties.SetName(_search, "Search settings");
         AutomationProperties.SetAutomationId(_search, "SettingsSearch");
+        AutomationProperties.SetAutomationId(_scroll, "SettingsContentScroll");
         _search.TextChanged += (_, args) =>
         {
             if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
@@ -160,6 +165,7 @@ internal sealed class SettingsWindow : Window
         UiStyles.ApplyTheme(this, _draft.General.Theme);
         _hotkeys.StatusChanged += RefreshHotkeyStatus;
         if (_app.Updates is { } updates) updates.StatusChanged += RefreshUpdateStatus;
+        if (_app.AgentServer is { } agents) agents.StatusChanged += RefreshAgentStatus;
         AppWindow.Closing += async (_, args) =>
         {
             if (_allowClose) return;
@@ -179,6 +185,7 @@ internal sealed class SettingsWindow : Window
             if (_titleBarRoot is not null) _titleBarRoot.Changed -= TitleBarRootChanged;
             _hotkeys.StatusChanged -= RefreshHotkeyStatus;
             if (_app.Updates is { } updates) updates.StatusChanged -= RefreshUpdateStatus;
+            if (_app.AgentServer is { } agents) agents.StatusChanged -= RefreshAgentStatus;
         };
         WindowTools.Configure(this, 1050, 790);
     }
@@ -266,6 +273,10 @@ internal sealed class SettingsWindow : Window
         yield return new(SettingsPage.Gif, "Loop animation", "repeat gif");
         yield return new(SettingsPage.About, "Automatic updates", "version releases github download install");
         yield return new(SettingsPage.About, "Diagnostics", "logs errors troubleshooting");
+        yield return new(SettingsPage.Agents, "Agent access", "mcp coding agents screenshots automation permissions");
+        yield return new(SettingsPage.Agents, "Allow history access", "mcp search ocr descriptions privacy");
+        yield return new(SettingsPage.Agents, "Connect a coding agent", "copilot claude cursor vscode codex mcp configuration skills");
+        yield return new(SettingsPage.Agents, "Plugins and skills", "marketplace install visual verification screenshot");
     }
 
     private void NavigateSearch(SearchResult result)
@@ -319,6 +330,7 @@ internal sealed class SettingsWindow : Window
             SettingsPage.Naming => "Organize captures with folders and filename tokens.",
             SettingsPage.Recording => "Record a window or region with optional audio.",
             SettingsPage.Gif => "Turn recordings into shareable animations. Original videos are kept.",
+            SettingsPage.Agents => "Give coding agents native screenshot tools through a local MCP server.",
             _ => "A lightweight native capture utility, always one shortcut away.",
         }));
         switch (page)
@@ -411,11 +423,24 @@ internal sealed class SettingsWindow : Window
                 Toggle(panel, "Loop animation", "Repeat the animation continuously.", _draft.Gif.Loop, v => _draft.Gif.Loop = v);
                 Note(panel, "GIFs have no audio. Select a recording in history to convert it.");
                 break;
+            case SettingsPage.Agents:
+                Section(panel, "Permissions");
+                Toggle(panel, "Agent access",
+                    "Allow local coding agents running as your Windows user to list targets and capture them without another prompt. Off by default.",
+                    _draft.Agents.Enabled, value => _draft.Agents.Enabled = value);
+                Toggle(panel, "Allow history access",
+                    "Separately allow agents to search previous captures, OCR and AI descriptions, and read capture images by ID.",
+                    _draft.Agents.AllowHistoryAccess, value => _draft.Agents.AllowHistoryAccess = value);
+                Note(panel, "Images returned to a coding agent may be sent to its model provider. Only enable access for agents you trust. Captures follow your save, clipboard, cursor, delay, OCR and Copilot-description settings; agents cannot change settings or control the mouse/keyboard.");
+                RefreshAgentStatus();
+                panel.Children.Add(_agentStatus);
+                AgentConnections(panel);
+                break;
             case SettingsPage.About:
                 panel.Children.Add(new Image { Source = Logo(), Width = 96, Height = 96, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 24, 0, 12) });
                 Section(panel, "Hotshot");
                 Note(panel, $"Version {typeof(SettingsWindow).Assembly.GetName().Version?.ToString(3)} - native Windows screenshots, recordings and annotation.");
-                Note(panel, "A PowerToys-inspired experience built with WinUI 3. Captures stay local unless you enable Copilot screenshot descriptions.");
+                Note(panel, "A PowerToys-inspired experience built with WinUI 3. Captures stay local unless you enable Copilot screenshot descriptions or share them with a coding agent.");
                 Section(panel, "Updates");
                 _checkUpdates = new Button { Content = "Check now" };
                 _checkUpdates.Click += async (_, _) => { if (_app.Updates is { } updates) await updates.CheckAsync(); };
@@ -519,6 +544,65 @@ internal sealed class SettingsWindow : Window
         _updateStatus.Text = _app.Updates?.Status ?? "Update service is starting.";
         if (_checkUpdates is not null)
             _checkUpdates.IsEnabled = _app.Updates is { IsManaged: true, IsChecking: false };
+    }
+
+    private void RefreshAgentStatus()
+    {
+        if (!_closed) _agentStatus.Text = _app.AgentServer?.Status ?? "Agent service is starting.";
+    }
+
+    private void AgentConnections(StackPanel panel)
+    {
+        Section(panel, "Connections");
+        var names = new[] { "GitHub Copilot CLI", "Claude Code", "VS Code", "Cursor", "Codex" };
+        var choices = new ComboBox { ItemsSource = names, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+        AutomationProperties.SetName(choices, "Coding agent");
+        var preview = new TextBox { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 120 };
+        AutomationProperties.SetAutomationId(preview, "AgentMcpConfiguration");
+        var location = UiStyles.Description(string.Empty);
+        var executable = Path.Combine(AppContext.BaseDirectory, "Mcp", "Hotshot.Mcp.exe");
+        void Update()
+        {
+            var agent = (CodingAgent)Math.Max(0, choices.SelectedIndex);
+            preview.Text = AgentConfiguration.Create(agent, executable);
+            location.Text = AgentConfiguration.Location(agent);
+        }
+        choices.SelectionChanged += (_, _) => Update();
+        Update();
+        var copy = new Button { Content = "Copy MCP configuration" };
+        copy.Click += async (_, _) =>
+        {
+            if (!File.Exists(executable))
+            {
+                _error.Title = "MCP server is not installed";
+                _error.Message = "Use the packaged Hotshot release, or publish the MCP project into the application's Mcp directory.";
+                _error.IsOpen = true;
+                return;
+            }
+            if (!await ClipboardService.SetTextAsync(_app.MessageWindowHandle, preview.Text))
+            {
+                _error.Title = "Could not copy the MCP configuration";
+                _error.Message = "Another application is using the clipboard.";
+                _error.IsOpen = true;
+            }
+        };
+        var body = new StackPanel { Spacing = 8 };
+        body.Children.Add(choices);
+        body.Children.Add(location);
+        body.Children.Add(preview);
+        body.Children.Add(copy);
+        Card(panel, "Connect a coding agent", body);
+        var plugins = new StackPanel { Spacing = 8 };
+        plugins.Children.Add(UiStyles.Description("Install the Hotshot capture, visual verification and library-search skills from the repository marketplace. No agent configuration files are changed automatically."));
+        plugins.Children.Add(new TextBox
+        {
+            IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
+            Text = "Copilot CLI:\ncopilot plugin marketplace add sebastienlevert/hotshot\ncopilot plugin install hotshot@hotshot\n\nClaude Code:\n/plugin marketplace add sebastienlevert/hotshot\n/plugin install hotshot@hotshot",
+        });
+        var docs = new Button { Content = "Open agent integration guide" };
+        docs.Click += (_, _) => CaptureActions.OpenPath("https://github.com/sebastienlevert/hotshot/blob/main/agents/README.md");
+        plugins.Children.Add(docs);
+        Card(panel, "Plugins and skills", plugins);
     }
 
     private void Toggle(StackPanel panel, string title, string description, bool current, Action<bool> changed)

@@ -25,6 +25,14 @@ if (-not (Test-Path (Join-Path $publish 'Hotshot.exe'))) {
     throw "Publish succeeded without producing Hotshot.exe."
 }
 
+$mcp = Join-Path $publish 'Mcp'
+& dotnet publish (Join-Path $root 'src\Hotshot.Mcp\Hotshot.Mcp.csproj') -c Release -r $Runtime "-p:Version=$Version" `
+    --self-contained true -o $mcp --nologo -v:q
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $mcp 'Hotshot.Mcp.exe'))) {
+    throw "Publishing the $Runtime MCP companion failed."
+}
+Copy-Item -LiteralPath (Join-Path $root 'agents') -Destination $publish -Recurse -Force
+
 Copy-Item -LiteralPath (Join-Path $root 'README.md') -Destination $publish -Force
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination $publish -Force
 Push-Location $root

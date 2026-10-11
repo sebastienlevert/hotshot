@@ -31,6 +31,21 @@ jobs:
           }
       - name: Build native app
         run: dotnet build src\Hotshot.App\Hotshot.App.csproj -c Release -p:Platform=${{ matrix.platform }} --nologo
+      - name: Build MCP companion
+        shell: pwsh
+        run: |
+          $runtime = if ('${{ matrix.platform }}' -eq 'ARM64') { 'win-arm64' } else { 'win-x64' }
+          dotnet build src\Hotshot.Mcp\Hotshot.Mcp.csproj -c Release -r $runtime --nologo
+          if ($LASTEXITCODE -ne 0) { throw 'MCP build failed.' }
+      - name: Validate agent plugins
+        shell: pwsh
+        run: .\tests\Hotshot.Agents.Manifests.ps1
+      - name: MCP protocol contract
+        if: matrix.platform == 'x64'
+        shell: pwsh
+        run: |
+          dotnet run --project tests\Hotshot.Mcp.Harness\Hotshot.Mcp.Harness.csproj -c Release -- "src\Hotshot.Mcp\bin\Release\net10.0-windows10.0.26100.0\win-x64\Hotshot.Mcp.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'MCP protocol contract failed.' }
       - name: Unit tests
         if: matrix.platform == 'x64'
         shell: pwsh

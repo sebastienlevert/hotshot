@@ -5,6 +5,7 @@ using Microsoft.UI.Dispatching;
 using Hotshot.Updates;
 using Hotshot.Core.Descriptions;
 using Hotshot.CaptureFlow;
+using Hotshot.Agents;
 
 namespace Hotshot;
 
@@ -42,6 +43,7 @@ internal sealed class AppServices
     public ScreenshotDescriptions? Descriptions { get; set; }
     public LocalTextIndex? TextIndex { get; set; }
     public OutputPipeline? Output { get; set; }
+    public AgentCaptureServer? AgentServer { get; set; }
     public bool IsSaving => _saveGate.CurrentCount == 0 || _saveTimer.IsRunning;
 
     /// <summary>HWND that owns clipboard data and receives hotkeys/tray messages.</summary>

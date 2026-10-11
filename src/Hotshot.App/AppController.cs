@@ -4,6 +4,7 @@ using Hotshot.Core.History;
 using Hotshot.Core.Hotkeys;
 using Hotshot.Core.Descriptions;
 using Hotshot.Descriptions;
+using Hotshot.Agents;
 using Hotshot.Shell;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -22,6 +23,7 @@ internal sealed partial class AppController : IDisposable
     private readonly CaptureActions _actions;
     private readonly ScreenshotDescriptions _descriptions;
     private readonly LocalTextIndex _textIndex;
+    private readonly AgentCaptureServer _agentServer;
     private Action? _balloonAction;
     private bool _exiting;
 
@@ -50,6 +52,9 @@ internal sealed partial class AppController : IDisposable
         _app.Output = _pipeline;
         _capture = new CaptureCoordinator(_app, _pipeline);
         _actions = new CaptureActions(_app);
+        _agentServer = new AgentCaptureServer(_app, _capture,
+            () => _exiting || IsRecording || _startTask is not null || _stopTask is not null);
+        _app.AgentServer = _agentServer;
 
         _hotkeys.Pressed += action => _app.Post(() => OnHotkey(action));
         _window.ArgumentsReceived += args => Execute(CommandLine.Parse(args).Command, secondInstance: true);
@@ -111,6 +116,7 @@ internal sealed partial class AppController : IDisposable
 
         ReportHotkeyConflicts();
         _updates.Start();
+        _agentServer.Start();
         foreach (var item in _app.History.Items.Where(item => item.DescriptionPending && !item.IsVideo))
         {
             if (_app.Settings.General.DescribeScreenshots) _ = _descriptions.EnqueueAsync(item);
@@ -151,6 +157,7 @@ internal sealed partial class AppController : IDisposable
         Log.Info("Exiting");
         try
         {
+            await _agentServer.StopAsync();
             await ShutdownRecordingAsync();
             await _descriptions.DisposeAsync();
             await _textIndex.DisposeAsync();
@@ -169,6 +176,7 @@ internal sealed partial class AppController : IDisposable
     public void Dispose()
     {
         _updates.Dispose();
+        _agentServer.Dispose();
         _hotkeys.Dispose();
         _tray.Dispose();
         _window.Dispose();
@@ -270,6 +278,7 @@ internal sealed partial class AppController : IDisposable
         SyncStartupRegistration();
         ApplyViewTheme();
         _descriptions.SetEnabled(_app.Settings.General.DescribeScreenshots);
+        _agentServer.RefreshStatus();
     }
 
     private void SyncStartupRegistration()

@@ -88,6 +88,13 @@ jobs:
       - name: Package installer, portable and update feed
         shell: pwsh
         run: .\build\package.ps1 -Version $env:RELEASE_VERSION -Runtime '${{ matrix.runtime }}'
+      - name: Validate packaged agent integration
+        if: matrix.runtime == 'win-x64'
+        shell: pwsh
+        run: |
+          .\tests\Hotshot.Agents.Manifests.ps1
+          dotnet run --project tests\Hotshot.Mcp.Harness\Hotshot.Mcp.Harness.csproj -c Release -- "artifacts\publish\$env:RELEASE_VERSION\win-x64\Mcp\Hotshot.Mcp.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged MCP protocol contract failed.' }
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.runtime }}

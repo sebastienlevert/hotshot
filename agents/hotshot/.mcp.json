@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "hotshot": {
+      "command": "powershell.exe",
+      "args": ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", "${CLAUDE_PLUGIN_ROOT}\\scripts\\start-mcp.ps1"]
+    }
+  }
+}

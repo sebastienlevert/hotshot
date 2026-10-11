@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>$(WindowsTargetFramework)</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Hotshot.Agents.Harness</AssemblyName>
+    <Platform>x64</Platform>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <IsPackable>false</IsPackable>
+    <ApplicationManifest>..\..\src\Hotshot.App\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Hotshot.App\Hotshot.App.csproj" />
+    <Compile Include="..\Hotshot.Recording.Harness\TestWindow.cs" Link="TestWindow.cs" />
+    <Compile Include="..\Hotshot.Recording.Harness\Native.cs" Link="NativeFixture.cs" />
+  </ItemGroup>
+</Project>
