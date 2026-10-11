@@ -39,14 +39,14 @@ internal sealed class SettingsWindow : Window
     private readonly AutoSuggestBox _search = new()
     {
         PlaceholderText = "Search settings", QueryIcon = new SymbolIcon(Symbol.Find),
-        MaxWidth = 480, MinWidth = 150, HorizontalAlignment = HorizontalAlignment.Stretch,
+        MaxWidth = 480, MinWidth = 0, HorizontalAlignment = HorizontalAlignment.Stretch,
     };
-    private readonly TitleBar _titleBar = new() { Title = "Hotshot", Subtitle = "Settings" };
-    private readonly Border _compactSearchHost = new()
+    private readonly TitleBar _titleBar = new()
     {
-        Margin = new Thickness(16, 4, 16, 8), Visibility = Visibility.Collapsed,
+        Title = "Hotshot", Subtitle = "Settings", MinHeight = 48,
     };
-    private bool? _compactSearch;
+    private bool? _compactTitle;
+    private XamlRoot? _titleBarRoot;
     private SearchResult[] _searchResults = [];
     private string _searchQuery = string.Empty;
     private readonly DispatcherQueueTimer _saveTimer;
@@ -128,14 +128,22 @@ internal sealed class SettingsWindow : Window
         _navigation.Content = content;
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         _titleBar.IconSource = new ImageIconSource { ImageSource = Logo() };
         _titleBar.Content = _search;
+        _titleBar.Resources["TitleBarContentHorizontalAlignment"] = HorizontalAlignment.Stretch;
+        AutomationProperties.SetAutomationId(_titleBar, "SettingsTitleBar");
+        _titleBar.SizeChanged += (_, _) => UpdateTitleBarInsets();
+        _titleBar.RegisterPropertyChangedCallback(FrameworkElement.FlowDirectionProperty, (_, _) => UpdateTitleBarInsets());
+        _titleBar.Loaded += (_, _) =>
+        {
+            if (_titleBarRoot is not null) _titleBarRoot.Changed -= TitleBarRootChanged;
+            _titleBarRoot = _titleBar.XamlRoot;
+            _titleBarRoot.Changed += TitleBarRootChanged;
+            UpdateTitleBarInsets();
+        };
         root.Children.Add(_titleBar);
-        Grid.SetRow(_compactSearchHost, 1);
-        root.Children.Add(_compactSearchHost);
-        Grid.SetRow(_navigation, 2);
+        Grid.SetRow(_navigation, 1);
         root.Children.Add(_navigation);
         root.SizeChanged += (_, args) => UpdateSearchLayout(args.NewSize.Width);
         root.Loaded += (_, _) => UpdateSearchLayout(root.ActualWidth);
@@ -168,6 +176,7 @@ internal sealed class SettingsWindow : Window
         {
             _closed = true;
             _saveTimer.Stop();
+            if (_titleBarRoot is not null) _titleBarRoot.Changed -= TitleBarRootChanged;
             _hotkeys.StatusChanged -= RefreshHotkeyStatus;
             if (_app.Updates is { } updates) updates.StatusChanged -= RefreshUpdateStatus;
         };
@@ -183,39 +192,34 @@ internal sealed class SettingsWindow : Window
     public Task SavePendingAsync() => PersistAsync();
     public bool HasPendingChanges => _editVersion != _savedVersion || _closing || _pickingFolder;
 
+    private void TitleBarRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateTitleBarInsets();
+
+    private void UpdateTitleBarInsets()
+    {
+        if (_titleBar.XamlRoot is not { } root || Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(_titleBar) == 0) return;
+        var layout = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(_titleBar, 0) as FrameworkElement;
+        if (layout?.FindName("LeftPaddingColumn") is not ColumnDefinition left ||
+            layout.FindName("RightPaddingColumn") is not ColumnDefinition right)
+        {
+            Log.Warn("The WinUI title bar template does not expose its caption-inset columns.");
+            return;
+        }
+
+        // WinUI's TitleBar currently treats physical caption insets as DIPs (microsoft-ui-xaml#10344).
+        var native = AppWindow.TitleBar;
+        var rtl = _titleBar.FlowDirection == FlowDirection.RightToLeft;
+        left.Width = new GridLength((rtl ? native.RightInset : native.LeftInset) / root.RasterizationScale);
+        right.Width = new GridLength((rtl ? native.LeftInset : native.RightInset) / root.RasterizationScale);
+    }
+
     private void UpdateSearchLayout(double width)
     {
         if (width <= 0) return;
         var compact = width < 760;
-        if (_compactSearch == compact) return;
-        var focused = false;
-        for (var element = _search.XamlRoot is { } root
-            ? Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root) as DependencyObject : null;
-            element is not null; element = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(element))
-        {
-            if (element != _search) continue;
-            focused = true;
-            break;
-        }
-        _search.IsSuggestionListOpen = false;
-        if (compact)
-        {
-            _titleBar.Content = null;
-            _search.MinWidth = 0;
-            _search.MaxWidth = double.PositiveInfinity;
-            _compactSearchHost.Child = _search;
-            _compactSearchHost.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            _compactSearchHost.Child = null;
-            _compactSearchHost.Visibility = Visibility.Collapsed;
-            _search.MinWidth = 150;
-            _search.MaxWidth = 480;
-            _titleBar.Content = _search;
-        }
-        _compactSearch = compact;
-        if (focused) _app.Post(() => { if (!_closed) _search.Focus(FocusState.Programmatic); });
+        if (_compactTitle == compact) return;
+        _titleBar.Title = compact ? string.Empty : "Hotshot";
+        _titleBar.Subtitle = compact ? string.Empty : "Settings";
+        _compactTitle = compact;
     }
 
     private void AddPage(SettingsPage page, string title, Symbol icon, bool footer = false)

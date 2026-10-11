@@ -7,6 +7,8 @@ param(
 
     [switch]$ThemeSearchOnly,
 
+    [switch]$HeaderSearchOnly,
+
     [switch]$SettingsControlsOnly,
 
     [switch]$HistoryNavigationOnly
@@ -186,6 +188,26 @@ function Settings-Window {
         }
     }
     return [IntPtr]::Zero
+}
+
+function Assert-EmbeddedSettingsSearch([IntPtr]$Hwnd) {
+    $search = Element-ById $Hwnd 'SettingsSearch'
+    $header = Element-ById $Hwnd 'SettingsTitleBar'
+    if (-not $header -or -not $search -or $search.Current.IsOffscreen) { throw 'Embedded title bar search is missing.' }
+    $dpi = [HotshotSmokeNative]::GetDpiForWindow($Hwnd) / 96.0
+    $headerBounds = $header.Current.BoundingRectangle
+    $searchBounds = $search.Current.BoundingRectangle
+    if ($headerBounds.Height -lt 48 * $dpi - 1) { throw 'Title bar is shorter than its tall caption buttons.' }
+    if ($searchBounds.Top -lt $headerBounds.Top - 1 -or $searchBounds.Bottom -gt $headerBounds.Bottom + 1) {
+        throw 'Search is outside the title bar instead of embedded inside it.'
+    }
+    foreach ($name in 'Minimize', 'Maximize', 'Restore', 'Close') {
+        $button = Element $Hwnd $name ([System.Windows.Automation.ControlType]::Button)
+        if ($button -and -not $button.Current.IsOffscreen -and $searchBounds.IntersectsWith($button.Current.BoundingRectangle)) {
+            throw "Search overlaps the $name caption button."
+        }
+    }
+    if ($searchBounds.Width -lt 120 * $dpi) { throw 'Embedded search is too narrow to use.' }
 }
 
 function Toggle-Control([IntPtr]$Hwnd, [string]$Name) {
@@ -368,91 +390,92 @@ try {
         return
     }
     $settings = Wait-For { Settings-Window } 'native settings window'
-    foreach ($page in 'General', 'Hotkeys', 'Naming', 'Capture', 'Recording', 'Gif', 'About') {
-        Select-SettingsPage $settings $page
-        Start-Sleep -Milliseconds 100
+    if (-not $HeaderSearchOnly) {
+        foreach ($page in 'General', 'Hotkeys', 'Naming', 'Capture', 'Recording', 'Gif', 'About') {
+            Select-SettingsPage $settings $page
+            Start-Sleep -Milliseconds 100
+        }
+        Select-SettingsPage $settings 'General'
+        $copyToggle = Toggle-Control $settings 'Copy captures to clipboard'
+        $copyToggle.Toggle()
+        Wait-For { -not (Read-AppJson $settingsFile).general.copyToClipboard } 'automatic settings save' | Out-Null
+        $copyToggle.Toggle()
+        Wait-For { (Read-AppJson $settingsFile).general.copyToClipboard } 'automatic clipboard setting restore' | Out-Null
+        $savedSettings = Read-AppJson $settingsFile
+        if ($savedSettings.general.showPreview -or $savedSettings.general.openEditorAfterCapture) { throw 'Legacy profile still opens capture windows.' }
+        if (Element $settings 'Save settings') { throw 'Settings still require a manual Save button.' }
+        Write-Host 'PASS adaptive settings modules, automatic persistence and legacy silent-capture migration'
+
+        if ($SettingsControlsOnly) {
+            if (Element $settings 'Captures folder' ([System.Windows.Automation.ControlType]::Edit)) {
+                throw 'Captures folder still uses an editable textbox.'
+            }
+            $browse = Element-ById $settings 'CapturesFolderPicker'
+            Click $browse
+            $picker = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Choose captures folder') } 'native folder picker'
+            # PowerShell's managed UIA exposes native picker buttons as panes without InvokePattern.
+            $cancel = Wait-For { [HotshotSmokeNative]::GetDlgItem($picker, 2) } 'native picker Cancel control'
+            if (-not [HotshotSmokeNative]::PostMessage($picker, 0x111, [IntPtr]2, $cancel)) { throw 'Could not cancel the folder picker.' }
+            Wait-For { $browse.Current.IsEnabled } 'folder picker cancellation' | Out-Null
+            if ((Read-AppJson $settingsFile).general.saveFolder -ne $output) { throw 'Canceling changed the captures folder.' }
+            Write-Host 'PASS native folder picker and cancellation without changing the saved folder'
+
+            $chosenFolder = Join-Path $output 'chosen'
+            [IO.Directory]::CreateDirectory($chosenFolder) | Out-Null
+            Click $browse
+            $picker = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Choose captures folder') } 'native folder picker selection'
+            $folder = Wait-For { Element $picker 'chosen' ([System.Windows.Automation.ControlType]::ListItem) } 'folder picker directory entry'
+            $folder.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            [HotshotSmokeNative]::SetForegroundWindow($picker) | Out-Null
+            $commit = Wait-For { [HotshotSmokeNative]::GetDlgItem($picker, 1) } 'folder picker commit button'
+            if (-not [HotshotSmokeNative]::PostMessage($picker, 0x111, [IntPtr]1, $commit)) { throw 'Could not select the chosen folder.' }
+            Wait-For { (Read-AppJson $settingsFile).general.saveFolder -eq $chosenFolder } 'selected folder automatic save' | Out-Null
+            if ((Element-ById $settings 'CapturesFolderPath').Current.Name -ne $chosenFolder) { throw 'Selected folder is not displayed.' }
+            Write-Host 'PASS selected captures folder is displayed and saved automatically'
+
+            Select-SettingsPage $settings 'Naming'
+            $year = Get-Date -Format yyyy
+            Set-Pattern $settings 'NamingRegionPattern' 'capture_'
+            Select-NamingToken $settings 'NamingRegionTokens' "{yyyy} - Year. Example: $year"
+            Wait-For { (Read-AppJson $settingsFile).naming.screenshotPattern -eq 'capture_{yyyy}' } 'year token inserted at cursor' | Out-Null
+            if ((Element-ById $settings 'NamingRegionPreview').Current.Name -ne "Example: capture_$year.png") {
+                throw 'Screenshot preview does not match the inserted token example.'
+            }
+            Set-Pattern $settings 'NamingRegionPattern' 'capture_{yyyy}_'
+            Select-NamingToken $settings 'NamingRegionTokens' '{counter:4} - Incrementing number, 4 digits. Example: 0042'
+            Wait-For { (Read-AppJson $settingsFile).naming.screenshotPattern -eq 'capture_{yyyy}_{counter:4}' } 'padded counter insertion' | Out-Null
+            if ((Element-ById $settings 'NamingRegionPreview').Current.Name -ne "Example: capture_$($year)_0042.png") {
+                throw 'Padded counter preview does not match its dropdown example.'
+            }
+            Set-Pattern $settings 'NamingRecordingPattern' 'video_'
+            Select-NamingToken $settings 'NamingRecordingTokens' '{type} - Capture type. Example: recording'
+            Wait-For { (Read-AppJson $settingsFile).naming.recordingPattern -eq 'video_{type}' } 'recording type token insertion' | Out-Null
+            if ((Element-ById $settings 'NamingRecordingPreview').Current.Name -ne 'Example: video_recording.mp4') {
+                throw 'Recording token preview has the wrong capture type or extension.'
+            }
+            Write-Host 'PASS token dropdown examples, cursor insertion, padded counters and capture-specific filename previews'
+            return
+        }
     }
-    Select-SettingsPage $settings 'General'
-    $copyToggle = Toggle-Control $settings 'Copy captures to clipboard'
-    $copyToggle.Toggle()
-    Wait-For { -not (Read-AppJson $settingsFile).general.copyToClipboard } 'automatic settings save' | Out-Null
-    $copyToggle.Toggle()
-    Wait-For { (Read-AppJson $settingsFile).general.copyToClipboard } 'automatic clipboard setting restore' | Out-Null
-    $savedSettings = Read-AppJson $settingsFile
-    if ($savedSettings.general.showPreview -or $savedSettings.general.openEditorAfterCapture) { throw 'Legacy profile still opens capture windows.' }
-    if (Element $settings 'Save settings') { throw 'Settings still require a manual Save button.' }
-    Write-Host 'PASS adaptive settings modules, automatic persistence and legacy silent-capture migration'
 
-    if ($SettingsControlsOnly) {
-        if (Element $settings 'Captures folder' ([System.Windows.Automation.ControlType]::Edit)) {
-            throw 'Captures folder still uses an editable textbox.'
-        }
-        $browse = Element-ById $settings 'CapturesFolderPicker'
-        Click $browse
-        $picker = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Choose captures folder') } 'native folder picker'
-        # PowerShell's managed UIA exposes native picker buttons as panes without InvokePattern.
-        $cancel = Wait-For { [HotshotSmokeNative]::GetDlgItem($picker, 2) } 'native picker Cancel control'
-        if (-not [HotshotSmokeNative]::PostMessage($picker, 0x111, [IntPtr]2, $cancel)) { throw 'Could not cancel the folder picker.' }
-        Wait-For { $browse.Current.IsEnabled } 'folder picker cancellation' | Out-Null
-        if ((Read-AppJson $settingsFile).general.saveFolder -ne $output) { throw 'Canceling changed the captures folder.' }
-        Write-Host 'PASS native folder picker and cancellation without changing the saved folder'
-
-        $chosenFolder = Join-Path $output 'chosen'
-        [IO.Directory]::CreateDirectory($chosenFolder) | Out-Null
-        Click $browse
-        $picker = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Choose captures folder') } 'native folder picker selection'
-        $folder = Wait-For { Element $picker 'chosen' ([System.Windows.Automation.ControlType]::ListItem) } 'folder picker directory entry'
-        $folder.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
-        [HotshotSmokeNative]::SetForegroundWindow($picker) | Out-Null
-        $commit = Wait-For { [HotshotSmokeNative]::GetDlgItem($picker, 1) } 'folder picker commit button'
-        if (-not [HotshotSmokeNative]::PostMessage($picker, 0x111, [IntPtr]1, $commit)) { throw 'Could not select the chosen folder.' }
-        Wait-For { (Read-AppJson $settingsFile).general.saveFolder -eq $chosenFolder } 'selected folder automatic save' | Out-Null
-        if ((Element-ById $settings 'CapturesFolderPath').Current.Name -ne $chosenFolder) { throw 'Selected folder is not displayed.' }
-        Write-Host 'PASS selected captures folder is displayed and saved automatically'
-
-        Select-SettingsPage $settings 'Naming'
-        $year = Get-Date -Format yyyy
-        Set-Pattern $settings 'NamingRegionPattern' 'capture_'
-        Select-NamingToken $settings 'NamingRegionTokens' "{yyyy} - Year. Example: $year"
-        Wait-For { (Read-AppJson $settingsFile).naming.screenshotPattern -eq 'capture_{yyyy}' } 'year token inserted at cursor' | Out-Null
-        if ((Element-ById $settings 'NamingRegionPreview').Current.Name -ne "Example: capture_$year.png") {
-            throw 'Screenshot preview does not match the inserted token example.'
-        }
-        Set-Pattern $settings 'NamingRegionPattern' 'capture_{yyyy}_'
-        Select-NamingToken $settings 'NamingRegionTokens' '{counter:4} - Incrementing number, 4 digits. Example: 0042'
-        Wait-For { (Read-AppJson $settingsFile).naming.screenshotPattern -eq 'capture_{yyyy}_{counter:4}' } 'padded counter insertion' | Out-Null
-        if ((Element-ById $settings 'NamingRegionPreview').Current.Name -ne "Example: capture_$($year)_0042.png") {
-            throw 'Padded counter preview does not match its dropdown example.'
-        }
-        Set-Pattern $settings 'NamingRecordingPattern' 'video_'
-        Select-NamingToken $settings 'NamingRecordingTokens' '{type} - Capture type. Example: recording'
-        Wait-For { (Read-AppJson $settingsFile).naming.recordingPattern -eq 'video_{type}' } 'recording type token insertion' | Out-Null
-        if ((Element-ById $settings 'NamingRecordingPreview').Current.Name -ne 'Example: video_recording.mp4') {
-            throw 'Recording token preview has the wrong capture type or extension.'
-        }
-        Write-Host 'PASS token dropdown examples, cursor insertion, padded counters and capture-specific filename previews'
-        return
-    }
-
-    if ($ThemeSearchOnly) {
+    if ($ThemeSearchOnly -or $HeaderSearchOnly) {
         $search = Wait-For { Element-ById $settings 'SettingsSearch' } 'title bar settings search'
         if ($search.Current.IsOffscreen) { throw 'Search is hidden when the sidebar collapses.' }
         $windowBounds = [System.Windows.Automation.AutomationElement]::FromHandle($settings).Current.BoundingRectangle
         $dpi = [HotshotSmokeNative]::GetDpiForWindow($settings) / 96.0
         if (($search.Current.BoundingRectangle.Top - $windowBounds.Top) / $dpi -gt 100) { throw 'Search is not in the window header.' }
-        if ([HotshotSmokeNative]::ClientWidth($settings) / $dpi -lt 760 -and
-            $search.Current.BoundingRectangle.Width -lt $windowBounds.Width * 0.85) {
-            throw 'Compact header search does not use at least 85% of the narrow window width.'
-        }
+        Assert-EmbeddedSettingsSearch $settings
         $theme = Element $settings 'App theme' ([System.Windows.Automation.ControlType]::ComboBox)
         foreach ($choice in 'Dark', 'Light', 'Dark') {
             $theme.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
             $item = Wait-For { App-Control $choice } "$choice theme option"
             $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
             Wait-For { (Read-AppJson $settingsFile).general.theme -eq $choice.ToLowerInvariant() } 'theme persistence' | Out-Null
-            [int]$mode = -1
-            if ([HotshotSmokeNative]::DwmGetWindowAttribute($settings, 20, [ref]$mode, 4) -ne 0 -or
-                $mode -ne $(if ($choice -eq 'Dark') { 1 } else { 0 })) { throw 'Window chrome does not follow app theme.' }
+            Wait-For {
+                [int]$mode = -1
+                [HotshotSmokeNative]::DwmGetWindowAttribute($settings, 20, [ref]$mode, 4) -eq 0 -and
+                    $mode -eq $(if ($choice -eq 'Dark') { 1 } else { 0 })
+            } 'window chrome follows app theme' | Out-Null
         }
         Write-Host 'PASS dark/light app theme updates native title bar mode immediately'
         $editableSearch = $search.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
@@ -476,13 +499,11 @@ try {
                 $search = Element-ById $settings 'SettingsSearch'
                 $bounds = [System.Windows.Automation.AutomationElement]::FromHandle($settings).Current.BoundingRectangle
                 $searchBounds = $search.Current.BoundingRectangle
-                if ([HotshotSmokeNative]::ClientWidth($settings) / $dpi -lt 760) {
-                    return $searchBounds.Width -ge $bounds.Width * 0.85 -and
-                        ($searchBounds.Left - $bounds.Left) / $dpi -le 32
-                }
-                return ($searchBounds.Top - $bounds.Top) / $dpi -lt 48 -and
-                    $searchBounds.Width -ge 150 * $dpi
+                $headerBounds = (Element-ById $settings 'SettingsTitleBar').Current.BoundingRectangle
+                return $searchBounds.Top -ge $headerBounds.Top -and $searchBounds.Bottom -le $headerBounds.Bottom -and
+                    $searchBounds.Width -ge 120 * $dpi
             } "responsive search at $width DIPs" | Out-Null
+            Assert-EmbeddedSettingsSearch $settings
             $actualWidth = [int]($bounds.Width / $dpi)
             if ([HotshotSmokeNative]::ClientWidth($settings) / $dpi -lt 760) { $compactWidths += $actualWidth }
             else { $inlineWidths += $actualWidth }
@@ -495,7 +516,7 @@ try {
             }
             Wait-For { $editableSearch.Current.HasKeyboardFocus } 'search focus preserved after resize' | Out-Null
         }
-        Write-Host "PASS full-width compact search at $($compactWidths | Sort-Object -Unique) DIPs and preserved query/focus"
+        Write-Host "PASS embedded compact search at $($compactWidths | Sort-Object -Unique) DIPs, no caption overlap and preserved query/focus"
         if ($inlineWidths.Count -gt 0) { Write-Host "PASS inline search at $($inlineWidths | Sort-Object -Unique) DIPs" }
         else { Write-Host 'SKIP inline search resizing: this desktop clamps the window below the wide-layout breakpoint.' }
         $query = Element-ById $settings 'QueryButton'

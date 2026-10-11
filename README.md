@@ -27,7 +27,7 @@ Settings, history and originals stay in `%AppData%\Hotshot`, outside the install
 | Shift+Print Screen | Capture the full virtual screen (all monitors) |
 | Ctrl+Shift+Print Screen | Start/stop screen recording |
 
-Settings use a PowerToys-inspired adaptive sidebar, grouped setting cards, and automatic saving. The title bar and caption buttons follow **General > App theme** (Windows default, light or dark), including inactive windows. Settings search stays in the title bar on wide windows and moves to a full-width header row below it on narrow windows, even when navigation collapses; **Ctrl+F** focuses it. Search individual settings by name or related keywords, choose a suggestion to jump to its highlighted card, or press Enter for all matching results. Invalid edits remain unapplied with an inline explanation; there is no global Save button.
+Settings use a PowerToys-inspired adaptive sidebar, grouped setting cards, and automatic saving. The title bar and caption buttons follow **General > App theme** (Windows default, light or dark), including inactive windows. Settings search is embedded in the title bar at every window width; the title and subtitle hide on narrow windows to leave room for search and the window buttons. **Ctrl+F** focuses it. Search individual settings by name or related keywords, choose a suggestion to jump to its highlighted card, or press Enter for all matching results. Invalid edits remain unapplied with an inline explanation; there is no global Save button.
 
 All shortcuts are configurable under **Keyboard shortcuts**: click a shortcut, press the new combination, and Apply or Clear it. Duplicate/invalid shortcuts are rejected, and registration conflicts are shown. If Print Screen launches Snipping Tool, disable that option in Windows keyboard settings or choose another shortcut. In the selection overlay, **Space** captures/selects the monitor under the cursor and **Escape** cancels.
 
@@ -115,3 +115,4 @@ The app smoke test exercises native settings, global shortcuts, capture selectio
 Pass `-VerifyStartup` only with a Release build to additionally exercise Start with Windows; the original Hotshot Run entry is restored afterward.
 Pass `-SettingsControlsOnly` to exercise folder selection/cancellation and filename-token dropdown examples/insertion without taking captures or changing the clipboard.
 Pass `-HistoryNavigationOnly` to verify filename-only browsing and automatic editor loading with generated PNG fixtures; it does not capture the desktop or change the clipboard.
+Pass `-HeaderSearchOnly` to check embedded title-bar search, caption-button separation, resizing, theme changes and search navigation without running unrelated capture or clipboard checks.
