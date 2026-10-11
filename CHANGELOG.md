@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/sebastienlevert/hotshot/compare/v0.1.10...v0.1.11) (2026-10-11)
+
+
+### Features
+
+* complete native capture and visual verification workflows ([8f825b9](https://github.com/sebastienlevert/hotshot/commit/8f825b9596b6a97d3ebc5aca7330adaf582b7397))
+
 ## [0.1.10](https://github.com/sebastienlevert/hotshot/compare/v0.1.9...v0.1.10) (2026-10-11)
 
 
