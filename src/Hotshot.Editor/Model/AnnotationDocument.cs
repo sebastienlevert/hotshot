@@ -112,8 +112,31 @@ internal sealed class AnnotationDocument
         {
             return false;
         }
-
         return Execute(() => _items[index] = updated);
+    }
+
+    public Guid? Duplicate(Guid id)
+    {
+        if (Find(id) is not { } source) return null;
+        var clone = source.Clone();
+        clone.Id = Guid.NewGuid();
+        clone.Translate(new Vector2(12, 12));
+        Execute(() => _items.Insert(IndexOf(id) + 1, clone));
+        return clone.Id;
+    }
+
+    public bool MoveLayer(Guid id, int targetIndex)
+    {
+        var index = IndexOf(id);
+        if (index < 0) return false;
+        targetIndex = Math.Clamp(targetIndex, 0, _items.Count - 1);
+        if (index == targetIndex) return false;
+        return Execute(() =>
+        {
+            var item = _items[index];
+            _items.RemoveAt(index);
+            _items.Insert(targetIndex, item);
+        });
     }
 
     public bool SetCrop(RectF? crop)

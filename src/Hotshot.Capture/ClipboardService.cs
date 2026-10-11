@@ -44,6 +44,9 @@ public static class ClipboardService
         return SetData(owner, [(Native.CF_UNICODETEXT, ToGlobal(bytes))]);
     }
 
+    public static Task<bool> SetTextAsync(nint owner, string text) =>
+        SetDataAsync(owner, [(Native.CF_UNICODETEXT, ToGlobal(Encoding.Unicode.GetBytes(text + "\0")))]);
+
     private static bool SetData(nint owner, (uint Format, nint Handle)[] items)
     {
         if (items[0].Handle == 0 || !TryOpen(owner))

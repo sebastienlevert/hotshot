@@ -1,5 +1,7 @@
 using Hotshot.Editor.Model;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Effects;
+using Microsoft.Graphics.Canvas.Geometry;
 using Windows.Graphics.DirectX;
 using Windows.Storage.Streams;
 using Windows.UI;
@@ -19,26 +21,45 @@ internal static class ImageExporter
         Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg" ? ExportFormat.Jpeg : ExportFormat.Png;
 
     public static async Task<byte[]> EncodeAsync(DocumentRenderer renderer, AnnotationDocument document, ExportFormat format = ExportFormat.Png)
+        => await EncodeAsync(renderer, document, new ImageExportOptions(format == ExportFormat.Jpeg ? ImageExportFormat.Jpeg : ImageExportFormat.Png));
+
+    public static async Task<byte[]> EncodeAsync(DocumentRenderer renderer, AnnotationDocument document, ImageExportOptions options)
     {
         var device = renderer.Device;
         var output = CropMath.OutputRect(document.Crop, renderer.Width, renderer.Height);
+        var layout = options.GetLayout(output.Width, output.Height);
         using var targets = new RenderTargetPair();
         var composite = renderer.Render(document, targets);
-        using var final = new CanvasRenderTarget(device, output.Width, output.Height, 96f, DirectXPixelFormat.B8G8R8A8UIntNormalized, CanvasAlphaMode.Premultiplied);
+        using var final = new CanvasRenderTarget(device, layout.CanvasWidth, layout.CanvasHeight, 96f, DirectXPixelFormat.B8G8R8A8UIntNormalized, CanvasAlphaMode.Premultiplied);
+        var destination = new Windows.Foundation.Rect(options.Padding, options.Padding, layout.ImageWidth, layout.ImageHeight);
+        var radius = Math.Min(options.CornerRadius, Math.Min(layout.ImageWidth, layout.ImageHeight) / 2f);
+        using var clip = CanvasGeometry.CreateRoundedRectangle(device, destination, radius, radius);
         using (var ds = final.CreateDrawingSession())
         {
-            // JPEG has no alpha: flatten onto white.
-            ds.Clear(format == ExportFormat.Jpeg ? Color.FromArgb(255, 255, 255, 255) : default);
-            ds.DrawImage(
-                composite,
-                new Windows.Foundation.Rect(0, 0, output.Width, output.Height),
+            var background = options.Background switch
+            {
+                ExportBackground.White => Color.FromArgb(255, 255, 255, 255),
+                ExportBackground.Charcoal => Color.FromArgb(255, 32, 32, 36),
+                ExportBackground.Blue => Color.FromArgb(255, 42, 78, 146),
+                _ => options.Format == ImageExportFormat.Jpeg ? Color.FromArgb(255, 255, 255, 255) : default,
+            };
+            ds.Clear(background);
+            if (options.Shadow)
+            {
+                using var mask = new CanvasCommandList(device);
+                using (var mds = mask.CreateDrawingSession()) mds.FillGeometry(clip, Color.FromArgb(255, 0, 0, 0));
+                using var shadow = new ShadowEffect { Source = mask, BlurAmount = 10, ShadowColor = Color.FromArgb(110, 0, 0, 0) };
+                ds.DrawImage(shadow, 0, 6);
+            }
+            using var layer = ds.CreateLayer(1, clip);
+            ds.DrawImage(composite, destination,
                 new Windows.Foundation.Rect(output.X, output.Y, output.Width, output.Height),
                 1f,
-                CanvasImageInterpolation.NearestNeighbor);
+                options.Width == 0 ? CanvasImageInterpolation.NearestNeighbor : CanvasImageInterpolation.HighQualityCubic);
         }
 
         using var stream = new InMemoryRandomAccessStream();
-        if (format == ExportFormat.Jpeg)
+        if (options.Format == ImageExportFormat.Jpeg)
         {
             await final.SaveAsync(stream, CanvasBitmapFileFormat.Jpeg, 0.92f);
         }

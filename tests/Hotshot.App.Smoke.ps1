@@ -146,6 +146,19 @@ function Click($Element) {
     $Element.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
 }
 
+function Workspace-Action([IntPtr]$Hwnd, [string]$Name) {
+    $control = Element $Hwnd $Name
+    if (-not $control) {
+        $commands = Element-ById $Hwnd 'WorkspaceCommands'
+        $more = $commands.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new(
+                [System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'MoreButton'))
+        Click $more
+        $control = Wait-For { App-Control $Name } "workspace command $Name"
+    }
+    Click $control
+}
+
 function Element-ById([IntPtr]$Hwnd, [string]$Id) {
     $window = [System.Windows.Automation.AutomationElement]::FromHandle($Hwnd)
     $condition = [System.Windows.Automation.PropertyCondition]::new(
@@ -162,6 +175,17 @@ function Select-SettingsPage([IntPtr]$Hwnd, [string]$Page) {
     $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
     $pane = Element-ById $Hwnd 'TogglePaneButton'
     if ($pane -and $pane.Current.Name -eq 'Close Navigation') { Click $pane }
+}
+
+function Settings-Window {
+    $owner = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $process.Id)
+    foreach ($window in [System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $owner)) {
+        if ($window.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'SettingsSearch'))) {
+            return [IntPtr]$window.Current.NativeWindowHandle
+        }
+    }
+    return [IntPtr]::Zero
 }
 
 function Toggle-Control([IntPtr]$Hwnd, [string]$Name) {
@@ -267,6 +291,8 @@ try {
                 fileSize = (Get-Item -LiteralPath $path).Length; thumbnailPath = $path
                 summary = if ($size -eq 96) { 'Synthetic geometry' } else { $null }
                 description = if ($size -eq 96) { 'Blue geometry on a generated image.' } else { $null }
+                recognizedText = if ($size -eq 80) { 'Invoice total 123.45' } else { $null }
+                tags = @(if ($size -eq 80) { 'finance' })
             }
         }
         [IO.File]::WriteAllText($historyFile, (ConvertTo-Json -InputObject $fixtures -Depth 4))
@@ -289,8 +315,7 @@ try {
                 [System.Windows.Automation.ControlType]::Image))) { throw 'History still displays thumbnail previews.' }
         $rows = @{}
         foreach ($size in 64, 80, 96) {
-            $rows[$size] = Element $workspace "Capture capture-$size.png" ([System.Windows.Automation.ControlType]::ListItem)
-            if (-not $rows[$size]) { throw "Filename history row is missing: capture-$size.png" }
+            $rows[$size] = Wait-For { Element $workspace "Capture capture-$size.png" ([System.Windows.Automation.ControlType]::ListItem) } "filename row capture-$size.png"
             $rows[$size].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
             Wait-For { Element $workspace "$size x $([int]($size * 0.75)) pixels" } "automatic editor preview for capture-$size.png" | Out-Null
             if (-not $list.Current.IsEnabled) { throw 'Filename history was disabled while browsing.' }
@@ -321,12 +346,28 @@ try {
             throw 'Editor saving discarded the screenshot description metadata.'
         }
         $search.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('')
+        $search.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('finance invoice')
+        Wait-For {
+            (Element $workspace 'Capture capture-80.png' ([System.Windows.Automation.ControlType]::ListItem)) -and
+                -not (Element $workspace 'Capture capture-96.png' ([System.Windows.Automation.ControlType]::ListItem))
+        } 'tags and recognized text search' | Out-Null
+        $search.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('')
+        Workspace-Action $workspace 'Favorite'
+        Wait-For { @(Read-CaptureHistory) | Where-Object isFavorite } 'favorite persisted' | Out-Null
+        (Toggle-Control $workspace 'Favorites only').Toggle()
+        Wait-For {
+            (Element $workspace 'Capture capture-96.png' ([System.Windows.Automation.ControlType]::ListItem)) -and
+                -not (Element $workspace 'Capture capture-64.png' ([System.Windows.Automation.ControlType]::ListItem))
+        } 'favorites filter' | Out-Null
+        (Toggle-Control $workspace 'Favorites only').Toggle()
+        if (-not (Element $workspace 'Resize capture list')) { throw 'Toolkit history/editor splitter is unavailable.' }
         Write-Host 'PASS filename-only history, automatic editor previews, enabled navigation and latest-selection consistency'
         Write-Host 'PASS stored AI descriptions participate in capture search without thumbnail previews'
         Write-Host 'PASS editor saves preserve embedded summary/description metadata'
+        Write-Host 'PASS favorites persist, tags/OCR text search and Toolkit resizable history layout'
         return
     }
-    $settings = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot settings') } 'native settings window'
+    $settings = Wait-For { Settings-Window } 'native settings window'
     foreach ($page in 'General', 'Hotkeys', 'Naming', 'Capture', 'Recording', 'Gif', 'About') {
         Select-SettingsPage $settings $page
         Start-Sleep -Milliseconds 100

@@ -25,6 +25,9 @@ public sealed class EditorView : UserControl, IDisposable
     private readonly ComboBox _colors = new() { ItemsSource = RgbaColor.Palette.Select(p => p.Name).ToArray(), SelectedIndex = 0, MinWidth = 92 };
     private readonly ComboBox _widths = new() { ItemsSource = StylePresets.StrokeNames, SelectedIndex = 1, MinWidth = 90 };
     private readonly TextBox _text = new() { PlaceholderText = "Annotation text", MinWidth = 150, Visibility = Visibility.Collapsed };
+    private readonly ComboBox _layers = new() { PlaceholderText = "Select annotation", MinWidth = 140, MaxWidth = 200 };
+    private readonly CheckBox _filled = new() { Content = "Filled", Visibility = Visibility.Collapsed };
+    private readonly NumberBox _fontSize = new() { Minimum = 8, Maximum = 144, Value = 24, Width = 100, Visibility = Visibility.Collapsed };
     private readonly AppBarButton _undo = new() { Label = "Undo", Icon = Icons.Glyph(Icons.Undo), IsEnabled = false };
     private readonly AppBarButton _redo = new() { Label = "Redo", Icon = Icons.Glyph(Icons.Redo), IsEnabled = false };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Opacity = 0.75 };
@@ -37,6 +40,7 @@ public sealed class EditorView : UserControl, IDisposable
     private Vector2 _anchor;
     private Vector2 _previous;
     private bool _moving;
+    private HandleKind? _resizeHandle;
     private bool _cropping;
     private PixelRect _cropViewport;
     private float _scale = 1;
@@ -58,10 +62,30 @@ public sealed class EditorView : UserControl, IDisposable
         AutomationProperties.SetName(_widths, "Stroke thickness");
         AutomationProperties.SetName(_text, "Annotation text");
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _tools });
+        ToolTipService.SetToolTip(_tools, "Select moves/resizes annotations. Redact permanently covers pixels in exported copies; private originals are retained.");
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _colors });
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _widths });
         commands.PrimaryCommands.Add(_undo);
         commands.PrimaryCommands.Add(_redo);
+        AutomationProperties.SetName(_layers, "Annotation layers");
+        AutomationProperties.SetName(_filled, "Fill selected shape");
+        AutomationProperties.SetName(_fontSize, "Annotation font size");
+        commands.SecondaryCommands.Add(new AppBarElementContainer { Content = _layers });
+        commands.SecondaryCommands.Add(new AppBarElementContainer { Content = _filled });
+        commands.SecondaryCommands.Add(new AppBarElementContainer { Content = _fontSize });
+        var duplicate = new AppBarButton { Label = "Duplicate annotation", Icon = new SymbolIcon(Symbol.Copy) };
+        duplicate.Click += (_, _) => DuplicateSelected();
+        commands.SecondaryCommands.Add(duplicate);
+        foreach (var (label, front) in new[] { ("Bring to front", true), ("Send to back", false) })
+        {
+            var layer = new AppBarButton { Label = label, Icon = new SymbolIcon(Symbol.Sort) };
+            layer.Click += (_, _) =>
+            {
+                if (_state?.SelectedId is { } id)
+                    _state.Document.MoveLayer(id, front ? _state.Document.Annotations.Count - 1 : 0);
+            };
+            commands.SecondaryCommands.Add(layer);
+        }
         var delete = new AppBarButton { Label = "Delete annotation", Icon = Icons.Glyph(Icons.Delete) };
         delete.Click += (_, _) => _state?.DeleteSelected();
         commands.SecondaryCommands.Add(delete);
@@ -90,6 +114,19 @@ public sealed class EditorView : UserControl, IDisposable
         _canvas.PointerCanceled += (_, _) => CancelGesture();
         _canvas.PointerCaptureLost += (_, _) => CancelGesture();
         _canvas.SizeChanged += (_, _) => _canvas.Invalidate();
+        _canvas.KeyDown += (_, args) =>
+        {
+            if (_busy || _state is not { Tool: EditorTool.Select, SelectedId: { } id } state) return;
+            var delta = args.Key switch
+            {
+                VirtualKey.Left => -Vector2.UnitX, VirtualKey.Right => Vector2.UnitX,
+                VirtualKey.Up => -Vector2.UnitY, VirtualKey.Down => Vector2.UnitY, _ => Vector2.Zero,
+            };
+            if (delta == Vector2.Zero) return;
+            if ((InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0) delta *= 10;
+            state.Document.Update(id, annotation => annotation.Translate(delta));
+            args.Handled = true;
+        };
         ActualThemeChanged += (_, _) => _canvas.Invalidate();
         _tools.SelectionChanged += (_, _) =>
         {
@@ -112,11 +149,24 @@ public sealed class EditorView : UserControl, IDisposable
             if (!_updating && _state?.Selected is TextAnnotation selected)
                 _state.Document.Update(selected.Id, a => ((TextAnnotation)a).Text = _text.Text);
         };
+        _layers.SelectionChanged += (_, _) =>
+        {
+            if (_updating || _state is null || _layers.SelectedItem is not ComboBoxItem { Tag: Guid id }) return;
+            _state.Tool = EditorTool.Select;
+            _state.Select(id);
+        };
+        _filled.Checked += (_, _) => { if (!_updating) _state?.SetFilled(true); };
+        _filled.Unchecked += (_, _) => { if (!_updating) _state?.SetFilled(false); };
+        _fontSize.ValueChanged += (_, args) =>
+        {
+            if (!_updating && double.IsFinite(args.NewValue)) _state?.SetFontSize((float)args.NewValue);
+        };
         _undo.Click += (_, _) => _state?.Document.Undo();
         _redo.Click += (_, _) => _state?.Document.Redo();
         AddAccelerator(VirtualKey.Z, VirtualKeyModifiers.Control, () => _state?.Document.Undo());
         AddAccelerator(VirtualKey.Y, VirtualKeyModifiers.Control, () => _state?.Document.Redo());
         AddAccelerator(VirtualKey.Delete, VirtualKeyModifiers.None, () => _state?.DeleteSelected());
+        AddAccelerator(VirtualKey.D, VirtualKeyModifiers.Control, DuplicateSelected);
     }
 
     public event EventHandler<EditorSavedEventArgs>? Saved;
@@ -124,6 +174,24 @@ public sealed class EditorView : UserControl, IDisposable
     public bool HasImage => _renderer is not null && _state is not null;
     public bool IsDirty => _state?.Document.IsDirty ?? false;
     public bool IsBusy => _busy;
+    public bool HasRedactions => _state?.Document.Annotations.Any(annotation => annotation is RedactionAnnotation) == true;
+
+    public async Task<byte[]> ExportPngAsync() => await ExportAsync(new ImageExportOptions());
+
+    public async Task<byte[]> ExportAsync(ImageExportOptions options)
+    {
+        if (_busy || _renderer is not { } renderer || _state is not { } state)
+            throw new InvalidOperationException("No screenshot is ready to export.");
+        CancelGesture();
+        SetBusy(true);
+        try { return await Task.Run(() => ImageExporter.EncodeAsync(renderer, state.Document, options)); }
+        finally { SetBusy(false); }
+    }
+
+    private void DuplicateSelected()
+    {
+        if (_state?.SelectedId is { } id) _state.Select(_state.Document.Duplicate(id));
+    }
 
     public async Task LoadAsync(EditorOptions options)
     {
@@ -195,7 +263,7 @@ public sealed class EditorView : UserControl, IDisposable
             {
                 if (!File.Exists(options.OriginalBackupPath))
                     await ImageExporter.WriteFileAtomicAsync(options.OriginalBackupPath, original);
-                if (options.SaveImageAsync is { } save) fileSize = await save(png);
+                if (options.SaveImageAsync is { } save) fileSize = await save(png, HasRedactions);
                 else await ImageExporter.WriteFileAtomicAsync(options.ImagePath, png);
                 await ImageExporter.WriteFileAtomicAsync(options.AnnotationsPath, System.Text.Encoding.UTF8.GetBytes(json));
             });
@@ -272,7 +340,13 @@ public sealed class EditorView : UserControl, IDisposable
             ds.Transform = Matrix3x2.CreateScale(_scale) * Matrix3x2.CreateTranslation(_offset - new Vector2(_viewport.X, _viewport.Y) * _scale);
             var accent = Color.FromArgb(255, 10, 132, 255);
             if (_cropping && state.Document.Crop is { } crop) ds.DrawRectangle(crop.ToRect(), accent, 2 / _scale);
-            if (state.Selected is { } selected) ds.DrawRectangle(selected.GetVisualBounds().ToRect(), accent, 1.5f / _scale);
+            if (state.Selected is { } selected)
+            {
+                ds.DrawRectangle(selected.GetVisualBounds().ToRect(), accent, 1.5f / _scale);
+                if (state.Tool == EditorTool.Select)
+                    foreach (var handle in selected.GetHandles())
+                        ds.FillRectangle(handle.Position.X - 3 / _scale, handle.Position.Y - 3 / _scale, 6 / _scale, 6 / _scale, accent);
+            }
         }
         catch (Exception ex) { Error($"The editor could not render this image: {ex.Message}"); }
     }
@@ -292,12 +366,14 @@ public sealed class EditorView : UserControl, IDisposable
         _canvas.Focus(FocusState.Pointer);
         if (state.Tool == EditorTool.Select)
         {
-            var selected = state.Document.HitTest(point, 6 / _scale);
+            var handle = state.Selected?.GetHandles().FirstOrDefault(handle => Vector2.Distance(handle.Position, point) <= 8 / _scale);
+            _resizeHandle = handle is { Kind: not HandleKind.None } found && Vector2.Distance(found.Position, point) <= 8 / _scale ? found.Kind : null;
+            var selected = _resizeHandle is not null ? state.Selected : state.Document.HitTest(point, 6 / _scale);
             state.Select(selected?.Id);
             if (selected is null) return;
             state.Document.BeginTransaction();
             _drawing = selected;
-            _moving = true;
+            _moving = _resizeHandle is null;
         }
         else if (state.Tool == EditorTool.Crop)
         {
@@ -327,7 +403,8 @@ public sealed class EditorView : UserControl, IDisposable
         if (_cropping) state.Document.SetCropTransient(RectF.FromPoints(_anchor, point));
         else if (_drawing is { } annotation)
         {
-            if (_moving) annotation.Translate(point - _previous);
+            if (_resizeHandle is { } handle) annotation.MoveHandle(handle, point, shift);
+            else if (_moving) annotation.Translate(point - _previous);
             else switch (annotation)
             {
                 case SegmentAnnotation segment: segment.End = shift ? GeometryMath.SnapAngle(_anchor, point) : point; break;
@@ -347,6 +424,7 @@ public sealed class EditorView : UserControl, IDisposable
         state.Document.CommitTransaction();
         _drawing = null;
         _moving = _cropping = false;
+        _resizeHandle = null;
         _canvas.ReleasePointerCapture(args.Pointer);
         _canvas.Invalidate();
         args.Handled = true;
@@ -357,6 +435,7 @@ public sealed class EditorView : UserControl, IDisposable
         _state?.Document.CancelTransaction();
         _drawing = null;
         _moving = _cropping = false;
+        _resizeHandle = null;
     }
 
     private void StateChanged(object? sender, EventArgs args) => Refresh();
@@ -373,6 +452,18 @@ public sealed class EditorView : UserControl, IDisposable
         if (state.Selected is TextAnnotation text) _text.Text = text.Text;
         _undo.IsEnabled = state.Document.CanUndo;
         _redo.IsEnabled = state.Document.CanRedo;
+        _filled.Visibility = state.StyleKind is { } kind && StyleTraits.UsesFill(kind) ? Visibility.Visible : Visibility.Collapsed;
+        _filled.IsChecked = style.Filled;
+        _fontSize.Visibility = state.StyleKind is { } fontKind && StyleTraits.UsesFontSize(fontKind) ? Visibility.Visible : Visibility.Collapsed;
+        _fontSize.Value = style.FontSize;
+        _layers.Items.Clear();
+        for (var i = 0; i < state.Document.Annotations.Count; i++)
+        {
+            var annotation = state.Document.Annotations[i];
+            var item = new ComboBoxItem { Content = $"{i + 1}. {annotation.Kind}", Tag = annotation.Id };
+            _layers.Items.Add(item);
+            if (annotation.Id == state.SelectedId) _layers.SelectedItem = item;
+        }
         _updating = false;
         _status.Text = $"{state.Document.ImageWidth} x {state.Document.ImageHeight} pixels{(IsDirty ? " - unsaved changes" : string.Empty)}";
         _canvas.Invalidate();

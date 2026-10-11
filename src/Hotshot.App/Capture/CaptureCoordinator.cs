@@ -138,6 +138,8 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         _busy = true;
         try
         {
+            if (app.Settings.Capture.DelaySeconds > 0)
+                await Task.Delay(TimeSpan.FromSeconds(app.Settings.Capture.DelaySeconds));
             await flow();
         }
         catch (Exception ex)

@@ -15,6 +15,7 @@ internal enum EditorTool
     Step,
     Blur,
     Crop,
+    Redact,
 }
 
 internal static class StylePresets

@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Windowing;
 using Microsoft.Windows.Storage.Pickers;
+using CommunityToolkit.WinUI.Controls;
 using System.Runtime.InteropServices;
 using VirtualKey = Windows.System.VirtualKey;
 
@@ -34,7 +35,7 @@ internal sealed class SettingsWindow : Window
     private Button? _checkUpdates;
     private readonly Dictionary<SettingsPage, NavigationViewItem> _pages = [];
     private readonly Dictionary<HotkeyAction, TextBlock> _hotkeyLabels = [];
-    private readonly Dictionary<string, Border> _settingCards = [];
+    private readonly Dictionary<string, SettingsCard> _settingCards = [];
     private readonly AutoSuggestBox _search = new()
     {
         PlaceholderText = "Search settings", QueryIcon = new SymbolIcon(Symbol.Find),
@@ -241,6 +242,8 @@ internal sealed class SettingsWindow : Window
         yield return new(SettingsPage.Capture, "Show crosshair", "alignment selection screenshot");
         yield return new(SettingsPage.Capture, "Include cursor", "mouse pointer screenshot");
         yield return new(SettingsPage.Capture, "Describe screenshots with Copilot", "ai description summary search metadata image properties privacy");
+        yield return new(SettingsPage.Capture, "Recognize screenshot text locally", "ocr copy search text offline privacy");
+        yield return new(SettingsPage.Capture, "Screenshot delay", "countdown timed capture seconds");
         foreach (var action in Enum.GetValues<HotkeyAction>())
             yield return new(SettingsPage.Hotkeys, action.DisplayName(), $"shortcut hotkey keyboard {action.Description()}");
         yield return new(SettingsPage.Hotkeys, "Print Screen and Snipping Tool", "windows shortcut conflict");
@@ -330,6 +333,12 @@ internal sealed class SettingsWindow : Window
                 Note(panel, "Click the tray icon to open the editor and history. Nothing opens automatically after a screenshot.");
                 break;
             case SettingsPage.Capture:
+                Section(panel, "Text recognition");
+                Toggle(panel, "Recognize screenshot text locally",
+                    "Index text in new screenshots using Windows OCR. Nothing is uploaded; requires an installed OCR language.",
+                    _draft.General.RecognizeScreenshotText, value => _draft.General.RecognizeScreenshotText = value);
+                Number(panel, "Screenshot delay", "Wait before showing the selection overlay or capturing the screen. 0 captures immediately.",
+                    _draft.Capture.DelaySeconds, 0, 30, value => _draft.Capture.DelaySeconds = value);
                 Section(panel, "AI descriptions");
                 Toggle(panel, "Describe screenshots with Copilot",
                     "Send new screenshots to your signed-in GitHub Copilot account. Descriptions are searchable in history and embedded in PNG metadata. Uses your Copilot quota.",
@@ -368,11 +377,15 @@ internal sealed class SettingsWindow : Window
                 Pattern(panel, "Screenshots", _draft.Naming.ScreenshotPattern, CaptureKind.Region, v => _draft.Naming.ScreenshotPattern = v);
                 Pattern(panel, "Recordings and GIFs", _draft.Naming.RecordingPattern, CaptureKind.Recording, v => _draft.Naming.RecordingPattern = v);
                 Note(panel, @"Use \ for subfolders. Extensions are automatic and collisions receive a numeric suffix.");
-                var tokens = new StackPanel { Spacing = 8 };
+                var tokens = new SettingsExpander
+                {
+                    Header = "Available tokens", Description = "Reference examples for filename patterns.",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
                 var sample = NamingContext.Sample();
                 foreach (var token in FileNameTemplate.Tokens)
-                    tokens.Children.Add(UiStyles.Description($"{token.Token}  -  {token.Description}\nExample: {FileNameTemplate.Expand(token.Token, sample)}"));
-                panel.Children.Add(new Expander { Header = "Available tokens", Content = tokens, HorizontalAlignment = HorizontalAlignment.Stretch });
+                    tokens.Items.Add(new SettingsCard { Header = token.Token, Description = $"{token.Description}\nExample: {FileNameTemplate.Expand(token.Token, sample)}" });
+                panel.Children.Add(tokens);
                 break;
             case SettingsPage.Recording:
                 Section(panel, "Video");
@@ -631,15 +644,12 @@ internal sealed class SettingsWindow : Window
 
     private void Card(StackPanel panel, string title, UIElement description, FrameworkElement? control = null)
     {
-        var grid = new Grid { ColumnSpacing = 20 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var body = new StackPanel { Spacing = 4 };
-        body.Children.Add(new TextBlock { Text = title, TextWrapping = TextWrapping.Wrap, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-        body.Children.Add(description);
-        grid.Children.Add(body);
-        if (control is not null) { Grid.SetColumn(control, 1); grid.Children.Add(control); }
-        var card = UiStyles.Card(grid);
+        var card = new SettingsCard
+        {
+            Header = title, Description = description, Content = control,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = control is null ? HorizontalAlignment.Stretch : HorizontalAlignment.Right,
+        };
         _settingCards[title] = card;
         panel.Children.Add(card);
     }

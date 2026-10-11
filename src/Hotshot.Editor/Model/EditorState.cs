@@ -165,6 +165,7 @@ internal sealed class EditorState
             EditorTool.Rectangle => new RectangleAnnotation { Rect = new RectF(point.X, point.Y, 0, 0), Filled = s.Filled },
             EditorTool.Ellipse => new EllipseAnnotation { Rect = new RectF(point.X, point.Y, 0, 0), Filled = s.Filled },
             EditorTool.Blur => new BlurAnnotation { Rect = new RectF(point.X, point.Y, 0, 0) },
+            EditorTool.Redact => new RedactionAnnotation { Rect = new RectF(point.X, point.Y, 0, 0) },
             EditorTool.Pen => new PenAnnotation { Points = [point] },
             EditorTool.Highlighter => new HighlighterAnnotation { Points = [point] },
             EditorTool.Text => new TextAnnotation { Position = point, FontSize = s.FontSize, HasBackground = s.TextBackground },

@@ -30,7 +30,7 @@ internal sealed partial class AppController
             ActiveWindow: Active(_historyWindow) || Active(_settingsWindow),
             UnsavedSettings: _app.IsSaving || (_settingsWindow?.HasPendingChanges ?? false),
             Exiting: _exiting,
-            Describing: _descriptions.IsBusy);
+            Describing: _descriptions.IsBusy || _textIndex.IsBusy);
     }
 
     private async Task<bool> ApplyUpdateAsync(VelopackAsset release)
@@ -46,6 +46,7 @@ internal sealed partial class AppController
             Log.Info($"Applying update {release.Version} silently.");
             _updates.ScheduleRestart(release);
             await _descriptions.DisposeAsync();
+            await _textIndex.DisposeAsync();
             CloseViews();
             Dispose();
             Application.Current.Exit();

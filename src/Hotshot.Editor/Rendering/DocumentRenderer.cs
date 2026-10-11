@@ -106,7 +106,7 @@ internal sealed class DocumentRenderer : IDisposable
         {
             switch (a)
             {
-                case BlurAnnotation:
+                case BlurAnnotation or RedactionAnnotation:
                     continue;
                 case HighlighterAnnotation h:
                     FlushRun(current, run);
@@ -120,6 +120,12 @@ internal sealed class DocumentRenderer : IDisposable
         }
 
         FlushRun(current, run);
+        using (var ds = current.CreateDrawingSession())
+        {
+            // Solid redactions always cover all layers, regardless of annotation ordering.
+            foreach (var redaction in items.OfType<RedactionAnnotation>())
+                ds.FillRectangle(redaction.Rect.ToRect(), Color.FromArgb(255, 0, 0, 0));
+        }
         return current;
     }
 

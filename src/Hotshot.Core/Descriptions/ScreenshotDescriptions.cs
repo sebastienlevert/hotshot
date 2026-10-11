@@ -61,16 +61,17 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
         }
     }
 
-    public async Task<long> SaveEditedImageAsync(HistoryItem item, byte[] png)
+    public async Task<long> SaveEditedImageAsync(HistoryItem item, byte[] png, bool preserveMetadata = true)
     {
         await _files.WaitAsync();
         try
         {
-            var description = item.Summary is { } summary && item.Description is { } text
+            var description = !preserveMetadata ? null : item.Summary is { } summary && item.Description is { } text
                 ? new CaptureDescription(summary, text)
                 : PngDescriptionMetadata.Read(await File.ReadAllBytesAsync(item.Path));
             if (description is not null) png = PngDescriptionMetadata.Embed(png, description);
             await WriteAtomicAsync(item.Path, png, CancellationToken.None);
+            _history.RecordImageChange(item.Id, clearDescription: !preserveMetadata);
             return png.LongLength;
         }
         finally { _files.Release(); }

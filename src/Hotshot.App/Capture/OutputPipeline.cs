@@ -19,7 +19,8 @@ internal sealed class OutputPipeline(AppServices app)
     public event Action<string>? Failed;
 
     /// <summary>Must be called on the UI thread (clipboard ownership).</summary>
-    public async Task<HistoryItem?> SaveScreenshotAsync(CapturedImage image, CaptureKind kind, CaptureSource source)
+    public async Task<HistoryItem?> SaveScreenshotAsync(CapturedImage image, CaptureKind kind, CaptureSource source,
+        bool copyToClipboard = true)
     {
         var general = app.Settings.General;
         var timer = Stopwatch.StartNew();
@@ -28,7 +29,7 @@ internal sealed class OutputPipeline(AppServices app)
             var png = await Task.Run(() => ImageCodec.EncodePngAsync(image)).ConfigureAwait(true);
             var encodeMs = timer.ElapsedMilliseconds;
 
-            if (general.CopyToClipboard && !await ClipboardService.SetImageAsync(app.MessageWindowHandle, image, png))
+            if (copyToClipboard && general.CopyToClipboard && !await ClipboardService.SetImageAsync(app.MessageWindowHandle, image, png))
             {
                 Failed?.Invoke("Could not copy the screenshot to the clipboard.");
             }
@@ -70,6 +71,7 @@ internal sealed class OutputPipeline(AppServices app)
             }
 
             await Task.Run(() => app.History.Add(item));
+            if (general.RecognizeScreenshotText) app.TextIndex?.Enqueue(item, png);
             if (general.DescribeScreenshots && app.Descriptions is { } descriptions)
                 _ = descriptions.EnqueueAsync(item);
             Log.Info($"{kind} {image.Width}x{image.Height}: encode {encodeMs} ms, clipboard {clipboardMs} ms, total {timer.ElapsedMilliseconds} ms -> {path}");

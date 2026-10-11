@@ -23,10 +23,16 @@ public sealed class HistoryItem
     public string? Description { get; set; }
     public string? DescriptionError { get; set; }
     public bool DescriptionPending { get; set; }
+    public bool IsFavorite { get; set; }
+    public string[] Tags { get; set; } = [];
+    public string? RecognizedText { get; set; }
+    public string? TextRecognitionError { get; set; }
+    public int ImageRevision { get; set; }
 
     public bool MatchesSearch(string query) => string.IsNullOrWhiteSpace(query) ||
-        new[] { FileName, Kind.DisplayName(), Summary, Description }.Any(value =>
-            value?.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase) == true);
+        query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).All(term =>
+            new[] { FileName, Kind.DisplayName(), Summary, Description, RecognizedText, AppName, WindowTitle }
+                .Concat(Tags ?? []).Any(value => value?.Contains(term, StringComparison.OrdinalIgnoreCase) == true));
 
     [JsonIgnore]
     public string FileName => System.IO.Path.GetFileName(Path);
@@ -158,6 +164,53 @@ public sealed class HistoryStore
         }
     }
 
+    public bool UpdateOrganization(string id, bool favorite, IEnumerable<string> tags)
+    {
+        var normalized = CaptureLibrary.NormalizeTags(tags);
+        lock (_gate)
+        {
+            var item = _items.FirstOrDefault(item => item.Id == id);
+            if (item is null) return false;
+            item.IsFavorite = favorite;
+            item.Tags = normalized;
+            SaveLocked();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    public bool UpdateRecognizedText(string id, string? text, string? error, int? expectedRevision = null)
+    {
+        lock (_gate)
+        {
+            var item = _items.FirstOrDefault(item => item.Id == id);
+            if (item is null || expectedRevision is { } revision && item.ImageRevision != revision) return false;
+            if (error is null) item.RecognizedText = text;
+            item.TextRecognitionError = error;
+            SaveLocked();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    public void RecordImageChange(string id, bool clearDescription)
+    {
+        lock (_gate)
+        {
+            var item = _items.FirstOrDefault(item => item.Id == id);
+            if (item is null) return;
+            item.ImageRevision++;
+            item.RecognizedText = item.TextRecognitionError = null;
+            if (clearDescription)
+            {
+                item.Summary = item.Description = item.DescriptionError = null;
+                item.DescriptionPending = false;
+            }
+            SaveLocked();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     public void Remove(string id)
     {
         HistoryItem? removed;
@@ -201,13 +254,8 @@ public sealed class HistoryStore
 
     private List<HistoryItem> Trim()
     {
-        if (_items.Count <= MaxItems)
-        {
-            return [];
-        }
-
-        var extra = _items.GetRange(MaxItems, _items.Count - MaxItems);
-        _items.RemoveRange(MaxItems, _items.Count - MaxItems);
+        var extra = _items.Where(item => !item.IsFavorite).Skip(MaxItems).ToList();
+        _items.RemoveAll(extra.Contains);
         return extra;
     }
 

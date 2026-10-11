@@ -14,6 +14,7 @@ internal enum AnnotationKind
     Text,
     Step,
     Blur,
+    Redact,
 }
 
 /// <summary>Base class for all annotation objects. Coordinates are image pixels.</summary>
@@ -27,6 +28,7 @@ internal enum AnnotationKind
 [JsonDerivedType(typeof(TextAnnotation), "text")]
 [JsonDerivedType(typeof(StepAnnotation), "step")]
 [JsonDerivedType(typeof(BlurAnnotation), "blur")]
+[JsonDerivedType(typeof(RedactionAnnotation), "redact")]
 internal abstract class Annotation
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -47,6 +49,7 @@ internal abstract class Annotation
         TextAnnotation => AnnotationKind.Text,
         StepAnnotation => AnnotationKind.Step,
         BlurAnnotation => AnnotationKind.Blur,
+        RedactionAnnotation => AnnotationKind.Redact,
         _ => throw new NotSupportedException(GetType().Name),
     };
 
@@ -173,6 +176,12 @@ internal sealed class BlurAnnotation : BoxAnnotation
 
     public override RectF GetVisualBounds() => Rect;
 
+    public override bool HitTest(Vector2 point, float tolerance) => Rect.Inflate(tolerance).Contains(point);
+}
+
+internal sealed class RedactionAnnotation : BoxAnnotation
+{
+    public override RectF GetVisualBounds() => Rect;
     public override bool HitTest(Vector2 point, float tolerance) => Rect.Inflate(tolerance).Contains(point);
 }
 
@@ -344,9 +353,9 @@ internal sealed class StepAnnotation : Annotation
 /// <summary>Which style properties apply to which annotation kinds.</summary>
 internal static class StyleTraits
 {
-    public static bool UsesColor(AnnotationKind k) => k != AnnotationKind.Blur;
+    public static bool UsesColor(AnnotationKind k) => k is not (AnnotationKind.Blur or AnnotationKind.Redact);
 
-    public static bool UsesStroke(AnnotationKind k) => k is not (AnnotationKind.Text or AnnotationKind.Step);
+    public static bool UsesStroke(AnnotationKind k) => k is not (AnnotationKind.Text or AnnotationKind.Step or AnnotationKind.Redact);
 
     public static bool UsesFontSize(AnnotationKind k) => k is AnnotationKind.Text or AnnotationKind.Step;
 
@@ -365,6 +374,7 @@ internal static class StyleTraits
         EditorTool.Text => AnnotationKind.Text,
         EditorTool.Step => AnnotationKind.Step,
         EditorTool.Blur => AnnotationKind.Blur,
+        EditorTool.Redact => AnnotationKind.Redact,
         _ => null,
     };
 
@@ -379,6 +389,7 @@ internal static class StyleTraits
         AnnotationKind.Text => EditorTool.Text,
         AnnotationKind.Step => EditorTool.Step,
         AnnotationKind.Blur => EditorTool.Blur,
+        AnnotationKind.Redact => EditorTool.Redact,
         _ => EditorTool.Select,
     };
 }

@@ -41,6 +41,21 @@ Use **Convert to GIF** on an MP4 in history, enable automatic GIF creation, or b
 
 **Start with Windows** uses the current user's Run registry entry and is enabled by default in Release builds. Debug builds never modify that entry. Keep a portable installation in its permanent location; moving it requires running the new copy and changing the startup setting to refresh its path. Exit via the tray menu or `Hotshot.exe --exit`.
 
+## Native workbench
+
+The ShareX-inspired workbench keeps the WinUI experience and silent captures:
+
+- **Organize:** mark favorites, edit tags in **Details and tags**, and filter by capture type or date. Search terms match filename, tags, application, AI description and recognized text. Favorites are retained beyond the ordinary recent-history limit.
+- **Local OCR:** **Extract text** recognizes the edited image and lets you copy the result. **Screenshots > Recognize screenshot text locally** optionally indexes new captures automatically. Windows OCR language support is required; no image or text is uploaded.
+- **Edit:** choose annotations from the layer selector, duplicate them with **Ctrl+D**, bring them forward/backward, resize using handles, and nudge a selected annotation with arrow keys (**Shift** moves 10 pixels). Shape fill and text size controls are available in the annotation toolbar.
+- **Redact:** the **Redact** tool uses opaque black rectangles above all annotation layers. Saved redactions discard old AI/OCR text metadata so hidden content is not leaked through descriptions. Pristine originals and editable sidecars still contain the original content and remain private; share only the flattened exported image.
+- **Export:** save a separate PNG/JPEG with proportional resizing, padding, backgrounds, rounded corners and shadows. Export copies omit AI/OCR metadata and never replace the editable capture. **Import image** adds existing PNG/JPEG/BMP images without changing the clipboard.
+- **Capture delay:** set 0–30 seconds under **Screenshots**; the default remains immediate capture.
+
+Settings now use Windows Community Toolkit **SettingsCard** and **SettingsExpander** controls, and the editor/history split uses **GridSplitter**. Toolkit `8.3.260402-preview2` is pinned because its split WinUI dependency is compatible with Hotshot's Windows App SDK 2.x; the older stable Toolkit pulls in conflicting App SDK 1.6 build targets.
+
+Feature research used [REA](https://github.com/morluto/rea) static inspection of the official ShareX 21.0.0 assemblies. Observed capability boundaries informed independent native implementations; no ShareX GPL source, binaries or UI are included in Hotshot. This is not a full ShareX clone: scrolling capture and upload services are not included.
+
 ## AI screenshot descriptions
 
 Enable **Screenshots > Describe screenshots with Copilot** to describe new screenshots after they are saved. This is **off by default**. Enabling it sends screenshot pixels to the signed-in GitHub Copilot account and consumes that account's model quota; screenshots can contain sensitive information. No image is sent while the setting is off. Recordings and GIFs are not submitted.
@@ -86,6 +101,7 @@ dotnet test --project tests\Hotshot.Editor.Tests\Hotshot.Editor.Tests.csproj
 dotnet run --project tests\Hotshot.Recording.Harness\Hotshot.Recording.Harness.csproj -- --window-only
 dotnet run --project tests\Hotshot.Updates.Harness\Hotshot.Updates.Harness.csproj
 dotnet run --project tests\Hotshot.Descriptions.Harness\Hotshot.Descriptions.Harness.csproj
+dotnet run --project tests\Hotshot.Workbench.Harness\Hotshot.Workbench.Harness.csproj -p:Platform=x64 -- --ocr
 pwsh tests\Hotshot.App.Smoke.ps1 -Exe <path-to-built-Hotshot.exe>
 ```
 
@@ -93,6 +109,7 @@ Tests use xUnit and Microsoft Testing Platform. The window-only harness records 
 
 The update harness calls the actual static GitHub release source for both architectures and validates version-pinned full/delta URLs using headers only. It requires internet access but does not install, apply an update or touch user data.
 The description harness verifies Windows PNG metadata and pixel preservation with a generated image. Add `-- --copilot` to submit only that generated image through the production SDK provider; this requires Copilot sign-in and uses model quota, but never reads or submits a real screenshot.
+The workbench harness renders generated text and annotations to verify local OCR, solid-redaction layering, styled PNG and JPEG output without capturing the desktop or sending data to any provider.
 
 The app smoke test exercises native settings, global shortcuts, capture selection, filename tokens, recording controls, history and GIF conversion. It temporarily replaces and then restores settings/history, captures the real desktop locally into its own temporary directory, and changes the clipboard. Close Hotshot before running it and use a desktop that is safe to capture. Use an unmanaged Debug/publish build for this smoke so automatic updates cannot restart a fixture.
 Pass `-VerifyStartup` only with a Release build to additionally exercise Start with Windows; the original Hotshot Run entry is restored afterward.

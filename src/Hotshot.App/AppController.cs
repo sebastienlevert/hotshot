@@ -21,6 +21,7 @@ internal sealed partial class AppController : IDisposable
     private readonly CaptureCoordinator _capture;
     private readonly CaptureActions _actions;
     private readonly ScreenshotDescriptions _descriptions;
+    private readonly LocalTextIndex _textIndex;
     private Action? _balloonAction;
     private bool _exiting;
 
@@ -37,12 +38,16 @@ internal sealed partial class AppController : IDisposable
             () => new CopilotDescriptionProvider(Path.Combine(_app.Paths.DataDirectory, "copilot-work")),
             _app.Settings.General.DescribeScreenshots);
         _app.Descriptions = _descriptions;
+        _textIndex = new LocalTextIndex(_app);
+        _app.TextIndex = _textIndex;
+        _textIndex.Failed += message => Notify("Local text recognition", message, isError: true);
         _descriptions.Failed += message => _app.Post(() =>
         {
             Log.Warn(message);
             Notify("Screenshot description", message, isError: true);
         });
         _pipeline = new OutputPipeline(_app);
+        _app.Output = _pipeline;
         _capture = new CaptureCoordinator(_app, _pipeline);
         _actions = new CaptureActions(_app);
 
@@ -148,6 +153,7 @@ internal sealed partial class AppController : IDisposable
         {
             await ShutdownRecordingAsync();
             await _descriptions.DisposeAsync();
+            await _textIndex.DisposeAsync();
             CloseViews();
             await _app.SaveAsync();
         }

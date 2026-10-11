@@ -3,6 +3,9 @@ using Hotshot.Core;
 using Hotshot.Core.History;
 using Hotshot.Editor;
 using Hotshot.Shell;
+using Hotshot.CaptureFlow;
+using Microsoft.Windows.Storage.Pickers;
+using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -17,7 +20,10 @@ internal sealed class WorkspaceWindow : Window
     private readonly CaptureActions _actions;
     private readonly Action<AppCommand> _execute;
     private readonly ListView _history = new() { SelectionMode = ListViewSelectionMode.Single };
-    private readonly TextBox _search = new() { PlaceholderText = "Search captures" };
+    private readonly TextBox _search = new() { PlaceholderText = "Search filename, tags or text" };
+    private readonly ToggleSwitch _favoritesOnly = new() { Header = "Favorites only", OnContent = "", OffContent = "" };
+    private readonly ComboBox _typeFilter = new() { ItemsSource = new[] { "All captures", "Screenshots", "Recordings", "GIFs" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly ComboBox _dateFilter = new() { ItemsSource = new[] { "Any time", "Today", "Last 7 days", "Last 30 days" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly EditorView _editor = new() { Visibility = Visibility.Collapsed };
     private readonly StackPanel _empty = new() { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _title = new() { Text = "Editor and history", FontSize = 18, MaxWidth = 180, TextTrimming = TextTrimming.CharacterEllipsis };
@@ -27,6 +33,10 @@ internal sealed class WorkspaceWindow : Window
     private readonly AppBarButton _open = new() { Label = "Open file", Icon = new SymbolIcon(Symbol.OpenFile), IsEnabled = false };
     private readonly AppBarButton _folder = new() { Label = "Show in folder", Icon = new SymbolIcon(Symbol.Folder), IsEnabled = false };
     private readonly AppBarButton _convert = new() { Label = "Convert to GIF", Icon = new SymbolIcon(Symbol.Video), IsEnabled = false };
+    private readonly AppBarButton _favorite = new() { Label = "Favorite", Icon = new SymbolIcon(Symbol.OutlineStar), IsEnabled = false };
+    private readonly AppBarButton _details = new() { Label = "Details and tags", Icon = new SymbolIcon(Symbol.Tag), IsEnabled = false };
+    private readonly AppBarButton _text = new() { Label = "Extract text", Icon = new SymbolIcon(Symbol.Document), IsEnabled = false };
+    private readonly AppBarButton _export = new() { Label = "Export...", Icon = new SymbolIcon(Symbol.SaveLocal), IsEnabled = false };
     private HistoryItem? _current;
     private HistoryItem? _pendingHistorySelection;
     private EditorSavedEventArgs? _lastSave;
@@ -48,6 +58,7 @@ internal sealed class WorkspaceWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var commands = new CommandBar { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right, IsDynamicOverflowEnabled = true };
+        AutomationProperties.SetAutomationId(commands, "WorkspaceCommands");
         var brand = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
         brand.Children.Add(new Image { Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Logo.png"))), Width = 28, Height = 28 });
         brand.Children.Add(_title);
@@ -73,6 +84,13 @@ internal sealed class WorkspaceWindow : Window
         commands.PrimaryCommands.Add(capture);
         commands.PrimaryCommands.Add(_save);
         commands.PrimaryCommands.Add(_copy);
+        commands.PrimaryCommands.Add(_favorite);
+        commands.PrimaryCommands.Add(_export);
+        commands.SecondaryCommands.Add(_text);
+        commands.SecondaryCommands.Add(_details);
+        var import = new AppBarButton { Label = "Import image...", Icon = new SymbolIcon(Symbol.OpenFile) };
+        import.Click += (_, _) => _ = RunAsync(ImportAsync);
+        commands.SecondaryCommands.Add(import);
         commands.SecondaryCommands.Add(_open);
         commands.SecondaryCommands.Add(_folder);
         commands.SecondaryCommands.Add(_convert);
@@ -83,10 +101,16 @@ internal sealed class WorkspaceWindow : Window
         Grid.SetRow(_error, 1);
         root.Children.Add(_error);
 
-        var main = new Grid { ColumnSpacing = 16 };
-        main.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
-        main.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var main = new Grid { ColumnSpacing = 8 };
+        main.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220), MinWidth = 170, MaxWidth = 420 });
+        main.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        main.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 180 });
+        var splitter = new GridSplitter { Width = 8, HorizontalAlignment = HorizontalAlignment.Stretch };
+        Grid.SetColumn(splitter, 1);
+        AutomationProperties.SetName(splitter, "Resize capture list");
+        main.Children.Add(splitter);
         var historyPane = new Grid { RowSpacing = 12 };
+        historyPane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         historyPane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         historyPane.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         historyPane.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -96,7 +120,19 @@ internal sealed class WorkspaceWindow : Window
         historyPane.Children.Add(_search);
         AutomationProperties.SetName(_history, "Capture history");
         AutomationProperties.SetAutomationId(_history, "CaptureHistory");
-        Grid.SetRow(_history, 2);
+        var filters = new StackPanel { Spacing = 6 };
+        AutomationProperties.SetName(_typeFilter, "Capture type filter");
+        AutomationProperties.SetName(_dateFilter, "Capture date filter");
+        AutomationProperties.SetName(_favoritesOnly, "Favorites only");
+        AutomationProperties.SetAutomationId(_favoritesOnly, "CaptureFavoritesFilter");
+        AutomationProperties.SetAutomationId(_typeFilter, "CaptureTypeFilter");
+        AutomationProperties.SetAutomationId(_dateFilter, "CaptureDateFilter");
+        filters.Children.Add(_typeFilter);
+        filters.Children.Add(_dateFilter);
+        filters.Children.Add(_favoritesOnly);
+        Grid.SetRow(filters, 2);
+        historyPane.Children.Add(filters);
+        Grid.SetRow(_history, 3);
         historyPane.Children.Add(_history);
         main.Children.Add(historyPane);
         var surface = new Grid();
@@ -105,13 +141,16 @@ internal sealed class WorkspaceWindow : Window
         _empty.Children.Add(UiStyles.Description("Select a screenshot from history to annotate, crop, save or copy it."));
         surface.Children.Add(_empty);
         surface.Children.Add(_editor);
-        Grid.SetColumn(surface, 1);
+        Grid.SetColumn(surface, 2);
         main.Children.Add(surface);
         Grid.SetRow(main, 2);
         root.Children.Add(main);
         Content = root;
         UiStyles.ApplyTheme(this, app.Settings.General.Theme);
         _search.TextChanged += (_, _) => RenderHistory();
+        _favoritesOnly.Toggled += (_, _) => RenderHistory();
+        _typeFilter.SelectionChanged += (_, _) => RenderHistory();
+        _dateFilter.SelectionChanged += (_, _) => RenderHistory();
         _history.SelectionChanged += (_, _) =>
         {
             if (_rendering || _history.SelectedItem is not ListViewItem { Tag: HistoryItem item }) return;
@@ -119,6 +158,14 @@ internal sealed class WorkspaceWindow : Window
             _ = RunAsync(LoadHistorySelectionAsync, keepHistoryEnabled: true);
         };
         _save.Click += (_, _) => _ = RunAsync(async () => await SaveCurrentAsync());
+        _favorite.Click += (_, _) => _ = RunAsync(async () =>
+        {
+            if (_current is not { } item) return;
+            await Task.Run(() => _app.History.UpdateOrganization(item.Id, !item.IsFavorite, item.Tags ?? []));
+        });
+        _details.Click += (_, _) => _ = RunAsync(ShowDetailsAsync);
+        _text.Click += (_, _) => _ = RunAsync(ExtractTextAsync);
+        _export.Click += (_, _) => _ = RunAsync(ExportAsync);
         _copy.Click += (_, _) => _ = RunAsync(async () =>
         {
             if (_current is not { } item) return;
@@ -258,7 +305,7 @@ internal sealed class WorkspaceWindow : Window
                 OriginalBackupPath = Path.Combine(_app.Paths.OriginalsDirectory, item.Id + ".png"),
                 AnnotationsPath = Path.Combine(_app.Paths.OriginalsDirectory, item.Id + ".json"),
                 SaveImageAsync = _app.Descriptions is { } descriptions
-                    ? png => descriptions.SaveEditedImageAsync(item, png) : null,
+                    ? (png, redacted) => descriptions.SaveEditedImageAsync(item, png, preserveMetadata: !redacted) : null,
                 CopyPngToClipboard = async png =>
                 {
                     var image = await Task.Run(() => ImageCodec.DecodePngAsync(png));
@@ -284,14 +331,134 @@ internal sealed class WorkspaceWindow : Window
         await Task.Run(() => _app.History.Update(item));
         if (_app.Settings.General.DescribeScreenshots && _app.Descriptions is { } descriptions)
             _ = descriptions.EnqueueAsync(item);
+        if (_app.Settings.General.RecognizeScreenshotText && _app.TextIndex is { } textIndex)
+            textIndex.Enqueue(item, await File.ReadAllBytesAsync(item.Path));
         return true;
+    }
+
+    private async Task ImportAsync()
+    {
+        if (!await ConfirmDiscardAsync()) return;
+        var picker = new FileOpenPicker(AppWindow.Id)
+        {
+            Title = "Import image into Hotshot",
+            FileTypeFilter = { ".png", ".jpg", ".jpeg", ".bmp" },
+        };
+        var selected = await picker.PickSingleFileAsync();
+        if (selected is null || _closed) return;
+        var image = await Task.Run(() => ImageCodec.LoadAsync(selected.Path));
+        var output = _app.Output ?? throw new InvalidOperationException("Capture output is not initialized.");
+        var item = await output.SaveScreenshotAsync(image, CaptureKind.Region,
+            CaptureSource.Now("Imported image", Path.GetFileName(selected.Path)), copyToClipboard: false);
+        if (item is not null) { await LoadAsync(item); RenderHistory(restoreCurrent: true); }
+    }
+
+    private async Task ShowDetailsAsync()
+    {
+        if (_current is not { } item) return;
+        var tags = new TextBox { Header = "Tags (comma-separated)", Text = string.Join(", ", item.Tags ?? []) };
+        var favorite = new CheckBox { Content = "Keep as a favorite", IsChecked = item.IsFavorite };
+        var content = new StackPanel { Spacing = 12 };
+        content.Children.Add(new TextBlock { Text = $"{item.Width} x {item.Height}  |  {item.Kind.DisplayName()}  |  {item.FileSize / 1024d:N1} KB", TextWrapping = TextWrapping.Wrap });
+        content.Children.Add(favorite);
+        content.Children.Add(tags);
+        content.Children.Add(new TextBox
+        {
+            Header = "AI summary and description", IsReadOnly = true, AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap, MaxHeight = 160,
+            Text = item.Summary is null ? item.DescriptionError ?? "No AI description." : $"{item.Summary}\n{item.Description}",
+        });
+        content.Children.Add(new TextBox
+        {
+            Header = "Recognized text (local)", IsReadOnly = true, AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap, MaxHeight = 160,
+            Text = item.RecognizedText ?? item.TextRecognitionError ?? "Use Extract text to recognize text without uploading the image.",
+        });
+        var dialog = new ContentDialog
+        {
+            Title = item.FileName, Content = new ScrollViewer { Content = content, MaxHeight = 470 },
+            PrimaryButtonText = "Save", CloseButtonText = "Cancel",
+            XamlRoot = ((FrameworkElement)Content).XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            var normalized = CaptureLibrary.NormalizeTags(tags.Text.Split(','));
+            await Task.Run(() => _app.History.UpdateOrganization(item.Id, favorite.IsChecked == true, normalized));
+        }
+    }
+
+    private async Task ExtractTextAsync()
+    {
+        if (_current is not { IsVideo: false } item) return;
+        var png = await _editor.ExportPngAsync();
+        var text = await Task.Run(() => TextRecognition.RecognizeAsync(png));
+        if (!_editor.IsDirty) await Task.Run(() => _app.History.UpdateRecognizedText(item.Id, text, null));
+        var box = new TextBox { Text = text, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MaxHeight = 400 };
+        var dialog = new ContentDialog
+        {
+            Title = string.IsNullOrWhiteSpace(text) ? "No text found" : "Recognized text (local)",
+            Content = box, PrimaryButtonText = "Copy text", CloseButtonText = "Close",
+            IsPrimaryButtonEnabled = !string.IsNullOrWhiteSpace(text), XamlRoot = ((FrameworkElement)Content).XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary &&
+            !await ClipboardService.SetTextAsync(_app.MessageWindowHandle, box.Text))
+            throw new IOException("The clipboard is being used by another application.");
+    }
+
+    private async Task ExportAsync()
+    {
+        if (_current is not { IsVideo: false } item) return;
+        var format = new ComboBox { Header = "File format", ItemsSource = new[] { "PNG", "JPEG" }, SelectedIndex = 0 };
+        var width = new NumberBox { Header = "Image width (0 = original)", Minimum = 0, Maximum = 16384, Value = 0 };
+        var padding = new NumberBox { Header = "Padding (pixels)", Minimum = 0, Maximum = 400, Value = 24 };
+        var radius = new NumberBox { Header = "Rounded corners (pixels)", Minimum = 0, Maximum = 400, Value = 12 };
+        var background = new ComboBox { Header = "Background", ItemsSource = Enum.GetValues<ExportBackground>(), SelectedItem = ExportBackground.Charcoal };
+        var shadow = new CheckBox { Content = "Drop shadow", IsChecked = true };
+        var body = new StackPanel { Spacing = 10 };
+        foreach (var control in new UIElement[] { format, width, padding, radius, background, shadow }) body.Children.Add(control);
+        body.Children.Add(UiStyles.Description("Exports a separate flattened copy. Originals and editable annotations are unchanged; AI/OCR metadata is not included."));
+        var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        body.Children.Add(error);
+        var dialog = new ContentDialog
+        {
+            Title = "Export image", Content = new ScrollViewer { Content = body, MaxHeight = 500 },
+            PrimaryButtonText = "Choose destination", CloseButtonText = "Cancel", XamlRoot = ((FrameworkElement)Content).XamlRoot,
+        };
+        ImageExportOptions? options = null;
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            try
+            {
+                if (!double.IsFinite(width.Value) || !double.IsFinite(padding.Value) || !double.IsFinite(radius.Value))
+                    throw new ArgumentException("Enter valid export dimensions.");
+                options = new ImageExportOptions(format.SelectedIndex == 1 ? ImageExportFormat.Jpeg : ImageExportFormat.Png,
+                    (int)width.Value, (int)padding.Value, (int)radius.Value, shadow.IsChecked == true,
+                    (ExportBackground)background.SelectedItem);
+                options.GetLayout(item.Width, item.Height);
+            }
+            catch (ArgumentException ex) { args.Cancel = true; error.Text = ex.Message; }
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || options is null) return;
+        var picker = new FileSavePicker(AppWindow.Id)
+        {
+            Title = "Export screenshot", SuggestedFileName = Path.GetFileNameWithoutExtension(item.Path) + "-export",
+            SuggestedStartLocation = PickerLocationId.PicturesLibrary,
+        };
+        picker.FileTypeChoices.Add(options.Format == ImageExportFormat.Jpeg ? "JPEG image" : "PNG image",
+            [options.Format == ImageExportFormat.Jpeg ? ".jpg" : ".png"]);
+        var selected = await picker.PickSaveFileAsync();
+        if (selected is null || _closed) return;
+        if (string.Equals(Path.GetFullPath(selected.Path), Path.GetFullPath(item.Path), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Choose a different export filename to preserve the editable capture.");
+        var bytes = await _editor.ExportAsync(options);
+        await Task.Run(() => ImageCodec.WriteAtomicAsync(selected.Path, bytes));
     }
 
     private async Task RunAsync(Func<Task> action, bool keepHistoryEnabled = false)
     {
         if (_operation is not null) return;
         _history.IsEnabled = keepHistoryEnabled;
-        _save.IsEnabled = _copy.IsEnabled = _convert.IsEnabled = false;
+        _save.IsEnabled = _copy.IsEnabled = _convert.IsEnabled = _favorite.IsEnabled = _details.IsEnabled = _text.IsEnabled = _export.IsEnabled = false;
         try
         {
             _operation = action();
@@ -322,6 +489,10 @@ internal sealed class WorkspaceWindow : Window
         _copy.IsEnabled = ready && _current is not null && (_current.IsVideo || _editor.HasImage);
         _open.IsEnabled = _folder.IsEnabled = _current is not null;
         _convert.IsEnabled = ready && _current is { } item && _actions.CanConvertToGif(item);
+        _favorite.IsEnabled = _details.IsEnabled = ready && _current is not null;
+        _text.IsEnabled = _export.IsEnabled = ready && _current is { IsVideo: false } && _editor.HasImage;
+        _favorite.Icon = new SymbolIcon(_current?.IsFavorite == true ? Symbol.SolidStar : Symbol.OutlineStar);
+        _favorite.Label = _current?.IsFavorite == true ? "Unfavorite" : "Favorite";
     }
 
     private void ShowError(string message)
@@ -340,7 +511,9 @@ internal sealed class WorkspaceWindow : Window
             : (_history.SelectedItem as ListViewItem)?.Tag is HistoryItem selected ? selected.Id : _current?.Id;
         _rendering = true;
         _history.Items.Clear();
-        foreach (var item in _app.History.Items.Where(i => i.MatchesSearch(_search.Text)))
+        var filter = new CaptureLibraryFilter(_search.Text, _favoritesOnly.IsOn,
+            (CaptureTypeFilter)Math.Max(0, _typeFilter.SelectedIndex), (CaptureDateRange)Math.Max(0, _dateFilter.SelectedIndex));
+        foreach (var item in _app.History.Items.Where(i => filter.Matches(i, DateTimeOffset.Now)))
         {
             var body = new TextBlock { Text = item.FileName, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 4) };
             var row = new ListViewItem { Content = body, Tag = item, HorizontalContentAlignment = HorizontalAlignment.Stretch };
@@ -352,6 +525,7 @@ internal sealed class WorkspaceWindow : Window
             _history.Items.Add(row);
             if (selectedId == item.Id) _history.SelectedItem = row;
         }
+        AutomationProperties.SetHelpText(_history, $"{_history.Items.Count} captures");
         _rendering = false;
     }
 }

@@ -40,6 +40,7 @@ public sealed class AppSettings
         if (string.IsNullOrWhiteSpace(Naming.RecordingPattern)) Naming.RecordingPattern = FileNameTemplate.DefaultPattern;
         Recording.FramesPerSecond = Recording.FramesPerSecond is 15 or 24 or 30 or 60 ? Recording.FramesPerSecond : 30;
         Recording.CountdownSeconds = Math.Clamp(Recording.CountdownSeconds, 0, 10);
+        Capture.DelaySeconds = Math.Clamp(Capture.DelaySeconds, 0, 30);
         Gif.FramesPerSecond = Math.Clamp(Gif.FramesPerSecond, 5, 30);
         Gif.MaxWidth = Gif.MaxWidth == 0 ? 0 : Math.Clamp(Gif.MaxWidth, 160, 3840);
         Version = CurrentVersion;
@@ -124,6 +125,7 @@ public sealed class GeneralSettings
     public long Counter { get; set; }
     public bool FirstRunCompleted { get; set; }
     public bool DescribeScreenshots { get; set; }
+    public bool RecognizeScreenshotText { get; set; }
 }
 
 public enum AppTheme
@@ -193,6 +195,7 @@ public sealed class NamingSettings
 
 public sealed class CaptureSettings
 {
+    public int DelaySeconds { get; set; }
     public bool IncludeCursor { get; set; }
     public bool ShowMagnifier { get; set; } = true;
     public bool SnapToWindows { get; set; } = true;

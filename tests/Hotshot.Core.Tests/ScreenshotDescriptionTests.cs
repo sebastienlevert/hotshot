@@ -148,6 +148,21 @@ public sealed class ScreenshotDescriptionTests : IDisposable
         Assert.Contains("saved", failure!);
     }
 
+    [Fact]
+    public async Task RedactionSave_RemovesOldDescriptionAndRecognizedText()
+    {
+        var (history, item) = Fixture();
+        await using var service = new ScreenshotDescriptions(history,
+            () => new Provider((_, _) => Task.FromResult(new CaptureDescription("Secret", "Hidden account number"))), true);
+        Assert.True(await service.EnqueueAsync(item));
+        history.UpdateRecognizedText(item.Id, "Hidden account number", null);
+        await service.SaveEditedImageAsync(item, Png(), preserveMetadata: false);
+        Assert.Null(PngDescriptionMetadata.Read(await File.ReadAllBytesAsync(item.Path, TestContext.Current.CancellationToken)));
+        Assert.Null(item.Description);
+        Assert.Null(item.RecognizedText);
+        Assert.Equal(1, item.ImageRevision);
+    }
+
     private (HistoryStore History, HistoryItem Item) Fixture()
     {
         var path = Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".png");
