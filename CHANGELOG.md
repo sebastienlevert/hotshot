@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/sebastienlevert/hotshot/compare/v0.1.8...v0.1.9) (2026-10-11)
+
+
+### Bug Fixes
+
+* **settings:** embed search in the title bar at every width ([573a57e](https://github.com/sebastienlevert/hotshot/commit/573a57eb8017e3ee5f791424a4fc0672ae6d0ec0))
+
 ## [0.1.8](https://github.com/sebastienlevert/hotshot/compare/v0.1.7...v0.1.8) (2026-10-11)
 
 
