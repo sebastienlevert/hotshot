@@ -15,6 +15,7 @@ using CommunityToolkit.WinUI.Controls;
 using System.Runtime.InteropServices;
 using Hotshot.Core.Agents;
 using Hotshot.Capture;
+using Hotshot.Recording;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace Hotshot.Views;
@@ -33,8 +34,9 @@ internal sealed class SettingsWindow : Window
     private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     private readonly InfoBar _error = new() { IsClosable = true, Severity = InfoBarSeverity.Error };
     private readonly TextBlock _status = UiStyles.Description("Changes are saved automatically.");
-    private readonly TextBlock _updateStatus = UiStyles.Description(string.Empty);
-    private readonly TextBlock _agentStatus = UiStyles.Description(string.Empty);
+    private TextBlock _updateStatus = UiStyles.Description(string.Empty);
+    private TextBlock _agentStatus = UiStyles.Description(string.Empty);
+    private TextBlock _aiStatus = UiStyles.Description(string.Empty);
     private Button? _checkUpdates;
     private readonly Dictionary<SettingsPage, NavigationViewItem> _pages = [];
     private readonly Dictionary<HotkeyAction, TextBlock> _hotkeyLabels = [];
@@ -166,6 +168,7 @@ internal sealed class SettingsWindow : Window
         _hotkeys.StatusChanged += RefreshHotkeyStatus;
         if (_app.Updates is { } updates) updates.StatusChanged += RefreshUpdateStatus;
         if (_app.AgentServer is { } agents) agents.StatusChanged += RefreshAgentStatus;
+        if (_app.Descriptions is { } descriptions) descriptions.Changed += RefreshAiStatus;
         AppWindow.Closing += async (_, args) =>
         {
             if (_allowClose) return;
@@ -186,8 +189,9 @@ internal sealed class SettingsWindow : Window
             _hotkeys.StatusChanged -= RefreshHotkeyStatus;
             if (_app.Updates is { } updates) updates.StatusChanged -= RefreshUpdateStatus;
             if (_app.AgentServer is { } agents) agents.StatusChanged -= RefreshAgentStatus;
+            if (_app.Descriptions is { } descriptions) descriptions.Changed -= RefreshAiStatus;
         };
-        WindowTools.Configure(this, 1050, 790);
+        WindowTools.Configure(this, 1050, 790, excludeFromCapture: false);
     }
 
     public void SelectPage(SettingsPage page)
@@ -277,6 +281,13 @@ internal sealed class SettingsWindow : Window
         yield return new(SettingsPage.Agents, "Allow history access", "mcp search ocr descriptions privacy");
         yield return new(SettingsPage.Agents, "Connect a coding agent", "copilot claude cursor vscode codex mcp configuration skills");
         yield return new(SettingsPage.Agents, "Plugins and skills", "marketplace install visual verification screenshot");
+        yield return new(SettingsPage.General, "Keep saved captures searchable", "library retention archive history");
+        yield return new(SettingsPage.Capture, "Review before cloud analysis", "ai privacy redact approval");
+        yield return new(SettingsPage.Capture, "Exclude applications from AI", "privacy process cloud");
+        yield return new(SettingsPage.Recording, "Microphone device", "audio input selection");
+        yield return new(SettingsPage.Agents, "Allowed agent applications", "privacy restrictions allowlist");
+        yield return new(SettingsPage.Agents, "Allow agent monitor capture", "permissions privacy monitor");
+        yield return new(SettingsPage.Agents, "Allow agent region capture", "permissions privacy region");
     }
 
     private void NavigateSearch(SearchResult result)
@@ -346,6 +357,8 @@ internal sealed class SettingsWindow : Window
                 Toggle(panel, "Save captures to files", "Keep captures on disk as well as in recent history.", _draft.General.SaveToFile, v => _draft.General.SaveToFile = v);
                 Section(panel, "History and editor");
                 Number(panel, "Recent captures", "Saved files are never deleted when history is trimmed.", _draft.General.HistorySize, 5, 500, v => _draft.General.HistorySize = v);
+                Toggle(panel, "Keep saved captures searchable", "Keep saved files in the library indefinitely. The recent-capture limit then applies only to temporary captures.",
+                    _draft.Library.KeepSavedCaptures, value => _draft.Library.KeepSavedCaptures = value);
                 Note(panel, "Click the tray icon to open the editor and history. Nothing opens automatically after a screenshot.");
                 break;
             case SettingsPage.Capture:
@@ -360,6 +373,14 @@ internal sealed class SettingsWindow : Window
                     "Send new screenshots to your signed-in GitHub Copilot account. Descriptions are searchable in history and embedded in PNG metadata. Uses your Copilot quota.",
                     _draft.General.DescribeScreenshots, value => _draft.General.DescribeScreenshots = value);
                 Note(panel, "Off by default. Screenshots may contain sensitive information; enable only when you are comfortable sending their contents to Copilot. Image analysis runs after saving, without delaying the clipboard.");
+                Toggle(panel, "Review before cloud analysis", "Hold new captures until you review/redact, save, and choose Analyze selected screenshot in the workspace.",
+                    _draft.General.ReviewBeforeAiUpload, value => _draft.General.ReviewBeforeAiUpload = value);
+                TextInput(panel, "Exclude applications from AI", string.Join(", ", _draft.General.AiExcludedApps),
+                    value => _draft.General.AiExcludedApps = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                Note(panel, "Use process names such as password-manager.exe. Exclusions use the capture's recorded application, not content detection; a monitor capture may contain other applications. Use review mode when in doubt.");
+                _aiStatus = UiStyles.Description(string.Empty);
+                RefreshAiStatus();
+                panel.Children.Add(_aiStatus);
                 Section(panel, "Selection");
                 Toggle(panel, "Snap to windows", "Click a window instead of dragging a region.", _draft.Capture.SnapToWindows, v => _draft.Capture.SnapToWindows = v);
                 Toggle(panel, "Show magnifier", "Inspect individual pixels while selecting a region.", _draft.Capture.ShowMagnifier, v => _draft.Capture.ShowMagnifier = v);
@@ -412,6 +433,7 @@ internal sealed class SettingsWindow : Window
                 Section(panel, "Audio");
                 Toggle(panel, "Record system audio", "Include audio played by Windows and apps.", _draft.Recording.CaptureSystemAudio, v => _draft.Recording.CaptureSystemAudio = v);
                 Toggle(panel, "Record microphone", "Use the default Windows microphone.", _draft.Recording.CaptureMicrophone, v => _draft.Recording.CaptureMicrophone = v);
+                MicrophoneChoice(panel);
                 Toggle(panel, "Also create a GIF", "Convert after recording and keep the MP4.", _draft.Recording.AlsoCreateGif, v => _draft.Recording.AlsoCreateGif = v);
                 Note(panel, "Disable both audio sources for silent video. Recording regions must fit within a single monitor.");
                 break;
@@ -431,9 +453,27 @@ internal sealed class SettingsWindow : Window
                 Toggle(panel, "Allow history access",
                     "Separately allow agents to search previous captures, OCR and AI descriptions, and read capture images by ID.",
                     _draft.Agents.AllowHistoryAccess, value => _draft.Agents.AllowHistoryAccess = value);
+                Toggle(panel, "Allow agent monitor capture", "Permit whole-monitor requests. An allowed-app list disables this automatically.",
+                    _draft.Agents.AllowMonitorCapture, value => _draft.Agents.AllowMonitorCapture = value);
+                Toggle(panel, "Allow agent region capture", "Permit arbitrary screen regions. An allowed-app list disables this automatically.",
+                    _draft.Agents.AllowRegionCapture, value => _draft.Agents.AllowRegionCapture = value);
+                TextInput(panel, "Allowed agent applications", string.Join(", ", _draft.Agents.AllowedApps),
+                    value => _draft.Agents.AllowedApps = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                Note(panel, "Leave the list empty to allow any target. Otherwise only listed process names can be captured/read from history. This is target filtering, not a guarantee that a window is unobscured.");
                 Note(panel, "Images returned to a coding agent may be sent to its model provider. Only enable access for agents you trust. Captures follow your save, clipboard, cursor, delay, OCR and Copilot-description settings; agents cannot change settings or control the mouse/keyboard.");
+                _agentStatus = UiStyles.Description(string.Empty);
                 RefreshAgentStatus();
                 panel.Children.Add(_agentStatus);
+                var activity = new Button { Content = "View agent activity" };
+                activity.Click += async (_, _) =>
+                {
+                    var lines = _app.AgentServer?.Activity.Reverse().Select(entry =>
+                        $"{entry.Timestamp:t}  {entry.Operation}  {(entry.Success ? "Completed" : entry.ErrorCode ?? "Failed")}") ?? [];
+                    await new ContentDialog { Title = "Local agent activity (this run)", Content = new ScrollViewer
+                        { Content = new TextBlock { Text = string.Join("\n", lines), TextWrapping = TextWrapping.Wrap }, MaxHeight = 400 },
+                        CloseButtonText = "Close", XamlRoot = _navigation.XamlRoot }.ShowAsync();
+                };
+                panel.Children.Add(activity);
                 AgentConnections(panel);
                 break;
             case SettingsPage.About:
@@ -444,6 +484,7 @@ internal sealed class SettingsWindow : Window
                 Section(panel, "Updates");
                 _checkUpdates = new Button { Content = "Check now" };
                 _checkUpdates.Click += async (_, _) => { if (_app.Updates is { } updates) await updates.CheckAsync(); };
+                _updateStatus = UiStyles.Description(string.Empty);
                 Card(panel, "Automatic updates", _updateStatus, _checkUpdates);
                 RefreshUpdateStatus();
                 Note(panel, "New versions download from GitHub Releases. Updates restart Hotshot silently only when capture, recording and editing are idle.");
@@ -453,6 +494,29 @@ internal sealed class SettingsWindow : Window
                 var logs = new Button { Content = "Open diagnostic log" };
                 logs.Click += (_, _) => CaptureActions.OpenPath(Log.FilePath);
                 Card(panel, "Diagnostics", UiStyles.Description("Local logs help diagnose capture and shortcut issues."), logs);
+                var diagnostic = new Button { Content = "Show diagnostics" };
+                diagnostic.Click += async (_, _) =>
+                {
+                    diagnostic.IsEnabled = false;
+                    try
+                    {
+                        var summary = await Task.Run(() => Hotshot.Diagnostics.AppDiagnostics.Read(_app));
+                        var report = new TextBox { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Text = summary };
+                        AutomationProperties.SetAutomationId(report, "DiagnosticsReport");
+                        await new ContentDialog { Title = "Hotshot diagnostics", Content = new ScrollViewer
+                            { Content = report, MaxHeight = 500 },
+                            CloseButtonText = "Close", XamlRoot = _navigation.XamlRoot }.ShowAsync();
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+                    {
+                        Log.Error("Could not read diagnostics", ex);
+                        _error.Title = "Diagnostics could not be read";
+                        _error.Message = ex.Message;
+                        _error.IsOpen = true;
+                    }
+                    finally { diagnostic.IsEnabled = true; }
+                };
+                panel.Children.Add(diagnostic);
                 break;
         }
         _scroll.Content = panel;
@@ -549,6 +613,40 @@ internal sealed class SettingsWindow : Window
     private void RefreshAgentStatus()
     {
         if (!_closed) _agentStatus.Text = _app.AgentServer?.Status ?? "Agent service is starting.";
+    }
+
+    private void RefreshAiStatus() => _app.Post(() =>
+    {
+        if (!_closed) _aiStatus.Text = $"{_app.Descriptions?.Status}\n{_app.Descriptions?.ProviderStatus}";
+    });
+
+    private void MicrophoneChoice(StackPanel panel)
+    {
+        var devices = new[] { new AudioDeviceInfo("", "Windows default", true) }.Concat(AudioDevices.GetMicrophones(message =>
+        {
+            Log.Warn(message);
+            _error.Title = "Audio devices unavailable";
+            _error.Message = message;
+            _error.IsOpen = true;
+        })).ToArray();
+        var input = new ComboBox { ItemsSource = devices, DisplayMemberPath = "Name", MinWidth = 180, MaxWidth = 300 };
+        input.SelectedItem = devices.FirstOrDefault(device => device.Id == (_draft.Recording.MicrophoneDeviceId ?? "")) ?? devices[0];
+        AutomationProperties.SetName(input, "Microphone device");
+        input.SelectionChanged += (_, _) =>
+        {
+            if (input.SelectedItem is not AudioDeviceInfo device || _rendering) return;
+            _draft.Recording.MicrophoneDeviceId = device.Id.Length == 0 ? null : device.Id;
+            Changed();
+        };
+        Card(panel, "Microphone device", UiStyles.Description("Choose an active input endpoint. If it disappears, recording reports a warning before falling back."), input);
+    }
+
+    private void TextInput(StackPanel panel, string title, string value, Action<string> update)
+    {
+        var input = new TextBox { Text = value, MinWidth = 180, MaxWidth = 320 };
+        AutomationProperties.SetName(input, title);
+        input.TextChanged += (_, _) => { if (!_rendering) { update(input.Text); Changed(); } };
+        Card(panel, title, UiStyles.Description("Comma-separated process names."), input);
     }
 
     private void AgentConnections(StackPanel panel)

@@ -2,14 +2,18 @@ using System.Diagnostics;
 using Hotshot.Capture;
 using Hotshot.Core;
 using Hotshot.Core.History;
+using Hotshot.Views;
 
 namespace Hotshot.CaptureFlow;
 
 /// <summary>Runs the screenshot flows (region / monitor / all monitors / repeat last region).</summary>
-internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipeline)
+internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipeline, Func<nint>? capturableWindow = null)
 {
     private bool _busy;
     private PixelRect? _lastRegion;
+    private readonly CancellationTokenSource _shutdown = new();
+    private TaskCompletionSource? _idle;
+    private ScrollingCaptureWindow? _scrollingWindow;
 
     public bool IsBusy => _busy;
 
@@ -21,7 +25,7 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         Func<bool> accessAllowed, CancellationToken token)
     {
         if (_busy) throw new InvalidOperationException("Another capture is in progress.");
-        _busy = true;
+        SetBusy(true);
         var warnings = new List<string>();
         void Warning(string message) => warnings.Add(message);
         pipeline.Failed += Warning;
@@ -42,7 +46,7 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         finally
         {
             pipeline.Failed -= Warning;
-            _busy = false;
+            SetBusy(false);
         }
     }
 
@@ -53,7 +57,7 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         var capture = app.Settings.Capture;
         using var snapshot = ScreenSnapshot.Take();
         var overlayTask = CaptureOverlay.SelectAsync(snapshot, new OverlayOptions(OverlayMode.Screenshot,
-            capture.SnapToWindows, capture.ShowMagnifier, capture.ShowCrosshair));
+            capture.SnapToWindows, capture.ShowMagnifier, capture.ShowCrosshair, capturableWindow?.Invoke() ?? 0), _shutdown.Token);
         Log.Info($"Region overlay shown in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} ms");
 
         var selection = await overlayTask;
@@ -105,6 +109,21 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         await SaveAsync(image, CaptureKind.AllMonitors, CaptureSource.Now(appName, title));
     });
 
+    public Task CaptureScrollingAsync() => RunAsync(async () =>
+    {
+        using var snapshot = ScreenSnapshot.Take();
+        var selection = await CaptureOverlay.SelectAsync(snapshot, new OverlayOptions(OverlayMode.Screenshot, false, true, true), _shutdown.Token);
+        if (selection is null) return;
+        var includeCursor = app.Settings.Capture.IncludeCursor;
+        if (includeCursor) snapshot.DrawCursor();
+        var window = new ScrollingCaptureWindow(selection.Rect, snapshot.Crop(selection.Rect), includeCursor);
+        _scrollingWindow = window;
+        window.Activate();
+        var image = await window.Completion;
+        _scrollingWindow = null;
+        if (image is not null) await SaveAsync(image, CaptureKind.Region, CaptureSource.Now("Scrolling capture"));
+    });
+
     /// <summary>Re-captures the last region without showing the overlay (falls back to the region flow).</summary>
     public Task RepeatLastRegionAsync()
     {
@@ -134,17 +153,17 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
             return null;
         }
 
-        _busy = true;
+        SetBusy(true);
         try
         {
             using var snapshot = ScreenSnapshot.Take();
             var capture = app.Settings.Capture;
             return await CaptureOverlay.SelectAsync(snapshot, new OverlayOptions(OverlayMode.Recording,
-                capture.SnapToWindows, capture.ShowMagnifier, capture.ShowCrosshair));
+                capture.SnapToWindows, capture.ShowMagnifier, capture.ShowCrosshair), _shutdown.Token);
         }
         finally
         {
-            _busy = false;
+            SetBusy(false);
         }
     }
 
@@ -164,13 +183,15 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
             return;
         }
 
-        _busy = true;
+        SetBusy(true);
         try
         {
             if (app.Settings.Capture.DelaySeconds > 0)
-                await Task.Delay(TimeSpan.FromSeconds(app.Settings.Capture.DelaySeconds));
+                await Task.Delay(TimeSpan.FromSeconds(app.Settings.Capture.DelaySeconds), _shutdown.Token);
+            _shutdown.Token.ThrowIfCancellationRequested();
             await flow();
         }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested) { }
         catch (Exception ex)
         {
             Log.Error("Capture failed", ex);
@@ -178,9 +199,23 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         }
         finally
         {
-            _busy = false;
+            SetBusy(false);
         }
     }
 
     private static int MonitorIndexOf(PixelRect rect) => Monitors.FromRect(rect).Index;
+
+    private void SetBusy(bool busy)
+    {
+        _busy = busy;
+        if (busy) _idle = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        else { _idle?.TrySetResult(); _idle = null; }
+    }
+
+    public async Task ShutdownAsync()
+    {
+        _shutdown.Cancel();
+        _scrollingWindow?.RequestClose();
+        if (_idle is { } idle) await idle.Task;
+    }
 }

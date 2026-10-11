@@ -9,6 +9,7 @@ internal sealed class CopilotDescriptionProvider(string directory) : ICaptureDes
     private CopilotClient? _client;
     private string? _model;
     private bool _started;
+    public string Status { get; private set; } = "Not connected";
 
     public async Task<CaptureDescription> DescribeAsync(byte[] png, CancellationToken cancellationToken)
     {
@@ -27,15 +28,20 @@ internal sealed class CopilotDescriptionProvider(string directory) : ICaptureDes
         if (!_started) { await _client.StartAsync(cancellationToken); _started = true; }
         var auth = await _client.GetAuthStatusAsync(cancellationToken);
         if (!auth.IsAuthenticated)
+        {
+            Status = "Not signed in";
             throw new InvalidOperationException("Sign in to GitHub Copilot before enabling screenshot descriptions.");
+        }
         if (_model is null)
         {
             var models = await _client.ListModelsAsync(cancellationToken);
-            _model = models.Where(model => model.Capabilities?.Supports?.Vision == true)
+            var selected = models.Where(model => model.Capabilities?.Supports?.Vision == true)
                 .OrderBy(model => model.Billing?.Multiplier ?? double.MaxValue)
                 .ThenBy(model => model.Id, StringComparer.Ordinal)
-                .FirstOrDefault()?.Id
+                .FirstOrDefault()
                 ?? throw new InvalidOperationException("Your Copilot account has no available image-capable model.");
+            _model = selected.Id;
+            Status = $"Signed in - model: {_model}; quota multiplier: {selected.Billing?.Multiplier?.ToString() ?? "unreported"}. Remaining quota is not reported here.";
         }
         var session = await _client.CreateSessionAsync(new SessionConfig
         {

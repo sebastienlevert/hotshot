@@ -23,7 +23,8 @@ internal sealed class AppServices
         paths.EnsureCreated();
         _settingsStore = new SettingsStore(paths.SettingsFile);
         Settings = _settingsStore.Load();
-        History = new HistoryStore(paths.HistoryFile, Settings.General.HistorySize);
+        History = new HistoryStore(paths.HistoryFile, Settings.General.HistorySize, Settings.Library.KeepSavedCaptures);
+        History.Failed += message => Post(() => { Log.Warn(message); Failed?.Invoke(message); });
         History.Load();
 
         _saveTimer = dispatcher.CreateTimer();
@@ -44,6 +45,7 @@ internal sealed class AppServices
     public LocalTextIndex? TextIndex { get; set; }
     public OutputPipeline? Output { get; set; }
     public AgentCaptureServer? AgentServer { get; set; }
+    public int AuxiliaryWindowCount { get; set; }
     public bool IsSaving => _saveGate.CurrentCount == 0 || _saveTimer.IsRunning;
 
     /// <summary>HWND that owns clipboard data and receives hotkeys/tray messages.</summary>
@@ -68,6 +70,7 @@ internal sealed class AppServices
         {
             Settings.Normalize();
             History.MaxItems = Settings.General.HistorySize;
+            History.KeepSavedCaptures = Settings.Library.KeepSavedCaptures;
             var snapshot = Settings.Clone();
             await Task.Run(() => _settingsStore.Save(snapshot));
             SettingsChanged?.Invoke();
@@ -93,6 +96,7 @@ internal sealed class AppServices
             var candidate = draft.Clone();
             candidate.General.Counter = Settings.General.Counter;
             candidate.General.FirstRunCompleted = Settings.General.FirstRunCompleted;
+            candidate.Library.SavedSearches = Settings.Library.SavedSearches.ToList();
             await Task.Run(() => _settingsStore.Save(candidate));
             var counter = Math.Max(candidate.General.Counter, Settings.General.Counter);
             Settings = candidate;
@@ -103,6 +107,7 @@ internal sealed class AppServices
             }
 
             History.MaxItems = Settings.General.HistorySize;
+            History.KeepSavedCaptures = Settings.Library.KeepSavedCaptures;
             await Task.Run(History.Prune);
             SettingsChanged?.Invoke();
             return true;

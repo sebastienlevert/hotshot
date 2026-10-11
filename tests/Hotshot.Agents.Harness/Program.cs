@@ -86,6 +86,14 @@ internal static class Harness
             app.Settings.Agents.AllowHistoryAccess = true;
             var history = await Send(new AgentRequest { Operation = "get_capture", CaptureId = "generated", MaxImageSize = 256 });
             Check(history.Success && history.Capture?.ImageWidth == 256 && history.Capture.ImageHeight == 128, "History preview geometry is incorrect.");
+            var crop = await Send(new AgentRequest { Operation = "get_capture_region", CaptureId = "generated", Region = new AgentRect(20, 30, 50, 40) });
+            Check(crop.Success && crop.Capture?.ImageWidth == 50 && crop.Capture.ImageHeight == 40 && crop.Capture.ImageRegion?.X == 20,
+                "Known-image region geometry was incorrect.");
+            var same = await Send(new AgentRequest { Operation = "compare_captures", BeforeId = "generated", CaptureId = "generated" });
+            Check(same.Success && same.Comparison?.ChangedPixels == 0 && same.Capture?.ImageBase64 is not null, "Native visual comparison failed.");
+            app.Settings.Agents.AllowedApps = ["restricted"];
+            Check((await Send(new AgentRequest { Operation = "get_capture", CaptureId = "generated" })).ErrorCode == "target_restricted", "Historical app restrictions were bypassed.");
+            app.Settings.Agents.AllowedApps = [];
             var decoded = await ImageCodec.DecodePngAsync(Convert.FromBase64String(history.Capture!.ImageBase64!));
             Check(decoded.Pixels[2] == 255 && decoded.Pixels[1] == 69, "History image pixels changed.");
             Check((await Send(new AgentRequest { Operation = "search_history", Query = "agent evidence" })).Captures?.Length == 1, "OCR search failed.");

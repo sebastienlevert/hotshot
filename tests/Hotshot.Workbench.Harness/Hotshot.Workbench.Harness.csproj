@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Hotshot.Editor\Hotshot.Editor.csproj" />
     <ProjectReference Include="..\..\src\Hotshot.Capture\Hotshot.Capture.csproj" />
+    <ProjectReference Include="..\..\src\Hotshot.Recording\Hotshot.Recording.csproj" />
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
     <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />

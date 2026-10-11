@@ -81,7 +81,7 @@ jobs:
         if: matrix.runtime == 'win-x64'
         shell: pwsh
         run: |
-          foreach ($project in 'Core', 'Editor', 'Gif') {
+          foreach ($project in 'Core', 'Capture', 'Editor', 'Gif') {
             dotnet test --project "tests\Hotshot.$project.Tests\Hotshot.$project.Tests.csproj" --output Detailed
             if ($LASTEXITCODE -ne 0) { throw "$project tests failed." }
           }

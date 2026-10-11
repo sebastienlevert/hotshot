@@ -21,6 +21,8 @@ internal sealed partial class AppController
     private bool _recordingAsGif;
     private bool _recordingTemporary;
     private CaptureSource? _recordingSource;
+    private string RecordingJournal => Path.Combine(_app.Paths.DataDirectory, "pending-recording.json");
+    private string? _journalOutputPath;
 
     private bool IsRecording => _recorder is not null;
 
@@ -66,6 +68,7 @@ internal sealed partial class AppController
 
     private async Task StartRecordingAsync(bool asGif, CancellationToken token)
     {
+        _journalOutputPath = null;
         try
         {
             var (appName, title) = WindowEnumerator.GetForegroundInfo();
@@ -107,6 +110,9 @@ internal sealed partial class AppController
             _recordingSource = source;
             var (path, temporary) = _pipeline.ReservePath(CaptureKind.Recording, source, selection.Rect.Width, selection.Rect.Height);
             _recordingTemporary = temporary;
+            await Hotshot.Recording.RecordingRecovery.BeginAsync(RecordingJournal,
+                new PendingRecording(path, selection.Rect.Width, selection.Rect.Height));
+            _journalOutputPath = path;
             var factor = settings.Quality switch
             {
                 RecordingQuality.Standard => 0.06,
@@ -174,6 +180,11 @@ internal sealed partial class AppController
         {
             if (_recorder is null)
             {
+                if (_journalOutputPath is { } path && !File.Exists(path))
+                {
+                    try { await Task.Run(() => Hotshot.Recording.RecordingRecovery.Complete(RecordingJournal)); }
+                    catch (IOException ex) { Log.Error("Canceled recording journal cleanup failed", ex); Notify("Recording recovery", ex.Message, isError: true); }
+                }
                 _recordingWindow?.Close();
                 _recordingWindow = null;
             }
@@ -215,6 +226,7 @@ internal sealed partial class AppController
                 result.Duration, _recordingTemporary, source: _recordingSource);
             if (item is not null)
             {
+                await Task.Run(() => Hotshot.Recording.RecordingRecovery.Complete(RecordingJournal));
                 if (_recordingAsGif && !_exiting) await ConvertToGifAsync(item);
             }
         }

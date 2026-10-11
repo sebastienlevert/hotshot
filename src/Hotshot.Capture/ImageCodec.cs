@@ -36,6 +36,8 @@ public static class ImageCodec
         var decoder = await BitmapDecoder.CreateAsync(stream);
         var transform = new BitmapTransform { InterpolationMode = BitmapInterpolationMode.Fant };
         uint width = decoder.OrientedPixelWidth, height = decoder.OrientedPixelHeight;
+        if ((long)width * height > 64_000_000)
+            throw new InvalidDataException("The image exceeds Hotshot's 64-megapixel limit.");
         if (maxSize is { } max && (width > max || height > max))
         {
             var scale = Math.Min((double)max / width, (double)max / height);

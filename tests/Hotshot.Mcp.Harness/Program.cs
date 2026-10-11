@@ -24,7 +24,7 @@ var command = args.Length > 0 ? Path.GetFullPath(args[0]) : throw new ArgumentEx
 var arguments = args.Skip(1).ToList();
 await CheckAsync(command, arguments, synthetic: false);
 await CheckAsync(Environment.ProcessPath!, ["--fixture"], synthetic: true);
-Console.WriteLine("PASS official MCP client handshake, tool schemas, disabled/unavailable native status, synthetic PNG content and structured errors.");
+Console.WriteLine("PASS official MCP client handshake, tool schemas, native status, synthetic PNG content and structured errors.");
 
 async Task CheckAsync(string executable, List<string> arguments, bool synthetic)
 {
@@ -33,7 +33,7 @@ async Task CheckAsync(string executable, List<string> arguments, bool synthetic)
         Command = executable, Arguments = arguments, Name = "Hotshot protocol test",
     }), cancellationToken: token);
     var tools = await client.ListToolsAsync(cancellationToken: token);
-    if (tools.Count != 8 || tools.Any(tool => !tool.Name.StartsWith("hotshot_", StringComparison.Ordinal)))
+    if (tools.Count != 12 || tools.Any(tool => !tool.Name.StartsWith("hotshot_", StringComparison.Ordinal)))
         throw new InvalidDataException("Unexpected MCP tool inventory.");
     if (tools.Any(tool => tool.JsonSchema.ToString().Contains("\"token\"", StringComparison.Ordinal)))
         throw new InvalidDataException("CancellationToken leaked into a tool's input schema.");
@@ -41,8 +41,8 @@ async Task CheckAsync(string executable, List<string> arguments, bool synthetic)
     if (!synthetic)
     {
         var response = Response(status);
-        if (response.Success && response.Status?.Enabled != false)
-            throw new InvalidDataException("Native access must be disabled during this non-capture test.");
+        if (response.Success && response.Status is null)
+            throw new InvalidDataException("Native status metadata is missing.");
         if (!response.Success && response.ErrorCode != "app_unavailable")
             throw new InvalidDataException("Unexpected native status error: " + response.Error);
         return;

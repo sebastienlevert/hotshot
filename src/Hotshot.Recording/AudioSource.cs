@@ -38,6 +38,11 @@ internal sealed class AudioSource : IDisposable
     private volatile bool _faulted;
     private bool _started;
     private bool _disposed;
+    private float _peak;
+    private long _lastPeak;
+    public float Peak => _accepting && !Muted && !_faulted &&
+        System.Diagnostics.Stopwatch.GetElapsedTime(Interlocked.Read(ref _lastPeak)) < TimeSpan.FromMilliseconds(500)
+            ? Volatile.Read(ref _peak) : 0;
 
     private enum SampleKind { Float32, Pcm16, Pcm24, Pcm32 }
 
@@ -223,6 +228,10 @@ internal sealed class AudioSource : IDisposable
 
                 var converted = _convertBuffer.AsSpan(0, frames * 2);
                 ConvertToStereoFloat(e.Buffer.AsSpan(0, frames * _blockAlign), frames, converted);
+                var peak = 0f;
+                foreach (var sample in converted) peak = Math.Max(peak, Math.Abs(sample));
+                Volatile.Write(ref _peak, Math.Clamp(peak, 0, 1));
+                Interlocked.Exchange(ref _lastPeak, System.Diagnostics.Stopwatch.GetTimestamp());
                 var bytes = MemoryMarshal.AsBytes(converted);
                 if (_resampler is null)
                 {

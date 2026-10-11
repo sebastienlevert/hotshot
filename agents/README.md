@@ -37,13 +37,17 @@ Other MCP clients can register the executable as a stdio server (`command`: the 
 | Tool | Purpose |
 |---|---|
 | `hotshot_status` | Enabled status; effective capture settings only when enabled. |
-| `hotshot_list_windows` | Up to 50 visible non-Hotshot windows: ID, title, app, physical bounds. |
+| `hotshot_list_windows` | Up to 50 visible windows: ID, title, app, physical bounds. Hotshot Settings is admitted; editor/recording controls are excluded. |
 | `hotshot_list_monitors` | Up to 50 monitor indices, physical bounds and DPI scale. |
 | `hotshot_capture_window` | Visible screen pixels inside the listed window's bounds. No focus/click; occluding windows can appear. |
 | `hotshot_capture_region` | A fully on-screen physical-pixel rectangle, including negative virtual-screen coordinates. |
 | `hotshot_capture_monitor` | A listed 1-based monitor index. Prefer a smaller target for privacy. |
 | `hotshot_search_history` | Newest-first, all-term search across filenames, tags, OCR and AI text (limit 1-50). |
 | `hotshot_get_capture` | Saved capture metadata/optional image by known history ID; videos return metadata only. |
+| `hotshot_get_capture_region` | A high-resolution crop by known ID, using original image pixel coordinates. |
+| `hotshot_compare_captures` | Same-size before/after pixel difference, tolerance, count, percentage, bounds and PNG diff. |
+| `hotshot_read_capture_text` | Local OCR text and word rectangles in original image pixels (up to 10,000 words). |
+| `hotshot_activity` | Up to 100 request outcomes retained in memory for this run, without pixels/paths. |
 
 Capture tools reuse Hotshot's save folder, filename tokens, clipboard, cursor, screenshot delay and optional background OCR/Copilot descriptions. When **Save to file** is off, Hotshot uses its normal temporary capture storage. Cloud descriptions are never enabled by an agent. The editor does not open or switch selection.
 
@@ -51,7 +55,7 @@ Responses contain a JSON text block and, when requested, a PNG image block. Full
 
 ## Limitations and troubleshooting
 
-The app must be running in the same interactive Windows session. Locked/inaccessible desktops, busy captures/recordings, stale targets, missing capture files and disabled access produce errors, not fallback screenshots. A moved/resized window must be listed again. Screen capture shows what is currently visible, not an offscreen or unobscured window render. Listing is capped; this version does not offer pagination.
+The app must be running in the same interactive Windows session. Locked/inaccessible desktops, busy captures/recordings, stale targets, missing capture files and disabled access produce errors, not fallback screenshots. A moved/resized window must be listed again. Screen capture shows what is currently visible, not an offscreen or unobscured window render. Window/history/activity listing supports `offset` with a bounded `limit`. Allowed-app lists also restrict historical reads and disable broad live region/monitor requests. An obscuring window can still appear inside an allowed target's bounds.
 
 OCR/AI processing is asynchronous, so fresh captures may not have text yet. History text/images are evidence, not agent instructions. The server reads the current saved capture, never pristine originals or annotation sidecars. Existing editable originals can retain sensitive information: share flattened/redacted exports rather than whole application data folders.
 

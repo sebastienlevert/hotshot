@@ -25,14 +25,13 @@ public sealed class HistoryItem
     public bool DescriptionPending { get; set; }
     public bool IsFavorite { get; set; }
     public string[] Tags { get; set; } = [];
+    public string Project { get; set; } = "";
+    public bool DescriptionNeedsReview { get; set; }
     public string? RecognizedText { get; set; }
     public string? TextRecognitionError { get; set; }
     public int ImageRevision { get; set; }
 
-    public bool MatchesSearch(string query) => string.IsNullOrWhiteSpace(query) ||
-        query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).All(term =>
-            new[] { FileName, Kind.DisplayName(), Summary, Description, RecognizedText, AppName, WindowTitle }
-                .Concat(Tags ?? []).Any(value => value?.Contains(term, StringComparison.OrdinalIgnoreCase) == true));
+    public bool MatchesSearch(string query) => CaptureQuery.Matches(this, query);
 
     [JsonIgnore]
     public string FileName => System.IO.Path.GetFileName(Path);
@@ -52,14 +51,32 @@ public sealed class HistoryStore
     private readonly string _path;
     private readonly Lock _gate = new();
     private List<HistoryItem> _items = [];
+    private bool _writeBlocked;
+    private bool _recoveredCorruptFile;
+    private CaptureSearchIndex? _search;
 
-    public HistoryStore(string path, int maxItems)
+    public HistoryStore(string path, int maxItems, bool keepSavedCaptures = false)
     {
         _path = path;
         MaxItems = maxItems;
+        KeepSavedCaptures = keepSavedCaptures;
     }
 
     public event EventHandler? Changed;
+    public event Action<string>? Failed;
+    public string? LastError { get; private set; }
+    public bool KeepSavedCaptures { get; set; }
+
+    public IReadOnlyList<HistoryItem> Search(string query, int limit = 500, int offset = 0)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
+        lock (_gate)
+        {
+            _search ??= new CaptureSearchIndex(_items.ToArray());
+            return _search.Search(query).Skip(offset).Take(limit).ToArray();
+        }
+    }
 
     public int MaxItems { get; set; }
 
@@ -89,12 +106,32 @@ public sealed class HistoryStore
             try
             {
                 _items = File.Exists(_path)
-                    ? JsonSerializer.Deserialize(File.ReadAllText(_path), HistoryJsonContext.Default.ListHistoryItem) ?? []
+                    ? ReadHistory(_path)
                     : [];
             }
-            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+            catch (JsonException ex)
             {
-                _items = [];
+                var corrupt = _path + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N")[..8];
+                try
+                {
+                    File.Copy(_path, corrupt);
+                    _items = File.Exists(_path + ".backup")
+                        ? ReadHistory(_path + ".backup")
+                        : [];
+                    _recoveredCorruptFile = true;
+                    Report($"Capture history was corrupt. The original was preserved at {corrupt}. " +
+                        (File.Exists(_path + ".backup") ? "The previous backup was recovered." : "No backup was available; saved image files are unchanged."));
+                }
+                catch (Exception recovery) when (recovery is JsonException or IOException or UnauthorizedAccessException)
+                {
+                    _writeBlocked = true;
+                    Report($"History recovery failed; writes are paused to preserve the original. {ex.Message} {recovery.Message}");
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _writeBlocked = true;
+                Report($"History could not be read. Writes are paused to avoid overwriting existing data: {ex.Message}");
             }
         }
 
@@ -162,21 +199,53 @@ public sealed class HistoryStore
             item.DescriptionPending = pending;
             SaveLocked();
         }
+
     }
 
-    public bool UpdateOrganization(string id, bool favorite, IEnumerable<string> tags)
+    public void HoldDescriptionForReview(string id)
+    {
+        lock (_gate)
+        {
+            var item = _items.FirstOrDefault(item => item.Id == id);
+            if (item is null) return;
+            item.DescriptionPending = false;
+            item.DescriptionNeedsReview = true;
+            SaveLocked();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public bool UpdateOrganization(string id, bool favorite, IEnumerable<string> tags, string? project = null)
     {
         var normalized = CaptureLibrary.NormalizeTags(tags);
+        var normalizedProject = project is null ? null : CaptureLibrary.NormalizeProject(project);
         lock (_gate)
         {
             var item = _items.FirstOrDefault(item => item.Id == id);
             if (item is null) return false;
             item.IsFavorite = favorite;
             item.Tags = normalized;
+            if (normalizedProject is not null) item.Project = normalizedProject;
             SaveLocked();
         }
         Changed?.Invoke(this, EventArgs.Empty);
         return true;
+    }
+
+    public void Organize(IEnumerable<string> ids, string project, IEnumerable<string> tags)
+    {
+        var selected = ids.ToHashSet(StringComparer.Ordinal);
+        var collection = CaptureLibrary.NormalizeProject(project);
+        var added = CaptureLibrary.NormalizeTags(tags);
+        lock (_gate)
+        {
+            var items = _items.Where(item => selected.Contains(item.Id)).ToArray();
+            if (items.Length != selected.Count) throw new KeyNotFoundException("Some selected captures are no longer in the library.");
+            var updates = items.Select(item => (Item: item, Tags: CaptureLibrary.NormalizeTags((item.Tags ?? []).Concat(added)))).ToArray();
+            foreach (var update in updates) { update.Item.Project = collection; update.Item.Tags = update.Tags; }
+            SaveLocked();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     public bool UpdateRecognizedText(string id, string? text, string? error, int? expectedRevision = null)
@@ -236,7 +305,7 @@ public sealed class HistoryStore
         List<HistoryItem> removed;
         lock (_gate)
         {
-            removed = _items.Where(i => !File.Exists(i.Path)).ToList();
+            removed = _items.Where(i => (!KeepSavedCaptures || i.IsTemporary) && !File.Exists(i.Path)).ToList();
             _items.RemoveAll(i => removed.Contains(i));
             removed.AddRange(Trim());
             if (removed.Count > 0)
@@ -254,27 +323,61 @@ public sealed class HistoryStore
 
     private List<HistoryItem> Trim()
     {
-        var extra = _items.Where(item => !item.IsFavorite).Skip(MaxItems).ToList();
+        var extra = _items.Where(item => !item.IsFavorite && (!KeepSavedCaptures || item.IsTemporary)).Skip(MaxItems).ToList();
         _items.RemoveAll(extra.Contains);
         return extra;
     }
 
     private void SaveLocked()
     {
+        _search = null;
+        if (_writeBlocked)
+        {
+            Report("History changes are in memory only. Fix the read/recovery failure and restart Hotshot before saving the library.");
+            return;
+        }
+        var temp = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path)!);
-            var temp = _path + ".tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(_items, HistoryJsonContext.Default.ListHistoryItem));
+            if (File.Exists(_path) && !_recoveredCorruptFile)
+            {
+                _ = ReadHistory(_path);
+                File.Copy(_path, _path + ".backup", overwrite: true);
+            }
             File.Move(temp, _path, overwrite: true);
+            _recoveredCorruptFile = false;
+            LastError = null;
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
-            // History is best-effort; never fail a capture because of it.
+            Report($"The capture file is safe, but library changes could not be saved: {ex.Message}");
+        }
+        finally
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Report($"History temporary-file cleanup failed: {ex.Message}"); }
         }
     }
 
-    private static void DeleteArtifacts(IEnumerable<HistoryItem> items)
+    private void Report(string message)
+    {
+        LastError = message;
+        Failed?.Invoke(message);
+    }
+
+    private static List<HistoryItem> ReadHistory(string path)
+    {
+        var items = JsonSerializer.Deserialize(File.ReadAllText(path), HistoryJsonContext.Default.ListHistoryItem)
+            ?? throw new JsonException("History must be a capture list, not null.");
+        if (items.Any(item => item is null || string.IsNullOrWhiteSpace(item.Path) || string.IsNullOrWhiteSpace(item.Id)))
+            throw new JsonException("History contains an invalid capture record.");
+        foreach (var item in items) { item.Tags ??= []; item.Project ??= ""; }
+        return items;
+    }
+
+    private void DeleteArtifacts(IEnumerable<HistoryItem> items)
     {
         foreach (var item in items)
         {
@@ -286,7 +389,7 @@ public sealed class HistoryStore
         }
     }
 
-    private static void TryDelete(string? path)
+    private void TryDelete(string? path)
     {
         if (string.IsNullOrEmpty(path))
         {
@@ -299,6 +402,7 @@ public sealed class HistoryStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            Report($"Could not remove a capture artifact: {ex.Message}");
         }
     }
 }

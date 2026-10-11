@@ -3,6 +3,7 @@ using Hotshot.Capture;
 using Hotshot.Core;
 using Hotshot.Core.History;
 using Hotshot.Core.Naming;
+using Hotshot.Core.Descriptions;
 
 namespace Hotshot.CaptureFlow;
 
@@ -48,7 +49,8 @@ internal sealed class OutputPipeline(AppServices app)
                 WindowTitle = source.WindowTitle,
                 MonitorIndex = source.MonitorIndex,
                 IsTemporary = isTemporary,
-                DescriptionPending = general.DescribeScreenshots,
+                DescriptionPending = CaptureAnalysisPolicy.CanAnalyzeAutomatically(general, source.AppName),
+                DescriptionNeedsReview = general.DescribeScreenshots && general.ReviewBeforeAiUpload && !CaptureAnalysisPolicy.IsExcluded(general, source.AppName),
             };
             var thumbnailPath = Path.Combine(app.Paths.ThumbnailsDirectory, item.Id + ".png");
 
@@ -72,7 +74,7 @@ internal sealed class OutputPipeline(AppServices app)
 
             await Task.Run(() => app.History.Add(item));
             if (general.RecognizeScreenshotText) app.TextIndex?.Enqueue(item, png);
-            if (general.DescribeScreenshots && app.Descriptions is { } descriptions)
+            if (item.DescriptionPending && app.Descriptions is { } descriptions)
                 _ = descriptions.EnqueueAsync(item);
             Log.Info($"{kind} {image.Width}x{image.Height}: encode {encodeMs} ms, clipboard {clipboardMs} ms, total {timer.ElapsedMilliseconds} ms -> {path}");
             return item;

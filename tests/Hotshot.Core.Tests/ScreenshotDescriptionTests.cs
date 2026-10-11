@@ -90,6 +90,28 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     }
 
     [Fact]
+    public async Task EnablingReviewModeCancelsAutomaticWorkAndHoldsItForApproval()
+    {
+        var (history, item) = Fixture();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var service = new ScreenshotDescriptions(history, () => new Provider(async (_, token) =>
+        {
+            entered.TrySetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            return new CaptureDescription("Never", "Never");
+        }), true);
+        var pending = service.EnqueueAsync(item);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        service.ApplyPolicy(new Hotshot.Core.Settings.GeneralSettings { DescribeScreenshots = true, ReviewBeforeAiUpload = true });
+        Assert.False(await pending.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        for (var i = 0; i < 50 && !item.DescriptionNeedsReview; i++)
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        Assert.True(item.DescriptionNeedsReview);
+        Assert.False(item.DescriptionPending);
+        Assert.False(await service.EnqueueAsync(item));
+    }
+
+    [Fact]
     public async Task ImageChangedDuringDescription_IsReprocessedWithoutOverwritingEdits()
     {
         var (history, item) = Fixture();
@@ -109,8 +131,10 @@ public sealed class ScreenshotDescriptionTests : IDisposable
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         var edited = PngDescriptionMetadata.Embed(Png(), new CaptureDescription("Edit", "Edited image metadata"));
         await service.SaveEditedImageAsync(item, edited);
+        var latest = service.EnqueueAsync(item);
         release.SetResult();
         Assert.True(await pending.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        Assert.True(await latest.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         Assert.Equal(2, calls);
         Assert.Equal("Updated chart", PngDescriptionMetadata.Read(await File.ReadAllBytesAsync(item.Path, TestContext.Current.CancellationToken))?.Summary);
     }

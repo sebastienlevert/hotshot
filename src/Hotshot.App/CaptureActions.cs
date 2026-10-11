@@ -76,15 +76,16 @@ internal sealed class CaptureActions(AppServices app)
     public Task ConvertToGifAsync(HistoryItem item) => ConvertToGifHandler?.Invoke(item) ?? Task.CompletedTask;
 
     /// <summary>Moves the file to the Recycle Bin and removes it from history.</summary>
-    public void Delete(HistoryItem item)
+    public bool Delete(HistoryItem item)
     {
         if (File.Exists(item.Path) && !item.IsTemporary && !Recycle(item.Path))
         {
             Failed?.Invoke("Could not delete the file.");
-            return;
+            return false;
         }
 
         app.History.Remove(item.Id);
+        return true;
     }
 
     public void OpenSaveFolder()

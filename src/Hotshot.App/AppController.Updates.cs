@@ -27,7 +27,7 @@ internal sealed partial class AppController
             Converting: _conversionTask is not null,
             UnsavedEdits: _historyWindow?.HasUnsavedEdits ?? false,
             EditorBusy: _historyWindow?.IsBusy ?? false,
-            ActiveWindow: Active(_historyWindow) || Active(_settingsWindow),
+            ActiveWindow: Active(_historyWindow) || Active(_settingsWindow) || _app.AuxiliaryWindowCount > 0,
             UnsavedSettings: _app.IsSaving || (_settingsWindow?.HasPendingChanges ?? false),
             Exiting: _exiting,
             Describing: _descriptions.IsBusy || _textIndex.IsBusy || _agentServer.IsBusy);

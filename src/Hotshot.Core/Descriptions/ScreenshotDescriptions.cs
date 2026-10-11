@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Channels;
 using Hotshot.Core.History;
+using Hotshot.Core.Settings;
 
 namespace Hotshot.Core.Descriptions;
 
@@ -10,7 +11,10 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
 {
     private readonly HistoryStore _history;
     private readonly Func<ICaptureDescriptionProvider> _createProvider;
-    private readonly Channel<Work> _queue = Channel.CreateUnbounded<Work>(new UnboundedChannelOptions { SingleReader = true });
+    public const int QueueCapacity = 32;
+    private readonly Channel<Work> _queue = Channel.CreateBounded<Work>(new BoundedChannelOptions(QueueCapacity)
+        { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+    private readonly Dictionary<string, Work> _scheduled = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _files = new(1, 1);
     private readonly CancellationTokenSource _stop = new();
     private readonly Lock _state = new();
@@ -21,17 +25,54 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
     private long _generation;
     private int _pending;
     private int _disposed;
+    private bool _reviewRequired;
+    private string[] _excludedApps = [];
 
     public ScreenshotDescriptions(HistoryStore history, Func<ICaptureDescriptionProvider> createProvider, bool enabled)
     {
         _history = history;
         _createProvider = createProvider;
         _enabled = enabled;
+        Status = enabled ? "Ready" : "Disabled";
         _worker = Task.Run(ProcessAsync);
     }
 
     public event Action<string>? Failed;
+    public event Action? Changed;
     public bool IsBusy => Volatile.Read(ref _pending) != 0;
+    public int PendingCount => Volatile.Read(ref _pending);
+    public string? ActiveCaptureId { get; private set; }
+    public string Status { get; private set; } = "Idle";
+    public string ProviderStatus => _provider?.Status ?? "Copilot has not been contacted.";
+    public IReadOnlyList<string> QueuedCaptureIds
+    {
+        get { lock (_state) return _scheduled.Keys.ToArray(); }
+    }
+
+    public void Cancel(string id)
+    {
+        lock (_state)
+        {
+            if (_scheduled.TryGetValue(id, out var work)) work.Cancelled = true;
+            if (ActiveCaptureId == id) _active?.Cancel();
+        }
+        Changed?.Invoke();
+    }
+
+    public void ApplyPolicy(GeneralSettings settings)
+    {
+        lock (_state)
+        {
+            _reviewRequired = settings.ReviewBeforeAiUpload;
+            _excludedApps = (settings.AiExcludedApps ?? []).ToArray();
+            if (ActiveCaptureId is { } id && _scheduled.TryGetValue(id, out var work) && !PolicyAllows(work))
+                _active?.Cancel();
+        }
+        Changed?.Invoke();
+    }
+
+    private bool PolicyAllows(Work work) => (work.Approved || !_reviewRequired) &&
+        !_excludedApps.Any(name => string.Equals(Path.GetFileNameWithoutExtension(name.Trim()), work.AppName, StringComparison.OrdinalIgnoreCase));
 
     public void SetEnabled(bool enabled)
     {
@@ -42,21 +83,39 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
             _generation++;
             if (!enabled) _active?.Cancel();
         }
+        Status = enabled ? "Ready" : "Disabled";
+        Changed?.Invoke();
     }
 
-    public Task<bool> EnqueueAsync(HistoryItem item)
+    public Task<bool> EnqueueAsync(HistoryItem item, bool approved = false)
     {
         ArgumentNullException.ThrowIfNull(item);
         lock (_state)
         {
             if (!_enabled || item.IsVideo || _stop.IsCancellationRequested) return Task.FromResult(false);
-            var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            Interlocked.Increment(ref _pending);
-            if (!_queue.Writer.TryWrite(new Work(item.Id, item.Path, _generation, completion)))
+            if (_scheduled.TryGetValue(item.Id, out var existing))
             {
-                Interlocked.Decrement(ref _pending);
-                throw new InvalidOperationException("Screenshot description processing has stopped.");
+                if (item.ImageRevision > existing.RequestedRevision)
+                {
+                    existing.RequestedRevision = item.ImageRevision;
+                    existing.Followup ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                }
+                return existing.Followup?.Task ?? existing.Completion.Task;
             }
+            var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var work = new Work(item.Id, item.Path, _generation, completion, item.AppName, approved) { RequestedRevision = item.ImageRevision };
+            if (!PolicyAllows(work)) return Task.FromResult(false);
+            _scheduled.Add(item.Id, work);
+            Interlocked.Increment(ref _pending);
+            if (!_queue.Writer.TryWrite(work))
+            {
+                _scheduled.Remove(item.Id);
+                Interlocked.Decrement(ref _pending);
+                ReportFailure(work, "The AI queue is full. Retry this capture after pending work finishes.");
+                return completion.Task;
+            }
+            Status = $"{PendingCount} capture(s) pending";
+            Changed?.Invoke();
             return completion.Task;
         }
     }
@@ -77,9 +136,16 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
         finally { _files.Release(); }
     }
 
+    public async Task RunFileOperationAsync(Func<Task> action)
+    {
+        await _files.WaitAsync();
+        try { await action(); }
+        finally { _files.Release(); }
+    }
+
     private bool MayProcess(Work work)
     {
-        lock (_state) return _enabled && work.Generation == _generation && !_stop.IsCancellationRequested;
+        lock (_state) return _enabled && !work.Cancelled && PolicyAllows(work) && work.Generation == _generation && !_stop.IsCancellationRequested;
     }
 
     private async Task ProcessAsync()
@@ -100,8 +166,11 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
                 lock (_state)
                 {
                     _active = request;
+                    ActiveCaptureId = work.Id;
                     if (!_enabled || work.Generation != _generation) request.Cancel();
                 }
+                Status = "Describing screenshot";
+                Changed?.Invoke();
                 for (var attempt = 0; attempt < 2; attempt++)
                 {
                     byte[] png;
@@ -124,6 +193,7 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
                         var annotated = PngDescriptionMetadata.Embed(current, description);
                         await WriteAtomicAsync(work.Path, annotated, request.Token);
                         _history.UpdateDescription(work.Id, description.Summary, description.Description, null, annotated.LongLength);
+                        work.ProcessedRevision = _history.Items.FirstOrDefault(item => item.Id == work.Id)?.ImageRevision ?? work.RequestedRevision;
                         work.Completion.SetResult(true);
                         break;
                     }
@@ -153,10 +223,31 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
                     {
                         Failed?.Invoke($"Screenshot description cancellation could not be saved: {ex.Message}");
                     }
+                    if (_enabled && _reviewRequired && !work.Approved) _history.HoldDescriptionForReview(work.Id);
                 }
-                lock (_state) _active = null;
+                lock (_state)
+                {
+                    _active = null;
+                    ActiveCaptureId = null;
+                    _scheduled.Remove(work.Id);
+                }
                 request?.Dispose();
                 Interlocked.Decrement(ref _pending);
+                if (work.Followup is { } followup)
+                {
+                    if (!MayProcess(work) || !work.Completion.Task.IsCompletedSuccessfully || !work.Completion.Task.Result)
+                        followup.TrySetResult(false);
+                    else if (work.ProcessedRevision >= work.RequestedRevision)
+                        followup.TrySetResult(true);
+                    else
+                    {
+                        var item = _history.Items.FirstOrDefault(item => item.Id == work.Id);
+                        if (item is null) followup.TrySetResult(false);
+                        else _ = CompleteFollowupAsync(item, work.Approved, followup);
+                    }
+                }
+                Status = !_enabled ? "Disabled" : IsBusy ? $"{PendingCount} capture(s) pending" : "Idle";
+                Changed?.Invoke();
             }
         }
     }
@@ -168,8 +259,19 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
         {
             error += $" The failure could not be recorded in history: {ex.Message}";
         }
+
         try { Failed?.Invoke($"The screenshot was saved, but its AI description failed: {error}"); }
         finally { work.Completion.TrySetResult(false); }
+    }
+
+    private async Task CompleteFollowupAsync(HistoryItem item, bool approved, TaskCompletionSource<bool> completion)
+    {
+        try { completion.TrySetResult(await EnqueueAsync(item, approved)); }
+        catch (Exception ex)
+        {
+            Failed?.Invoke("The updated screenshot could not be queued: " + ex.Message);
+            completion.TrySetException(ex);
+        }
     }
 
     private static async Task WriteAtomicAsync(string path, byte[] data, CancellationToken cancellationToken)
@@ -195,5 +297,11 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
         _stop.Dispose();
     }
 
-    private sealed record Work(string Id, string Path, long Generation, TaskCompletionSource<bool> Completion);
+    private sealed record Work(string Id, string Path, long Generation, TaskCompletionSource<bool> Completion, string? AppName, bool Approved)
+    {
+        public bool Cancelled { get; set; }
+        public int RequestedRevision { get; set; }
+        public int ProcessedRevision { get; set; } = -1;
+        public TaskCompletionSource<bool>? Followup { get; set; }
+    }
 }

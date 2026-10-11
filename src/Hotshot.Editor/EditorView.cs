@@ -18,7 +18,7 @@ namespace Hotshot.Editor;
 /// <summary>Code-only, reusable annotation surface for the capture/history workspace.</summary>
 public sealed class EditorView : UserControl, IDisposable
 {
-    private readonly CanvasControl _canvas = new();
+    private readonly CanvasControl _canvas = new() { IsTabStop = true };
     private readonly RenderTargetPair _targets = new();
     private readonly TaskCompletionSource<CanvasDevice> _deviceReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ComboBox _tools = new() { ItemsSource = Enum.GetValues<EditorTool>(), SelectedItem = EditorTool.Arrow, MinWidth = 110 };
@@ -45,9 +45,17 @@ public sealed class EditorView : UserControl, IDisposable
     private PixelRect _cropViewport;
     private float _scale = 1;
     private Vector2 _offset;
+    private readonly EditorViewport _navigation = new();
+    private readonly TextBlock _zoomLabel = new() { VerticalAlignment = VerticalAlignment.Center };
+    private readonly Windows.UI.ViewManagement.UISettings _systemColors = new();
+    private readonly Windows.UI.ViewManagement.AccessibilitySettings _accessibility = new();
+    private readonly Windows.Foundation.TypedEventHandler<Windows.UI.ViewManagement.UISettings, object> _colorsChanged;
+    private bool _panning;
+    private Vector2 _panPoint;
     private PixelRect _viewport;
     private bool _updating;
     private bool _busy;
+    private bool _hostBusy;
     private bool _disposed;
 
     public EditorView()
@@ -57,6 +65,8 @@ public sealed class EditorView : UserControl, IDisposable
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var commands = new CommandBar { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right, IsDynamicOverflowEnabled = true };
+        AutomationProperties.SetAutomationId(commands, "EditorCommands");
+        AutomationProperties.SetAutomationId(_zoomLabel, "EditorZoomStatus");
         AutomationProperties.SetName(_tools, "Annotation tool");
         AutomationProperties.SetName(_colors, "Annotation color");
         AutomationProperties.SetName(_widths, "Stroke thickness");
@@ -67,6 +77,12 @@ public sealed class EditorView : UserControl, IDisposable
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _widths });
         commands.PrimaryCommands.Add(_undo);
         commands.PrimaryCommands.Add(_redo);
+        var fit = new AppBarButton { Label = "Fit image", Icon = new SymbolIcon(Symbol.ZoomOut) };
+        fit.Click += (_, _) => { _navigation.Reset(); _canvas.Invalidate(); };
+        var actual = new AppBarButton { Label = "100% zoom", Icon = new SymbolIcon(Symbol.ZoomIn) };
+        actual.Click += (_, _) => ZoomTo((float)(1 / (XamlRoot?.RasterizationScale ?? 1)));
+        commands.PrimaryCommands.Add(fit);
+        commands.PrimaryCommands.Add(actual);
         AutomationProperties.SetName(_layers, "Annotation layers");
         AutomationProperties.SetName(_filled, "Fill selected shape");
         AutomationProperties.SetName(_fontSize, "Annotation font size");
@@ -96,8 +112,11 @@ public sealed class EditorView : UserControl, IDisposable
         root.Children.Add(commands);
         Grid.SetRow(_canvas, 1);
         root.Children.Add(_canvas);
-        Grid.SetRow(_status, 2);
-        root.Children.Add(_status);
+        var statusPanel = new StackPanel { Spacing = 2 };
+        statusPanel.Children.Add(_status);
+        statusPanel.Children.Add(_zoomLabel);
+        Grid.SetRow(statusPanel, 2);
+        root.Children.Add(statusPanel);
         Content = root;
         AutomationProperties.SetName(_canvas, "Annotation canvas");
         AutomationProperties.SetAutomationId(_canvas, "AnnotationCanvas");
@@ -113,9 +132,38 @@ public sealed class EditorView : UserControl, IDisposable
         _canvas.PointerReleased += OnPointerReleased;
         _canvas.PointerCanceled += (_, _) => CancelGesture();
         _canvas.PointerCaptureLost += (_, _) => CancelGesture();
+        _canvas.PointerWheelChanged += (_, args) =>
+        {
+            if (_busy || !HasImage) return;
+            var pointer = args.GetCurrentPoint(_canvas);
+            _navigation.Zoom(_scale * MathF.Pow(1.2f, pointer.Properties.MouseWheelDelta / 120f),
+                new Vector2((float)pointer.Position.X, (float)pointer.Position.Y));
+            _canvas.Invalidate();
+            args.Handled = true;
+        };
         _canvas.SizeChanged += (_, _) => _canvas.Invalidate();
         _canvas.KeyDown += (_, args) =>
         {
+            if (!_busy && _state is { } keyboardState && args.Key == VirtualKey.Insert)
+            {
+                var point = new Vector2(_viewport.X + _viewport.Width / 2f, _viewport.Y + _viewport.Height / 2f);
+                var annotation = keyboardState.CreateAnnotation(keyboardState.Tool, point);
+                switch (annotation)
+                {
+                    case BoxAnnotation box: box.Rect = new RectF(point.X, point.Y, 100, 60); break;
+                    case SegmentAnnotation line: line.End = point + new Vector2(100, 60); break;
+                    case TextAnnotation text: text.Text = "Text"; break;
+                    case PenAnnotation pen: pen.Points.Add(point + new Vector2(100, 60)); break;
+                }
+                if (annotation is not null)
+                {
+                    keyboardState.Document.Add(annotation);
+                    keyboardState.Tool = EditorTool.Select;
+                    keyboardState.Select(annotation.Id);
+                }
+                args.Handled = true;
+                return;
+            }
             if (_busy || _state is not { Tool: EditorTool.Select, SelectedId: { } id } state) return;
             var delta = args.Key switch
             {
@@ -124,7 +172,14 @@ public sealed class EditorView : UserControl, IDisposable
             };
             if (delta == Vector2.Zero) return;
             if ((InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0) delta *= 10;
-            state.Document.Update(id, annotation => annotation.Translate(delta));
+            var resize = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control) & CoreVirtualKeyStates.Down) != 0;
+            state.Document.Update(id, annotation =>
+            {
+                if (resize && annotation is BoxAnnotation box)
+                    box.Rect = box.Rect with { Width = Math.Max(1, box.Rect.Width + delta.X), Height = Math.Max(1, box.Rect.Height + delta.Y) };
+                else if (resize && annotation is SegmentAnnotation segment) segment.End += delta;
+                else annotation.Translate(delta);
+            });
             args.Handled = true;
         };
         ActualThemeChanged += (_, _) => _canvas.Invalidate();
@@ -167,6 +222,14 @@ public sealed class EditorView : UserControl, IDisposable
         AddAccelerator(VirtualKey.Y, VirtualKeyModifiers.Control, () => _state?.Document.Redo());
         AddAccelerator(VirtualKey.Delete, VirtualKeyModifiers.None, () => _state?.DeleteSelected());
         AddAccelerator(VirtualKey.D, VirtualKeyModifiers.Control, DuplicateSelected);
+        AddAccelerator(VirtualKey.Number0, VirtualKeyModifiers.Control, () => { _navigation.Reset(); _canvas.Invalidate(); });
+        AddAccelerator(VirtualKey.Number1, VirtualKeyModifiers.Control, () => ZoomTo((float)(1 / (XamlRoot?.RasterizationScale ?? 1))));
+        foreach (var (key, tool) in new[] { (VirtualKey.V, EditorTool.Select), (VirtualKey.A, EditorTool.Arrow),
+            (VirtualKey.R, EditorTool.Rectangle), (VirtualKey.T, EditorTool.Text), (VirtualKey.C, EditorTool.Crop),
+            (VirtualKey.P, EditorTool.Pen) })
+            AddAccelerator(key, VirtualKeyModifiers.None, () => { if (_state is { } state) state.Tool = tool; });
+        _colorsChanged = (_, _) => _canvas.DispatcherQueue.TryEnqueue(() => { if (!_disposed) _canvas.Invalidate(); });
+        _systemColors.ColorValuesChanged += _colorsChanged;
     }
 
     public event EventHandler<EditorSavedEventArgs>? Saved;
@@ -326,19 +389,23 @@ public sealed class EditorView : UserControl, IDisposable
     private void Draw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         var ds = args.DrawingSession;
-        ds.Clear(ActualTheme == ElementTheme.Dark ? Color.FromArgb(255, 24, 24, 24) : Color.FromArgb(255, 235, 235, 235));
+        var highContrast = _accessibility.HighContrast;
+        ds.Clear(highContrast ? _systemColors.GetColorValue(Windows.UI.ViewManagement.UIColorType.Background) :
+            ActualTheme == ElementTheme.Dark ? Color.FromArgb(255, 24, 24, 24) : Color.FromArgb(255, 235, 235, 235));
         if (_busy || _renderer is not { } renderer || _state is not { } state) return;
         try
         {
             _viewport = _cropping ? _cropViewport : CropMath.OutputRect(state.Document.Crop, renderer.Width, renderer.Height);
-            _scale = Math.Max(0.01f, Math.Min((float)(sender.ActualWidth - 32) / _viewport.Width, (float)(sender.ActualHeight - 32) / _viewport.Height));
-            _offset = new Vector2((float)(sender.ActualWidth - _viewport.Width * _scale) / 2, (float)(sender.ActualHeight - _viewport.Height * _scale) / 2);
+            _navigation.Layout(new Vector2((float)sender.ActualWidth, (float)sender.ActualHeight), new Vector2(_viewport.Width, _viewport.Height));
+            _scale = _navigation.Scale;
+            _offset = _navigation.Offset;
+            _zoomLabel.Text = $"{_scale * (XamlRoot?.RasterizationScale ?? 1):P0} - wheel to zoom; Space-drag or middle-drag to pan";
             var rendered = renderer.Render(state.Document, _targets);
             ds.DrawImage(rendered,
                 new Windows.Foundation.Rect(_offset.X, _offset.Y, _viewport.Width * _scale, _viewport.Height * _scale),
                 new Windows.Foundation.Rect(_viewport.X, _viewport.Y, _viewport.Width, _viewport.Height), 1, CanvasImageInterpolation.Linear);
             ds.Transform = Matrix3x2.CreateScale(_scale) * Matrix3x2.CreateTranslation(_offset - new Vector2(_viewport.X, _viewport.Y) * _scale);
-            var accent = Color.FromArgb(255, 10, 132, 255);
+            var accent = highContrast ? _systemColors.GetColorValue(Windows.UI.ViewManagement.UIColorType.Foreground) : Color.FromArgb(255, 10, 132, 255);
             if (_cropping && state.Document.Crop is { } crop) ds.DrawRectangle(crop.ToRect(), accent, 2 / _scale);
             if (state.Selected is { } selected)
             {
@@ -360,6 +427,17 @@ public sealed class EditorView : UserControl, IDisposable
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
     {
+        var pointer = args.GetCurrentPoint(_canvas);
+        if (!_busy && HasImage && (pointer.Properties.IsMiddleButtonPressed ||
+            pointer.Properties.IsLeftButtonPressed && (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Space) & CoreVirtualKeyStates.Down) != 0))
+        {
+            _panning = true;
+            _panPoint = new Vector2((float)pointer.Position.X, (float)pointer.Position.Y);
+            _canvas.CapturePointer(args.Pointer);
+            _canvas.Focus(FocusState.Pointer);
+            args.Handled = true;
+            return;
+        }
         if (_busy || _state is not { } state || !args.GetCurrentPoint(_canvas).Properties.IsLeftButtonPressed) return;
         var point = ImagePoint(args);
         _anchor = _previous = point;
@@ -397,6 +475,16 @@ public sealed class EditorView : UserControl, IDisposable
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs args)
     {
+        if (_panning)
+        {
+            var position = args.GetCurrentPoint(_canvas).Position;
+            var panPosition = new Vector2((float)position.X, (float)position.Y);
+            _navigation.Pan(panPosition - _panPoint);
+            _panPoint = panPosition;
+            _canvas.Invalidate();
+            args.Handled = true;
+            return;
+        }
         if (_state is not { } state || !state.Document.InTransaction) return;
         var point = ImagePoint(args);
         var shift = (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift) & CoreVirtualKeyStates.Down) != 0;
@@ -419,6 +507,13 @@ public sealed class EditorView : UserControl, IDisposable
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs args)
     {
+        if (_panning)
+        {
+            _panning = false;
+            _canvas.ReleasePointerCapture(args.Pointer);
+            args.Handled = true;
+            return;
+        }
         if (_state is not { } state || !state.Document.InTransaction) return;
         OnPointerMoved(sender, args);
         state.Document.CommitTransaction();
@@ -432,6 +527,7 @@ public sealed class EditorView : UserControl, IDisposable
 
     private void CancelGesture()
     {
+        _panning = false;
         _state?.Document.CancelTransaction();
         _drawing = null;
         _moving = _cropping = false;
@@ -472,8 +568,14 @@ public sealed class EditorView : UserControl, IDisposable
     private void SetBusy(bool busy)
     {
         _busy = busy;
-        IsEnabled = !busy;
+        IsEnabled = !busy && !_hostBusy;
         if (!busy && !_disposed) _canvas.Invalidate();
+    }
+
+    public void SetHostBusy(bool busy)
+    {
+        _hostBusy = busy;
+        IsEnabled = !_busy && !busy;
     }
 
     private void Error(string message)
@@ -487,7 +589,7 @@ public sealed class EditorView : UserControl, IDisposable
         var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
         accelerator.Invoked += (_, args) =>
         {
-            if (_busy || _text.FocusState != FocusState.Unfocused) return;
+            if (_busy || FocusManager.GetFocusedElement(XamlRoot) is TextBox or NumberBox) return;
             action();
             args.Handled = true;
         };
@@ -496,6 +598,7 @@ public sealed class EditorView : UserControl, IDisposable
 
     private void ReleaseDocument()
     {
+        _navigation.Reset();
         CancelGesture();
         if (_state is not null) _state.Changed -= StateChanged;
         _state = null;
@@ -512,7 +615,15 @@ public sealed class EditorView : UserControl, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _systemColors.ColorValuesChanged -= _colorsChanged;
         ReleaseDocument();
         _canvas.RemoveFromVisualTree();
+    }
+
+    private void ZoomTo(float scale)
+    {
+        if (!HasImage) return;
+        _navigation.Zoom(scale, new Vector2((float)_canvas.ActualWidth / 2, (float)_canvas.ActualHeight / 2));
+        _canvas.Invalidate();
     }
 }

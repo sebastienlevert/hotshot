@@ -28,6 +28,13 @@ public sealed record CaptureLibraryFilter(string Query = "", bool FavoritesOnly 
 
 public static class CaptureLibrary
 {
+    public static string NormalizeProject(string project)
+    {
+        project = project.Trim();
+        if (project.Length > 80 || project.Any(char.IsControl))
+            throw new ArgumentException("Project names must be at most 80 characters, without control characters.");
+        return project;
+    }
     public static string[] NormalizeTags(IEnumerable<string> tags)
     {
         ArgumentNullException.ThrowIfNull(tags);

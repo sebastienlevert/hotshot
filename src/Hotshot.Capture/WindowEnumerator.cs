@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Hotshot.Interop;
 
@@ -8,7 +7,6 @@ public sealed record WindowInfo(nint Handle, PixelRect Bounds, string Title, str
 
 public static unsafe class WindowEnumerator
 {
-    private static readonly ConcurrentDictionary<uint, string> ProcessNames = new();
     private static readonly HashSet<string> IgnoredClasses = new(StringComparer.Ordinal)
     {
         "Progman", "WorkerW", "Windows.UI.Core.CoreWindow", "ForegroundStaging", "MultitaskingViewFrame",
@@ -16,7 +14,7 @@ public static unsafe class WindowEnumerator
     };
 
     /// <summary>Visible, non-cloaked top-level windows in z-order (topmost first).</summary>
-    public static IReadOnlyList<WindowInfo> GetVisibleWindows(uint? excludeProcessId = null)
+    public static IReadOnlyList<WindowInfo> GetVisibleWindows(uint? excludeProcessId = null, nint includeWindow = 0)
     {
         var handles = new List<nint>(256);
         var gc = GCHandle.Alloc(handles);
@@ -44,7 +42,7 @@ public static unsafe class WindowEnumerator
             }
 
             Native.GetWindowThreadProcessId(hwnd, out var pid);
-            if (excludeProcessId == pid)
+            if (excludeProcessId == pid && hwnd != includeWindow)
             {
                 continue;
             }
@@ -100,27 +98,24 @@ public static unsafe class WindowEnumerator
             return string.Empty;
         }
 
-        return ProcessNames.GetOrAdd(pid, static id =>
+        var process = Native.OpenProcess(Native.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (process == 0)
         {
-            var process = Native.OpenProcess(Native.PROCESS_QUERY_LIMITED_INFORMATION, false, id);
-            if (process == 0)
-            {
-                return string.Empty;
-            }
+            return string.Empty;
+        }
 
-            try
-            {
-                var buffer = stackalloc char[1024];
-                var size = 1024;
-                return Native.QueryFullProcessImageName(process, 0, buffer, ref size)
-                    ? Path.GetFileNameWithoutExtension(new string(buffer, 0, size))
-                    : string.Empty;
-            }
-            finally
-            {
-                Native.CloseHandle(process);
-            }
-        });
+        try
+        {
+            var buffer = stackalloc char[1024];
+            var size = 1024;
+            return Native.QueryFullProcessImageName(process, 0, buffer, ref size)
+                ? Path.GetFileNameWithoutExtension(new string(buffer, 0, size))
+                : string.Empty;
+        }
+        finally
+        {
+            Native.CloseHandle(process);
+        }
     }
 
     /// <summary>Process name and title of the current foreground window (for naming tokens).</summary>

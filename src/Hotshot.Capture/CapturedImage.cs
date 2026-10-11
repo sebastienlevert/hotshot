@@ -10,7 +10,8 @@ public sealed class CapturedImage
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(height, 1);
-        if (pixels.Length < width * height * 4)
+        if ((long)width * height > 64_000_000) throw new ArgumentException("Images are limited to 64 megapixels.");
+        if (pixels.LongLength < (long)width * height * 4)
         {
             throw new ArgumentException("Pixel buffer is too small.", nameof(pixels));
         }
@@ -24,6 +25,15 @@ public sealed class CapturedImage
     public int Height { get; }
     public int Stride => Width * 4;
     public byte[] Pixels { get; }
+    public CapturedImage Crop(PixelRect region)
+    {
+        if (region.IsEmpty || region.Intersect(new PixelRect(0, 0, Width, Height)) != region)
+            throw new ArgumentException("The image region must be fully inside the image.");
+        var pixels = new byte[checked(region.Width * region.Height * 4)];
+        for (var y = 0; y < region.Height; y++)
+            Pixels.AsSpan(((region.Y + y) * Width + region.X) * 4, region.Width * 4).CopyTo(pixels.AsSpan(y * region.Width * 4));
+        return new CapturedImage(region.Width, region.Height, pixels);
+    }
 
     /// <summary>Area-averaging downscale that fits the image inside <paramref name="maxSize"/>.</summary>
     public CapturedImage Downscale(int maxSize)

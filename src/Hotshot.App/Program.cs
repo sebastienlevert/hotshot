@@ -7,6 +7,9 @@ namespace Hotshot;
 
 public static class Program
 {
+    private static readonly System.Diagnostics.Stopwatch Startup = System.Diagnostics.Stopwatch.StartNew();
+    internal static long StartupMilliseconds { get; private set; }
+    internal static void MarkReady() => StartupMilliseconds = Startup.ElapsedMilliseconds;
     private const string MutexName = @"Local\Hotshot.SingleInstance";
 
     internal static CommandLine CommandLine { get; private set; } = new(false, AppCommand.None);

@@ -11,11 +11,13 @@ using Hotshot.Core.History;
 
 namespace Hotshot.Agents;
 
-internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator capture, Func<bool> isUnavailable) : IDisposable
+internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator capture, Func<bool> isUnavailable, Func<nint>? settingsWindow = null) : IDisposable
 {
     private readonly CancellationTokenSource _stop = new();
     private Task? _listener;
     private int _requests;
+    private readonly Queue<AgentActivity> _activity = new();
+    public IReadOnlyList<AgentActivity> Activity => _activity.ToArray();
     public bool IsBusy => Volatile.Read(ref _requests) > 0;
     public string Status { get; private set; } = "Agent access is off.";
     public event Action? StatusChanged;
@@ -64,7 +66,27 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                     var request = AgentProtocol.DecodeRequest(bytes);
                     request.Validate();
                     Interlocked.Increment(ref _requests);
-                    try { response = await OnUiAsync(() => HandleAsync(request, deadline.Token), deadline.Token); }
+                    try
+                    {
+                        response = await OnUiAsync(async () =>
+                        {
+                            AgentResponse result;
+                            try { result = await HandleAsync(request, deadline.Token); }
+                            catch (OperationCanceledException) { throw; }
+                            catch (Exception ex)
+                            {
+                                Log.Error("Agent operation failed", ex);
+                                result = AgentResponse.Failure("operation_failed", ex.Message);
+                            }
+                            if (request.Operation is not ("status" or "activity"))
+                            {
+                                _activity.Enqueue(new AgentActivity(DateTimeOffset.Now, request.Operation, result.Success, result.ErrorCode));
+                                while (_activity.Count > 100) _activity.Dequeue();
+                                StatusChanged?.Invoke();
+                            }
+                            return result;
+                        }, deadline.Token);
+                    }
                     finally { Interlocked.Decrement(ref _requests); }
                 }
                 catch (Exception ex) when (ex is ArgumentException or IOException or System.Text.Json.JsonException)
@@ -82,6 +104,11 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
             catch (Exception ex) when (ex is IOException or OperationCanceledException or UnauthorizedAccessException)
             {
                 Log.Warn($"Agent IPC request failed: {ex.Message}");
+                app.Post(() =>
+                {
+                    Status = "The last agent connection failed: " + ex.Message;
+                    StatusChanged?.Invoke();
+                });
                 try { await Task.Delay(100, _stop.Token).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { return; }
             }
@@ -128,32 +155,70 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
             var status = settings.Agents.Enabled
                 ? new AgentStatus(true, settings.Agents.AllowHistoryAccess, version, settings.General.SaveFolder,
                     settings.General.SaveToFile, settings.General.CopyToClipboard, settings.Capture.IncludeCursor,
-                    settings.Capture.DelaySeconds, settings.General.RecognizeScreenshotText, settings.General.DescribeScreenshots)
+                    settings.Capture.DelaySeconds, settings.General.RecognizeScreenshotText, settings.General.DescribeScreenshots,
+                    settings.Agents.AllowedApps, AgentAccessPolicy.AllowsRegion(settings.Agents), AgentAccessPolicy.AllowsMonitor(settings.Agents))
                 : new AgentStatus(false, false, version);
             return new AgentResponse { Success = true, Status = status };
         }
         if (!settings.Agents.Enabled)
             return AgentResponse.Failure("access_disabled", "Enable Hotshot Settings > Coding agents > Agent access before using capture tools.");
+        if (request.Operation == "activity")
+            return new AgentResponse { Success = true, Activity = _activity.Reverse().Skip(request.Offset).Take(request.Limit).ToArray() };
         if (isUnavailable() || capture.IsBusy) return AgentResponse.Failure("app_busy", "Hotshot is exiting, recording, or processing another capture. Retry when idle.");
         if (request.Operation == "windows")
-            return new AgentResponse { Success = true, Windows = Windows().Take(request.Limit).Select(ToAgentWindow).ToArray() };
+            return new AgentResponse { Success = true, Windows = Windows().Where(window => AgentAccessPolicy.AllowsApp(settings.Agents,
+                WindowEnumerator.GetProcessName(window.ProcessId))).Skip(request.Offset).Take(request.Limit).Select(ToAgentWindow).ToArray() };
         if (request.Operation == "monitors")
             return new AgentResponse
             {
                 Success = true, Monitors = Monitors.GetAll().Select(monitor =>
                     new AgentMonitor(monitor.Index, monitor.DeviceName, Rect(monitor.Bounds), monitor.Scale, monitor.IsPrimary)).Take(request.Limit).ToArray(),
             };
-        if (request.Operation is "search_history" or "get_capture")
+        if (request.Operation is "search_history" or "get_capture" or "get_capture_region" or "compare_captures" or "read_capture_text")
         {
             if (!settings.Agents.AllowHistoryAccess)
                 return AgentResponse.Failure("history_disabled", "Enable Coding agents > Allow history access to expose previous capture files and descriptions.");
             if (request.Operation == "search_history")
-                return new AgentResponse { Success = true, Captures = app.History.Items.Where(item => item.MatchesSearch(request.Query)).Take(request.Limit).Select(Metadata).ToArray() };
+                return new AgentResponse { Success = true, Captures = app.History.Search(request.Query, int.MaxValue)
+                    .Where(item => AgentAccessPolicy.AllowsApp(settings.Agents, item.AppName)).Skip(request.Offset).Take(request.Limit).Select(Metadata).ToArray() };
             var item = app.History.Items.FirstOrDefault(item => item.Id == request.CaptureId);
             if (item is null) return AgentResponse.Failure("not_found", "The capture ID is no longer in Hotshot history.");
+            if (!AgentAccessPolicy.AllowsApp(settings.Agents, item.AppName))
+                return AgentResponse.Failure("target_restricted", "The capture's application is outside the allowed-app list.");
+            if (request.Operation is "compare_captures" or "read_capture_text")
+            {
+                if (item.IsVideo) throw new ArgumentException("This tool requires screenshots.");
+                var after = await ReadImageAsync(item, token);
+                AgentResponse analysisResult;
+                string? beforeApp = null;
+                if (request.Operation == "read_capture_text")
+                    analysisResult = new AgentResponse { Success = true, Text = await Task.Run(() => TextRecognition.RecognizeWithBoundsAsync(after, token), token) };
+                else
+                {
+                    var beforeItem = app.History.Items.FirstOrDefault(capture => capture.Id == request.BeforeId)
+                        ?? throw new ArgumentException("The before capture ID is not in history.");
+                    if (beforeItem.IsVideo || !AgentAccessPolicy.AllowsApp(settings.Agents, beforeItem.AppName))
+                        throw new ArgumentException("The before capture must be an allowed screenshot.");
+                    beforeApp = beforeItem.AppName;
+                    var before = await ReadImageAsync(beforeItem, token);
+                    var diff = await Task.Run(() => ImageComparison.Compare(before, after, request.Tolerance), token);
+                    var preview = diff.Difference.Downscale(request.MaxImageSize);
+                    var png = await Task.Run(() => ImageCodec.EncodePngAsync(preview), token);
+                    analysisResult = new AgentResponse { Success = true, Comparison = new AgentComparison(beforeItem.Id, item.Id,
+                        diff.ChangedPixels, diff.ChangedPercent, diff.ChangedBounds is { } rect ? Rect(rect) : null, request.Tolerance),
+                        Capture = new AgentCapture("difference", "", "Difference", after.Width, after.Height, DateTimeOffset.Now,
+                            null, null, null, Convert.ToBase64String(png), preview.Width, preview.Height) };
+                }
+                token.ThrowIfCancellationRequested();
+                if (!app.Settings.Agents.Enabled || !app.Settings.Agents.AllowHistoryAccess ||
+                    !AgentAccessPolicy.AllowsApp(app.Settings.Agents, item.AppName) ||
+                    request.Operation == "compare_captures" && !AgentAccessPolicy.AllowsApp(app.Settings.Agents, beforeApp))
+                    return AgentResponse.Failure("access_disabled", "Access changed during processing.");
+                return analysisResult;
+            }
             var result = await ResultAsync(item, request, token);
             token.ThrowIfCancellationRequested();
-            if (!app.Settings.Agents.Enabled || !app.Settings.Agents.AllowHistoryAccess)
+            if (!app.Settings.Agents.Enabled || !app.Settings.Agents.AllowHistoryAccess || !AgentAccessPolicy.AllowsApp(app.Settings.Agents, item.AppName))
                 return AgentResponse.Failure("access_disabled", "Agent or history access was disabled during the request.");
             return new AgentResponse { Success = true, Capture = result };
         }
@@ -165,12 +230,15 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
         {
             var window = Windows().FirstOrDefault(window => WindowId(window.Handle) == request.WindowId)
                 ?? throw new ArgumentException("The window ID is not visible or no longer exists. List windows again.");
+            if (!AgentAccessPolicy.AllowsApp(settings.Agents, WindowEnumerator.GetProcessName(window.ProcessId)))
+                return AgentResponse.Failure("target_restricted", "This application is not allowed.");
             bounds = window.Bounds.Intersect(Monitors.VirtualScreen);
             kind = CaptureKind.Window;
             source = CaptureSource.Now(WindowEnumerator.GetProcessName(window.ProcessId), window.Title);
         }
         else if (request.Operation == "capture_monitor")
         {
+            if (!AgentAccessPolicy.AllowsMonitor(settings.Agents)) return AgentResponse.Failure("target_restricted", "Monitor capture is disabled or an app restriction is active.");
             var monitor = Monitors.GetAll().FirstOrDefault(monitor => monitor.Index == request.MonitorIndex)
                 ?? throw new ArgumentException("Monitor index does not exist.");
             bounds = monitor.Bounds;
@@ -179,6 +247,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
         }
         else
         {
+            if (!AgentAccessPolicy.AllowsRegion(settings.Agents)) return AgentResponse.Failure("target_restricted", "Region capture is disabled or an app restriction is active.");
             var region = request.Region!;
             bounds = new PixelRect(region.X, region.Y, region.Width, region.Height);
             if (bounds.Intersect(Monitors.VirtualScreen) != bounds) throw new ArgumentException("The region must lie completely inside the virtual screen.");
@@ -197,10 +266,11 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                 EnsureDesktopAccessible();
                 if (request.Operation == "capture_window")
                     return Windows().Any(window => WindowId(window.Handle) == request.WindowId &&
-                        window.Bounds.Intersect(Monitors.VirtualScreen) == bounds);
+                        window.Bounds.Intersect(Monitors.VirtualScreen) == bounds &&
+                        AgentAccessPolicy.AllowsApp(app.Settings.Agents, WindowEnumerator.GetProcessName(window.ProcessId)));
                 if (request.Operation == "capture_monitor")
-                    return Monitors.GetAll().Any(monitor => monitor.Index == request.MonitorIndex && monitor.Bounds == bounds);
-                return bounds.Intersect(Monitors.VirtualScreen) == bounds;
+                    return AgentAccessPolicy.AllowsMonitor(app.Settings.Agents) && Monitors.GetAll().Any(monitor => monitor.Index == request.MonitorIndex && monitor.Bounds == bounds);
+                return AgentAccessPolicy.AllowsRegion(app.Settings.Agents) && bounds.Intersect(Monitors.VirtualScreen) == bounds;
             }, token);
             var preview = await Task.Run(async () =>
             {
@@ -209,7 +279,10 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                 return Metadata(item) with { ImageBase64 = Convert.ToBase64String(png), ImageWidth = scaled.Width, ImageHeight = scaled.Height };
             }, token);
             token.ThrowIfCancellationRequested();
-            if (!app.Settings.Agents.Enabled) return AgentResponse.Failure("access_disabled", "Agent access was disabled during capture.");
+            if (!app.Settings.Agents.Enabled || request.Operation == "capture_window" && !AgentAccessPolicy.AllowsApp(app.Settings.Agents, source.AppName) ||
+                request.Operation == "capture_monitor" && !AgentAccessPolicy.AllowsMonitor(app.Settings.Agents) ||
+                request.Operation == "capture_region" && !AgentAccessPolicy.AllowsRegion(app.Settings.Agents))
+                return AgentResponse.Failure("access_disabled", "Agent access changed during capture.");
             return new AgentResponse { Success = true, Capture = preview, Warnings = warnings.Length > 0 ? warnings : null };
         }
         finally { RefreshStatus(); }
@@ -223,15 +296,32 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
         {
             token.ThrowIfCancellationRequested();
             if (new FileInfo(item.Path).Length > 64 * 1024 * 1024) throw new IOException("Capture exceeds the agent image-read limit.");
-            var image = await ImageCodec.LoadAsync(item.Path, request.MaxImageSize);
+            var image = request.Operation == "get_capture_region" ? await ReadImageAsync(item, token) : await ImageCodec.LoadAsync(item.Path, request.MaxImageSize);
+            AgentRect? imageRegion = null;
+            if (request.Operation == "get_capture_region")
+            {
+                imageRegion = request.Region!;
+                image = image.Crop(new PixelRect(imageRegion.X, imageRegion.Y, imageRegion.Width, imageRegion.Height)).Downscale(request.MaxImageSize);
+            }
             var png = await ImageCodec.EncodePngAsync(image);
-            return result with { ImageBase64 = Convert.ToBase64String(png), ImageWidth = image.Width, ImageHeight = image.Height };
+            return result with { ImageBase64 = Convert.ToBase64String(png), ImageWidth = image.Width, ImageHeight = image.Height, ImageRegion = imageRegion };
         }, token);
     }
 
     private static AgentCapture Metadata(HistoryItem item) =>
         new(item.Id, item.Path, item.Kind.ToString(), item.Width, item.Height, item.CreatedAt, item.Summary, item.Description, item.RecognizedText);
-    private static IReadOnlyList<WindowInfo> Windows() => WindowEnumerator.GetVisibleWindows((uint)Environment.ProcessId);
+    private IReadOnlyList<WindowInfo> Windows() => WindowEnumerator.GetVisibleWindows((uint)Environment.ProcessId, settingsWindow?.Invoke() ?? 0);
+    private static async Task<CapturedImage> ReadImageAsync(HistoryItem item, CancellationToken token)
+    {
+        return await Task.Run(async () =>
+        {
+            token.ThrowIfCancellationRequested();
+            if (new FileInfo(item.Path).Length > 64 * 1024 * 1024) throw new IOException("Image exceeds 64 MB.");
+            var size = await ImageCodec.GetSizeAsync(item.Path);
+            if ((long)size.Width * size.Height > 64_000_000) throw new IOException("Image exceeds 64 megapixels.");
+            return await ImageCodec.LoadAsync(item.Path);
+        }, token);
+    }
     private static string WindowId(nint handle) => ((long)handle).ToString("X", CultureInfo.InvariantCulture);
     private static AgentRect Rect(PixelRect rect) => new(rect.X, rect.Y, rect.Width, rect.Height);
     private static AgentWindow ToAgentWindow(WindowInfo window) => new(WindowId(window.Handle), window.Title,

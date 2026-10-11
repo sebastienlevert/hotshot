@@ -40,6 +40,7 @@ internal sealed partial class AppController : IDisposable
             () => new CopilotDescriptionProvider(Path.Combine(_app.Paths.DataDirectory, "copilot-work")),
             _app.Settings.General.DescribeScreenshots);
         _app.Descriptions = _descriptions;
+        _descriptions.ApplyPolicy(_app.Settings.General);
         _textIndex = new LocalTextIndex(_app);
         _app.TextIndex = _textIndex;
         _textIndex.Failed += message => Notify("Local text recognition", message, isError: true);
@@ -50,10 +51,12 @@ internal sealed partial class AppController : IDisposable
         });
         _pipeline = new OutputPipeline(_app);
         _app.Output = _pipeline;
-        _capture = new CaptureCoordinator(_app, _pipeline);
+        _capture = new CaptureCoordinator(_app, _pipeline,
+            () => _settingsWindow is { } settings ? WinRT.Interop.WindowNative.GetWindowHandle(settings) : 0);
         _actions = new CaptureActions(_app);
         _agentServer = new AgentCaptureServer(_app, _capture,
-            () => _exiting || IsRecording || _startTask is not null || _stopTask is not null);
+            () => _exiting || IsRecording || _startTask is not null || _stopTask is not null,
+            () => _settingsWindow is { } settings ? WinRT.Interop.WindowNative.GetWindowHandle(settings) : 0);
         _app.AgentServer = _agentServer;
 
         _hotkeys.Pressed += action => _app.Post(() => OnHotkey(action));
@@ -69,7 +72,7 @@ internal sealed partial class AppController : IDisposable
         _pipeline.Failed += message => Notify("Hotshot", message, isError: true);
         _app.Failed += message => Notify("Hotshot", message, isError: true);
         _capture.Failed += message => Notify("Hotshot", message, isError: true);
-        _actions.Failed += message => Notify("Hotshot", message, isError: true);
+        _actions.Failed += message => _app.Post(() => Notify("Hotshot", message, isError: true));
         _app.SettingsChanged += OnSettingsChanged;
 
         InitializeViews();
@@ -117,6 +120,10 @@ internal sealed partial class AppController : IDisposable
         ReportHotkeyConflicts();
         _updates.Start();
         _agentServer.Start();
+        Program.MarkReady();
+        Log.Info($"Resident ready in {Program.StartupMilliseconds} ms.");
+        if (File.Exists(RecordingJournal))
+            Notify("Recording recovery", "An interrupted recording needs review. Use Recording tools in the workspace to recover a playable file or dismiss its notice.", isError: true);
         foreach (var item in _app.History.Items.Where(item => item.DescriptionPending && !item.IsVideo))
         {
             if (_app.Settings.General.DescribeScreenshots) _ = _descriptions.EnqueueAsync(item);
@@ -133,6 +140,7 @@ internal sealed partial class AppController : IDisposable
             case AppCommand.Region: _ = _capture.CaptureRegionAsync(); break;
             case AppCommand.Monitor: _ = _capture.CaptureMonitorAsync(); break;
             case AppCommand.AllMonitors: _ = _capture.CaptureAllMonitorsAsync(); break;
+            case AppCommand.Scrolling: _ = _capture.CaptureScrollingAsync(); break;
             case AppCommand.Record: _ = ToggleRecordingAsync(asGif: false); break;
             case AppCommand.RecordGif: _ = ToggleRecordingAsync(asGif: true); break;
             case AppCommand.Settings: ShowSettings(); break;
@@ -158,6 +166,7 @@ internal sealed partial class AppController : IDisposable
         try
         {
             await _agentServer.StopAsync();
+            await _capture.ShutdownAsync();
             await ShutdownRecordingAsync();
             await _descriptions.DisposeAsync();
             await _textIndex.DisposeAsync();
@@ -230,6 +239,7 @@ internal sealed partial class AppController : IDisposable
             new($"Capture region\t{DisplayHotkey(HotkeyAction.RegionScreenshot)}", () => Delayed(_capture.CaptureRegionAsync)),
             new($"Capture monitor\t{DisplayHotkey(HotkeyAction.MonitorScreenshot)}", () => Delayed(_capture.CaptureMonitorAsync)),
             new($"Capture all monitors\t{DisplayHotkey(HotkeyAction.AllMonitorsScreenshot)}", () => Delayed(_capture.CaptureAllMonitorsAsync)),
+            new("Scrolling capture", () => Delayed(_capture.CaptureScrollingAsync)),
             new($"Repeat last region\t{DisplayHotkey(HotkeyAction.RepeatLastRegion)}", () => Delayed(_capture.RepeatLastRegionAsync)),
             TrayMenuItem.Separator,
             recording
@@ -278,6 +288,7 @@ internal sealed partial class AppController : IDisposable
         SyncStartupRegistration();
         ApplyViewTheme();
         _descriptions.SetEnabled(_app.Settings.General.DescribeScreenshots);
+        _descriptions.ApplyPolicy(_app.Settings.General);
         _agentServer.RefreshStatus();
     }
 

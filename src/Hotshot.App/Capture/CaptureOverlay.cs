@@ -10,7 +10,8 @@ internal enum OverlayMode
     Recording,
 }
 
-internal sealed record OverlayOptions(OverlayMode Mode, bool SnapToWindows, bool ShowMagnifier, bool ShowCrosshair);
+internal sealed record OverlayOptions(OverlayMode Mode, bool SnapToWindows, bool ShowMagnifier, bool ShowCrosshair,
+    nint CapturableWindow = 0);
 
 internal abstract record OverlaySelection(PixelRect Rect);
 
@@ -53,13 +54,15 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
     private int _anchorY;
     private WindowInfo? _hoverWindow;
     private Frame _frame;
+    private CancellationTokenRegistration _cancellation;
 
     private CaptureOverlay(ScreenSnapshot snapshot, OverlayOptions options)
     {
         _snapshot = snapshot;
         _options = options;
         _monitors = Monitors.GetAll();
-        _windows = options.SnapToWindows ? WindowEnumerator.GetVisibleWindows((uint)Environment.ProcessId) : [];
+        _windows = options.SnapToWindows
+            ? WindowEnumerator.GetVisibleWindows((uint)Environment.ProcessId, options.CapturableWindow) : [];
         _dim = snapshot.Bitmap.CreateDimmedCopy(118);
         _back = new GdiBitmap(snapshot.Bounds.Width, snapshot.Bounds.Height);
         _accentBrush = Win32.CreateSolidBrush(Accent);
@@ -76,10 +79,11 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
             "Hotshot capture", Win32.IDC_CROSS);
     }
 
-    public static Task<OverlaySelection?> SelectAsync(ScreenSnapshot snapshot, OverlayOptions options)
+    public static Task<OverlaySelection?> SelectAsync(ScreenSnapshot snapshot, OverlayOptions options, CancellationToken token = default)
     {
         var overlay = new CaptureOverlay(snapshot, options);
         overlay.Show();
+        overlay._cancellation = token.Register(() => Win32.PostMessage(overlay.Handle, Win32.WM_CLOSE, 0, 0));
         return overlay._result.Task;
     }
 
@@ -111,6 +115,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
     protected override void OnDestroyed()
     {
         _result.TrySetResult(null);
+        _cancellation.Dispose();
         _dim.Dispose();
         _back.Dispose();
         Native.DeleteObject(_accentBrush);
@@ -254,6 +259,17 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
     {
         switch (vk)
         {
+            case 'R' when !_dragging:
+                _anchorX = _cx;
+                _anchorY = _cy;
+                _dragging = true;
+                Refresh(Math.Clamp(_cx + 100, 0, Origin.Width - 1), Math.Clamp(_cy + 60, 0, Origin.Height - 1));
+                break;
+            case Win32.VK_RETURN when _dragging:
+                var selected = DragRect();
+                if (selected.Width >= 4 && selected.Height >= 4)
+                    Complete(new RegionSelection(selected.Offset(Origin.X, Origin.Y)));
+                break;
             case Win32.VK_ESCAPE:
                 Complete(null);
                 break;
@@ -268,8 +284,12 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
                 var step = Win32.IsKeyDown(Win32.VK_SHIFT) ? 10 : 1;
                 var dx = vk == Win32.VK_LEFT ? -step : vk == Win32.VK_RIGHT ? step : 0;
                 var dy = vk == Win32.VK_UP ? -step : vk == Win32.VK_DOWN ? step : 0;
-                Native.GetCursorPos(out var pt);
-                Win32.SetCursorPos(pt.X + dx, pt.Y + dy);
+                if (_dragging) Refresh(Math.Clamp(_cx + dx, 0, Origin.Width - 1), Math.Clamp(_cy + dy, 0, Origin.Height - 1));
+                else
+                {
+                    Native.GetCursorPos(out var pt);
+                    Win32.SetCursorPos(pt.X + dx, pt.Y + dy);
+                }
                 break;
         }
     }
@@ -417,8 +437,8 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         if (!_mouseDown)
         {
             hintText = _options.Mode == OverlayMode.Recording
-                ? "Record: drag a region  ·  click a window  ·  Space = full screen  ·  Esc = cancel"
-                : "Drag a region  ·  click a window  ·  Space = full screen  ·  Esc = cancel";
+                ? "Record: drag or R + arrows + Enter  ·  click a window  ·  Space = screen  ·  Esc = cancel"
+                : "Drag or R + arrows + Enter  ·  click a window  ·  Space = screen  ·  Esc = cancel";
             var hintSize = MeasureText(hintText, scale, out _);
             var hw = hintSize.Width + pad * 3;
             var hh = hintSize.Height + (int)(12 * scale);

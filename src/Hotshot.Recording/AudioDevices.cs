@@ -5,7 +5,7 @@ namespace Hotshot.Recording;
 public static class AudioDevices
 {
     /// <summary>Lists active capture endpoints. Returns an empty list when the audio stack is unavailable.</summary>
-    public static IReadOnlyList<AudioDeviceInfo> GetMicrophones()
+    public static IReadOnlyList<AudioDeviceInfo> GetMicrophones(Action<string>? failure = null)
     {
         var result = new List<AudioDeviceInfo>();
         try
@@ -29,9 +29,10 @@ public static class AudioDevices
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // No audio service / no endpoints: report none.
+            if (failure is null) throw new InvalidOperationException("Microphone enumeration failed.", ex);
+            failure("Microphone enumeration failed: " + ex.Message);
         }
 
         return result;

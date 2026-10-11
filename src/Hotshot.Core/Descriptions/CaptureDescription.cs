@@ -28,5 +28,6 @@ public sealed record CaptureDescription(string Summary, string Description)
 
 public interface ICaptureDescriptionProvider : IAsyncDisposable
 {
+    string Status => "Provider status unavailable";
     Task<CaptureDescription> DescribeAsync(byte[] png, CancellationToken cancellationToken);
 }

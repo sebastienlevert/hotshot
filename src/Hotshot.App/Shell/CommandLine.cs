@@ -12,6 +12,7 @@ internal enum AppCommand
     Settings,
     History,
     Exit,
+    Scrolling,
 }
 
 internal sealed record CommandLine(bool Background, AppCommand Command)
@@ -35,6 +36,7 @@ internal sealed record CommandLine(bool Background, AppCommand Command)
                 case "settings": command = AppCommand.Settings; break;
                 case "history": command = AppCommand.History; break;
                 case "exit" or "quit": command = AppCommand.Exit; break;
+                case "scrolling": command = AppCommand.Scrolling; break;
             }
         }
 

@@ -8,7 +8,7 @@ namespace Hotshot.Views;
 
 internal static class WindowTools
 {
-    public static void Configure(Window window, int width, int height, bool compact = false)
+    public static void Configure(Window window, int width, int height, bool compact = false, bool excludeFromCapture = true)
     {
         var monitor = Monitors.FromCursor();
         var w = Math.Min((int)(width * monitor.Scale), monitor.WorkArea.Width);
@@ -27,9 +27,9 @@ internal static class WindowTools
         }
 
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-        if (!Win32.SetWindowDisplayAffinity(hwnd, Win32.WDA_EXCLUDEFROMCAPTURE))
+        if (!Win32.SetWindowDisplayAffinity(hwnd, excludeFromCapture ? Win32.WDA_EXCLUDEFROMCAPTURE : Win32.WDA_NONE))
         {
-            Log.Warn("Could not exclude a Hotshot window from captures.");
+            Log.Warn("Could not set a Hotshot window's capture visibility.");
         }
     }
 

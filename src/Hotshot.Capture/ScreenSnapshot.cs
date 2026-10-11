@@ -149,6 +149,8 @@ public sealed class ScreenSnapshot : IDisposable
     public static ScreenSnapshot Take(PixelRect? area = null, bool includeCursor = false)
     {
         var bounds = area ?? Monitors.VirtualScreen;
+        if (bounds.IsEmpty || (long)bounds.Width * bounds.Height > 64_000_000)
+            throw new ArgumentException("Capture bounds must be non-empty and at most 64 megapixels.");
         var bitmap = new GdiBitmap(bounds.Width, bounds.Height);
         var screen = Native.GetDC(0);
         try

@@ -12,6 +12,10 @@ internal sealed class RecordingWindow : Window
     private readonly Button _stop = new() { Content = "Cancel" };
     private readonly DispatcherQueueTimer _timer;
     private ScreenRecorder? _recorder;
+    private readonly ToggleSwitch _microphoneMute = new() { Header = "Mute microphone" };
+    private readonly ToggleSwitch _systemMute = new() { Header = "Mute system audio" };
+    private readonly ProgressBar _microphoneMeter = new() { Minimum = 0, Maximum = 1 };
+    private readonly ProgressBar _systemMeter = new() { Minimum = 0, Maximum = 1 };
 
     public RecordingWindow(AppServices app, Func<Task> stop)
     {
@@ -39,6 +43,14 @@ internal sealed class RecordingWindow : Window
         buttons.Children.Add(_pause);
         buttons.Children.Add(_stop);
         panel.Children.Add(buttons);
+        panel.Children.Add(_microphoneMute);
+        panel.Children.Add(_microphoneMeter);
+        panel.Children.Add(_systemMute);
+        panel.Children.Add(_systemMeter);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_microphoneMeter, "Microphone audio level");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_systemMeter, "System audio level");
+        _microphoneMute.Toggled += (_, _) => { if (_recorder is { } recorder) recorder.MicrophoneMuted = _microphoneMute.IsOn; };
+        _systemMute.Toggled += (_, _) => { if (_recorder is { } recorder) recorder.SystemAudioMuted = _systemMute.IsOn; };
         Content = panel;
         UiStyles.ApplyTheme(this, app.Settings.General.Theme);
         _timer = app.Dispatcher.CreateTimer();
@@ -49,7 +61,7 @@ internal sealed class RecordingWindow : Window
             _timer.Stop();
             await stop();
         };
-        WindowTools.Configure(this, 430, 210, compact: true);
+        WindowTools.Configure(this, 430, 430, compact: true);
         WindowTools.PlaceNearTray(this);
     }
 
@@ -58,6 +70,8 @@ internal sealed class RecordingWindow : Window
     public void SetRecorder(ScreenRecorder recorder)
     {
         _recorder = recorder;
+        _microphoneMute.IsEnabled = recorder.HasMicrophone;
+        _systemMute.IsEnabled = recorder.HasSystemAudio;
         _pause.IsEnabled = true;
         _stop.Content = "Stop and save";
         _timer.Start();
@@ -69,6 +83,8 @@ internal sealed class RecordingWindow : Window
         if (_recorder is { } recorder)
         {
             _status.Text = $"{(recorder.IsPaused ? "Paused" : "Recording")} {recorder.Elapsed:hh\\:mm\\:ss} - {recorder.Width} x {recorder.Height}";
+            _microphoneMeter.Value = recorder.IsPaused ? 0 : recorder.MicrophonePeak;
+            _systemMeter.Value = recorder.IsPaused ? 0 : recorder.SystemAudioPeak;
         }
     }
 }

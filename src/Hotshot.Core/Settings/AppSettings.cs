@@ -16,6 +16,7 @@ public sealed class AppSettings
     public RecordingSettings Recording { get; set; } = new();
     public GifSettings Gif { get; set; } = new();
     public AgentSettings Agents { get; set; } = new();
+    public LibrarySettings Library { get; set; } = new();
 
     /// <summary>Clamps values to supported ranges and fills missing sections after deserialization.</summary>
     public AppSettings Normalize()
@@ -27,6 +28,10 @@ public sealed class AppSettings
         Recording ??= new();
         Gif ??= new();
         Agents ??= new();
+        Library ??= new();
+        Library.SavedSearches ??= [];
+        General.AiExcludedApps ??= [];
+        Agents.AllowedApps ??= [];
 
         if (string.IsNullOrWhiteSpace(General.SaveFolder))
         {
@@ -54,6 +59,15 @@ public sealed class AppSettings
     public IReadOnlyList<string> Validate()
     {
         var errors = new List<string>();
+        if (General.AiExcludedApps.Length > 50 || General.AiExcludedApps.Any(name =>
+            name is null || name.Length > 100 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+            errors.Add("AI exclusions must be up to 50 process names, without paths or invalid filename characters.");
+        if (Agents.AllowedApps.Length > 50 || Agents.AllowedApps.Any(name =>
+            name is null || name.Length > 100 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+            errors.Add("Agent target restrictions must be up to 50 process names, without paths.");
+        if (Library.SavedSearches.Count > 100 || Library.SavedSearches.Any(search =>
+            search is null || search.Name is null || search.Query is null || search.Name.Length > 80 || search.Query.Length > 500))
+            errors.Add("Use up to 100 saved searches with names up to 80 and queries up to 500 characters.");
         try
         {
             if (string.IsNullOrWhiteSpace(General.SaveFolder) || !Path.IsPathFullyQualified(General.SaveFolder))
@@ -128,12 +142,25 @@ public sealed class GeneralSettings
     public bool FirstRunCompleted { get; set; }
     public bool DescribeScreenshots { get; set; }
     public bool RecognizeScreenshotText { get; set; }
+    public bool ReviewBeforeAiUpload { get; set; }
+    public string[] AiExcludedApps { get; set; } = [];
 }
+
+public sealed class LibrarySettings
+{
+    public bool KeepSavedCaptures { get; set; } = true;
+    public List<SavedCaptureSearch> SavedSearches { get; set; } = [];
+}
+
+public sealed record SavedCaptureSearch(string Name, string Query);
 
 public sealed class AgentSettings
 {
     public bool Enabled { get; set; }
     public bool AllowHistoryAccess { get; set; }
+    public string[] AllowedApps { get; set; } = [];
+    public bool AllowMonitorCapture { get; set; } = true;
+    public bool AllowRegionCapture { get; set; } = true;
 }
 
 public enum AppTheme

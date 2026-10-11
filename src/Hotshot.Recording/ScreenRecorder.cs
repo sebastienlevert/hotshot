@@ -87,6 +87,10 @@ public sealed class ScreenRecorder : IAsyncDisposable
     public VideoEncoderPath EncoderPath { get; private set; }
 
     public bool HasAudio => _writer?.HasAudio ?? false;
+    public bool HasMicrophone => _microphone is not null;
+    public bool HasSystemAudio => _systemAudio is not null;
+    public float MicrophonePeak => _microphone?.Peak ?? 0;
+    public float SystemAudioPeak => _systemAudio?.Peak ?? 0;
 
     /// <summary>Frames skipped because the encoder could not keep up (the previous frame is shown longer instead).</summary>
     public long FramesDropped => Interlocked.Read(ref _framesDropped);
