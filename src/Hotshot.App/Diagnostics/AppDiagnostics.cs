@@ -20,6 +20,7 @@ internal static class AppDiagnostics
             $"Missing saved files: {items.Count(item => !File.Exists(item.Path))}\nHistory error: {app.History.LastError ?? "None"}\n" +
             $"AI queue: {app.Descriptions?.PendingCount ?? 0}; {app.Descriptions?.ProviderStatus}\n" +
             $"Agent service: {app.AgentServer?.Status}\nUpdates: {app.Updates?.Status}\n" +
+            $"Settings roaming: {app.SettingsSyncStatus}\nShared settings: {app.SharedSettingsFile ?? "None"}\n" +
             $"Interrupted recording journal: {(File.Exists(Path.Combine(app.Paths.DataDirectory, "pending-recording.json")) ? "Present - use Recover interrupted recording in the workspace" : "None")}\n" +
             "Packages are unsigned. No signing is configured. Diagnostics stay local.";
     }

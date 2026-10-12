@@ -60,7 +60,7 @@ The ShareX-inspired workbench keeps the WinUI experience and silent captures:
 
 ### Consolidated local workflows
 
-- **Export presets, not sharing:** export remembers its last format, width, padding, radius, shadow and background. Save/reuse/delete up to 50 named presets. No sharing, uploader, Markdown-copy or cloud-sync feature is added.
+- **Export presets, not sharing:** export remembers its last format, width, padding, radius, shadow and background. Save/reuse/delete up to 50 named presets. No capture-sharing, uploader or Markdown-copy feature is added; only portable settings roam through OneDrive.
 - **Storage and privacy:** Library actions shows measured capture/thumbnail/original/index sizes. Preview orphan cleanup or explicitly include all private originals/sidecars, then confirm permanent deletion in a second dialog. Saved capture files are not cleaned up automatically. Removing originals discards editable history; the current flattened capture remains. File-size changes and symbolic-link targets are rejected during cleanup.
 - **Local backup/restore:** ZIP backups contain existing captures and metadata; private originals are separately opt-in. Restores are previewed and imported into a new capture subfolder without replacing existing files/IDs or scheduling cloud analysis. Paths and archive sizes/counts are validated. Relink missing capture selects an existing matching-format file; screenshot dimensions must match.
 - **Scalable history:** `history.json` is a compatible checkpoint with a previous-valid backup. Small changes append durable transactions to `history.json.journal`; checkpoints compact every 256 transactions/8 MB and at clean exit. An incomplete final transaction is preserved for inspection and recovered; invalid completed transactions pause writes. The workspace renders bounded pages rather than rebuilding all capture rows.
@@ -103,6 +103,18 @@ The default captures folder is `Pictures\Hotshot`; change it using the native fo
 Supported tokens include date/time (`{yyyy}`, `{MM}`, `{dd}`, `{HH}`, `{mm}`, `{ss}`, `{fff}`, `{timestamp}`, `{date}`, `{time}`, `{unix}`, `{now:yyyyMMdd}`), context (`{type}`, `{app}`, `{title}`, `{monitor}`, `{width}`, `{height}`), and identifiers (`{counter:4}`, `{rand:8}`, `{guid}`, `{computer}`, `{user}`). Separators create folders, extensions are automatic, invalid filename characters are sanitized, and collisions receive numeric suffixes.
 
 Settings, history, thumbnails and logs are stored under `%AppData%\Hotshot`. History trimming does not delete saved captures. With file saving disabled, captures are held in temporary files for clipboard/history and removed when their history entries are trimmed.
+
+## OneDrive settings across machines
+
+When a local OneDrive folder is available, Hotshot automatically stores portable preferences in **`<OneDrive>\Apps\Hotshot\settings.json`**. Sign into the same OneDrive account on your other Windows machines and install a current Hotshot release; the shared file is loaded there. You can also choose the local root of a shared OneDrive folder under **General > Settings across devices**. Hotshot does not share the folder with other people or change OneDrive permissions.
+
+Theme, hotkeys, filename patterns, capture/recording options, local-OCR preferences, export presets and saved searches roam. Absolute capture/runtime paths, window positions/splitter width, microphone device IDs, filename counters, first-run state, project baseline IDs, cloud-AI enable/review choices and all coding-agent permissions stay device-local. Enabling agent or cloud-image access on one machine never grants it on another. Captures, history, originals, logs and credentials are not synchronized by this feature.
+
+The existing `%AppData%\Hotshot\settings.json` remains a full local cache/device-override file. `settings-sync.json` in that same directory records this machine's selected location and last shared baseline. Without OneDrive or while its files cannot be read, the local cache stays active and edits are queued for a later retry. Hotshot never creates a fake OneDrive root or overwrites an invalid/unavailable shared document with defaults. The OneDrive desktop client—not Hotshot—uploads/downloads the file; folder availability is not a guarantee that cloud transfer has completed.
+
+Valid incoming changes reload every few seconds when Hotshot is idle and Settings is not actively being edited. **Reload shared preferences** applies them explicitly after pending edits are resolved. Independent field edits are merged; conflicting same-field edits are preserved locally and require an explicit resolution. The shared file keeps a backup, and invalid documents are preserved separately before explicit replacement. OneDrive may create extra conflict-copy JSON files after simultaneous offline edits: review/move those copies before resolving, or use OneDrive version history. This is not a distributed locking service.
+
+**Use local preferences only** stops settings roaming on this device without deleting the OneDrive file. **Choose another OneDrive folder** selects the root whose `Apps\Hotshot\settings.json` should be used. The native page shows the exact shared-file path, local cache and current status.
 
 ## Build and package
 

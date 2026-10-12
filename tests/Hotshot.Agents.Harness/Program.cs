@@ -7,6 +7,7 @@ using Hotshot.CaptureFlow;
 using Hotshot.Core;
 using Hotshot.Core.Agents;
 using Hotshot.Core.History;
+using Hotshot.Core.Settings;
 using Microsoft.UI.Dispatching;
 using Hotshot.Recording.Harness;
 
@@ -58,11 +59,15 @@ internal static class Harness
         Log.FilePath = Path.Combine(directory, "harness.log");
         var name = "Hotshot.Agent.Test." + Guid.NewGuid().ToString("N");
         AgentCaptureServer? server = null;
+        AppServices? services = null;
         Process? target = null;
         var artifacts = new List<string>();
         try
         {
-            var app = new AppServices(new AppPaths(directory), DispatcherQueue.GetForCurrentThread());
+            var cloud = Path.Combine(directory, "OneDrive");
+            Directory.CreateDirectory(cloud);
+            var app = new AppServices(new AppPaths(directory), DispatcherQueue.GetForCurrentThread(), cloud);
+            services = app;
             app.Settings.General.SaveFolder = Path.Combine(directory, "captures");
             app.Settings.General.CopyToClipboard = false;
             app.Settings.General.DescribeScreenshots = false;
@@ -76,6 +81,41 @@ internal static class Harness
             var status = await Send(new AgentRequest { Operation = "status" });
             Check(status.Success && status.Status?.Enabled == false && status.Status.SaveFolder is null, "Disabled status disclosed private settings.");
             Check((await Send(new AgentRequest { Operation = "windows" })).ErrorCode == "access_disabled", "Disabled window access was allowed.");
+            Check(await app.SaveAsync(), "Initial shared preferences could not be saved.");
+            var other = new RoamingSettingsStore(Path.Combine(directory, "other-machine", "settings.json"), () => cloud);
+            var remote = other.Load();
+            remote.General.Theme = AppTheme.Dark;
+            remote.Agents.Enabled = true;
+            other.Save(remote);
+            app.CanReloadSharedSettings = () => false;
+            await app.ReloadSharedSettingsAsync();
+            Check(app.Settings.General.Theme != AppTheme.Dark, "Shared settings reloaded while native edits were protected.");
+            app.CanReloadSharedSettings = () => true;
+            await app.ReloadSharedSettingsAsync();
+            Check(app.Settings.General.Theme == AppTheme.Dark && !app.Settings.Agents.Enabled &&
+                app.Settings.General.SaveFolder == Path.Combine(directory, "captures"), "Shared preferences changed device paths or permissions.");
+            remote.General.Theme = AppTheme.Light;
+            other.Save(remote);
+            var checks = 0;
+            app.CanReloadSharedSettings = () => ++checks == 1;
+            await app.ReloadSharedSettingsAsync();
+            Check(app.Settings.General.Theme == AppTheme.Dark, "A late edit-start check did not defer shared changes.");
+            app.Settings.Capture.ShowMagnifier = false;
+            Check(await app.SaveAsync(), "A local change could not merge deferred shared settings.");
+            Check(app.Settings.General.Theme == AppTheme.Light && !app.Settings.Capture.ShowMagnifier,
+                "A local save reverted deferred portable changes or lost local edits.");
+            app.CanReloadSharedSettings = () => true;
+            remote.General.Theme = AppTheme.Dark;
+            other.Save(remote);
+            app.CanChangeSharedSettings = () => false;
+            await app.ReloadSharedSettingsAsync(manual: true);
+            Check(app.Settings.General.Theme == AppTheme.Light, "Manual reload bypassed the active capture/recording guard.");
+            app.CanChangeSharedSettings = () => true;
+            app.CanReloadSharedSettings = () => false;
+            await app.ReloadSharedSettingsAsync(manual: true);
+            Check(app.Settings.General.Theme == AppTheme.Dark, "Explicit reload did not work with Settings in the foreground.");
+            app.CanReloadSharedSettings = () => true;
+            Console.WriteLine("PASS native shared-settings reload defers editing and preserves local capture path/agent permissions.");
             var synthetic = await Send(new AgentRequest { Operation = "test_connection" });
             Check(synthetic.Success && synthetic.Capture?.Id == "synthetic-connection-test", "Generated connection test failed while access was off.");
             app.Settings.Agents.Enabled = true;
@@ -176,6 +216,7 @@ internal static class Harness
         }
         finally
         {
+            services?.StopSettingsSync();
             if (server is not null) { await server.StopAsync(); server.Dispose(); }
             if (target is not null)
             {

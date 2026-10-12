@@ -43,6 +43,7 @@ internal sealed partial class AppController
             if (!await _app.SaveAsync()) return false;
             if (!UpdateActivity().CanRestart) return false;
             _exiting = true;
+            _app.StopSettingsSync();
             Log.Info($"Applying update {release.Version} silently.");
             _updates.ScheduleRestart(release);
             await _agentServer.StopAsync();

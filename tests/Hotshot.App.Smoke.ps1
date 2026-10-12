@@ -23,6 +23,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$env:HOTSHOT_SETTINGS_SYNC_MODE = 'local'
 $Exe = (Resolve-Path -LiteralPath $Exe).Path
 if (Get-Process -Name Hotshot -ErrorAction SilentlyContinue) {
     throw 'Close Hotshot before running the smoke test; existing instances are never interrupted.'
@@ -731,6 +732,13 @@ try {
             Start-Sleep -Milliseconds 100
         }
         Select-SettingsPage $settings 'General'
+        $settingsScroll = Element-ById $settings 'SettingsContentScroll'
+        $settingsScroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 100)
+        Wait-For { Element-ById $settings 'SettingsSyncStatus' } 'native settings-across-devices status' | Out-Null
+        foreach ($label in 'Use OneDrive preferences','Choose another OneDrive folder','Use local preferences only','Reload shared preferences') {
+            Wait-For { Element $settings $label ([System.Windows.Automation.ControlType]::Button) } "settings synchronization control $label" | Out-Null
+        }
+        $settingsScroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 0)
         $copyToggle = Toggle-Control $settings 'Copy captures to clipboard'
         $copyToggle.Toggle()
         Wait-For { -not (Read-AppJson $settingsFile).general.copyToClipboard } 'automatic settings save' | Out-Null

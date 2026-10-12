@@ -58,6 +58,10 @@ internal sealed partial class AppController : IDisposable
             () => _exiting || IsRecording || _startTask is not null || _stopTask is not null,
             () => _settingsWindow is { } settings ? WinRT.Interop.WindowNative.GetWindowHandle(settings) : 0);
         _app.AgentServer = _agentServer;
+        _app.CanChangeSharedSettings = () => !_exiting && !_capture.IsBusy && !IsRecording && _startTask is null && _stopTask is null;
+        _app.CanReloadSharedSettings = () => _app.CanChangeSharedSettings() &&
+            !(_settingsWindow?.HasPendingChanges ?? false) && (_settingsWindow is null ||
+                Hotshot.Interop.Win32.GetForegroundWindow() != WinRT.Interop.WindowNative.GetWindowHandle(_settingsWindow));
         _agentServer.ApprovalHandler = async (request, client, token) =>
         {
             var window = new Hotshot.Views.AgentApprovalWindow(request, client, token);
@@ -169,6 +173,7 @@ internal sealed partial class AppController : IDisposable
         if (_historyWindow is not null && !await _historyWindow.PrepareToCloseAsync()) return;
         if (_settingsWindow is not null) await _settingsWindow.SavePendingAsync();
         _exiting = true;
+        _app.StopSettingsSync();
         Log.Info("Exiting");
         try
         {

@@ -24,7 +24,9 @@ internal sealed partial class SettingsWindow : Window
 {
     private readonly AppServices _app;
     private readonly HotkeyManager _hotkeys;
-    private readonly AppSettings _draft;
+    private AppSettings _draft;
+    private AppSettings _draftBaseline;
+    private TextBlock _syncStatus = UiStyles.Description(string.Empty);
     private readonly NavigationView _navigation = new()
     {
         IsSettingsVisible = false, IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
@@ -68,6 +70,7 @@ internal sealed partial class SettingsWindow : Window
         _app = app;
         _hotkeys = hotkeys;
         _draft = app.Settings.Clone();
+        _draftBaseline = app.Settings.Clone();
         Title = "Hotshot settings";
         SystemBackdrop = new Microsoft.UI.Xaml.Media.MicaBackdrop();
         _saveTimer = app.Dispatcher.CreateTimer();
@@ -169,6 +172,8 @@ internal sealed partial class SettingsWindow : Window
         if (_app.Updates is { } updates) updates.StatusChanged += RefreshUpdateStatus;
         if (_app.AgentServer is { } agents) agents.StatusChanged += RefreshAgentStatus;
         if (_app.Descriptions is { } descriptions) descriptions.Changed += RefreshAiStatus;
+        _app.SettingsSyncStatusChanged += RefreshSyncStatus;
+        _app.SharedSettingsReloaded += ReloadSharedPreferences;
         AppWindow.Closing += async (_, args) =>
         {
             if (_allowClose) return;
@@ -190,6 +195,8 @@ internal sealed partial class SettingsWindow : Window
             if (_app.Updates is { } updates) updates.StatusChanged -= RefreshUpdateStatus;
             if (_app.AgentServer is { } agents) agents.StatusChanged -= RefreshAgentStatus;
             if (_app.Descriptions is { } descriptions) descriptions.Changed -= RefreshAiStatus;
+            _app.SettingsSyncStatusChanged -= RefreshSyncStatus;
+            _app.SharedSettingsReloaded -= ReloadSharedPreferences;
         };
         WindowTools.Configure(this, 1050, 790, excludeFromCapture: false, app: _app, layoutKey: "settings");
     }
@@ -282,6 +289,7 @@ internal sealed partial class SettingsWindow : Window
         yield return new(SettingsPage.Agents, "Connect a coding agent", "copilot claude cursor vscode codex mcp configuration skills");
         yield return new(SettingsPage.Agents, "Plugins and skills", "marketplace install visual verification screenshot");
         yield return new(SettingsPage.General, "Keep saved captures searchable", "library retention archive history");
+        yield return new(SettingsPage.General, "Settings across devices", "onedrive sync roaming preferences machines cloud settings");
         yield return new(SettingsPage.Capture, "Review before cloud analysis", "ai privacy redact approval");
         yield return new(SettingsPage.Capture, "Exclude applications from AI", "privacy process cloud");
         yield return new(SettingsPage.Recording, "Microphone device", "audio input selection");
@@ -364,6 +372,7 @@ internal sealed partial class SettingsWindow : Window
                     _draft.Library.KeepSavedCaptures, value => _draft.Library.KeepSavedCaptures = value);
                 Note(panel, "Library actions in the workspace provide reviewed storage cleanup, local backups, restore and relinking moved files. Originals are never automatically deleted.");
                 Note(panel, "Click the tray icon to open the editor and history. Nothing opens automatically after a screenshot.");
+                SettingsSynchronization(panel);
                 break;
             case SettingsPage.Capture:
                 Section(panel, "Text recognition");
@@ -590,9 +599,14 @@ internal sealed partial class SettingsWindow : Window
             return;
         }
         var snapshot = _draft.Clone();
-        if (await _app.ApplySettingsAsync(snapshot))
+        if (await _app.ApplySettingsAsync(snapshot, _draftBaseline))
         {
             _savedVersion = version;
+            if (version == _editVersion)
+            {
+                _draft = _app.Settings.Clone();
+                _draftBaseline = _app.Settings.Clone();
+            }
             if (_closed) return;
             _error.IsOpen = false;
             if (version == _editVersion) _status.Text = "All changes saved.";
