@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.13](https://github.com/sebastienlevert/hotshot/compare/v0.1.12...v0.1.13) (2026-10-12)
+
+
+### Features
+
+* sync portable settings through OneDrive ([699c55f](https://github.com/sebastienlevert/hotshot/commit/699c55f2978113d948e4abf9a6d9c0fbb04429f1))
+
 ## [0.1.12](https://github.com/sebastienlevert/hotshot/compare/v0.1.11...v0.1.12) (2026-10-12)
 
 
