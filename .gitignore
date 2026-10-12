@@ -14,3 +14,7 @@ TestResults/
 *.pfx
 *.pem
 *.key
+node_modules/
+website/dist/
+website/test-results/
+website/playwright-report/

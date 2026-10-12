@@ -1,171 +1,288 @@
+<img src="https://raw.githubusercontent.com/sebastienlevert/hotshot/main/src/Hotshot.App/Assets/Logo.png" alt="Hotshot logo" width="80" height="80">
+
 # Hotshot
 
-A native WinUI 3 screenshot and screen-recording utility for Windows 10 (19041+) and Windows 11, built with .NET 10. It lives in the tray rather than leaving a main window open.
+**Capture fast. Edit when you need to. Stay in your flow.**
 
-The Hotshot logo pairs a white capture viewfinder with a lightning bolt on an amber-to-coral tile. Taskbar and tray icons include sizes from 16 to 256 pixels; recording switches the tray to a dark tile with a red recording dot. Regenerate the assets with `pwsh build\make-icons.ps1`.
+Hotshot is a native Windows screenshot and screen-recording app. It lives in your system tray: press a shortcut, choose what to capture, and paste the result. Screenshots are copied and saved without opening a preview window.
 
-[Download the latest release](https://github.com/sebastienlevert/hotshot/releases/latest) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/sebastienlevert/hotshot/issues)
+[Website](https://sebastienlevert.github.io/hotshot/) | [Full documentation](https://sebastienlevert.github.io/hotshot/docs/) | [Download Hotshot](https://github.com/sebastienlevert/hotshot/releases/latest) | [Quick start](#your-first-screenshot) | [Changelog](https://github.com/sebastienlevert/hotshot/blob/main/CHANGELOG.md) | [Report an issue](https://github.com/sebastienlevert/hotshot/issues) | [Contribute](CONTRIBUTING.md)
 
-## Use
+**Works on:** Windows 10 build 19041 or newer and Windows 11, on x64 and ARM64. The release includes .NET and the Windows App SDK; you do not need to install them separately. Basic capture and editing do not require an account.
 
-Download **Hotshot-win-x64-Setup.exe** or **Hotshot-win-arm64-Setup.exe** from GitHub Releases and run it. Installation is per-user and needs no administrator privileges. No separate .NET or Windows App SDK installation is required. The first launch opens settings; closing a settings/editor window leaves the app running in the tray.
+**Jump to:** [Settings](#set-it-up-your-way) | [Editing and library](#edit-organize-and-compare) | [Video and GIFs](#record-video-and-make-gifs) | [OneDrive](#keep-settings-across-machines-with-onedrive) | [AI and agents](#optional-ai-and-coding-agents) | [Troubleshooting](#troubleshooting)
 
-Managed portable bundles are also available. Extract the entire `Hotshot-win-<architecture>-Portable.zip` to a permanent writable folder; do not move individual files out of the bundle. Earlier development ZIPs and raw `dotnet publish` folders are unmanaged and cannot update themselves: install a current release once to enable updates.
+## What can I do with it?
 
-### Automatic updates
-
-Installed and Velopack-managed portable builds check this public repository's stable GitHub Releases shortly after startup and hourly thereafter. New versions download and are verified in the background, using separate `win-x64` and `win-arm64` static release feeds. This avoids GitHub REST API quotas, and package URLs stay pinned to the discovered release version. No GitHub account or token is required.
-
-Once ready, Hotshot updates silently and restarts in the tray when it is safe: no capture, recording, GIF conversion, AI description, editor operation, unsaved annotations/settings, or active editor/settings window. Work in progress is never interrupted. Offline/failed checks are logged and retried automatically; prepared updates are reconsidered after startup using those same safety checks. Secondary launches never force-apply an update before the single-instance/idle checks. **About Hotshot > Automatic updates** shows status and offers an optional Check now button.
-
-Settings, history and originals stay in `%AppData%\Hotshot`, outside the installer-owned application directory. Release packages are currently unsigned, so Windows may show a first-install SmartScreen warning; no signing credentials are stored in this repository.
-
-| Default shortcut | Action |
+| You want to... | Hotshot helps you... |
 |---|---|
-| Print Screen | Select a region or click a window |
-| Ctrl+Print Screen | Capture the monitor under the cursor |
-| Shift+Print Screen | Capture the full virtual screen (all monitors) |
-| Ctrl+Shift+Print Screen | Start/stop screen recording |
+| Capture something quickly | Grab a region, a window, one monitor, or all monitors with global shortcuts. |
+| Explain what you captured | Add arrows, text, shapes, numbered steps, highlights, crops, and opaque redactions. |
+| Find an older capture | Browse filenames and search tags, projects, recognized text, and optional AI descriptions. |
+| Record a walkthrough | Record MP4 with optional system/microphone audio, pause, trim, extract frames, and convert to GIF. |
+| Check a visual change | Compare screenshots with a swipe view, pixel differences, alignment, ignored regions, and project baselines. |
+| Keep your setup consistent | Roam portable preferences across machines through OneDrive, without copying device permissions. |
+| Work with a coding agent | Opt into local MCP screenshot tools and portable skills for supported coding clients. |
 
-Settings use a PowerToys-inspired adaptive sidebar, grouped setting cards, and automatic saving. The title bar and caption buttons follow **General > App theme** (Windows default, light or dark), including inactive windows. Settings search is embedded in the title bar at every window width; the title and subtitle hide on narrow windows to leave room for search and the window buttons. **Ctrl+F** focuses it. Search individual settings by name or related keywords, choose a suggestion to jump to its highlighted card, or press Enter for all matching results. Invalid edits remain unapplied with an inline explanation; there is no global Save button.
+## Install Hotshot
 
-All shortcuts are configurable under **Keyboard shortcuts**: click a shortcut, press the new combination, and Apply or Clear it. Duplicate/invalid shortcuts are rejected, and registration conflicts are shown. If Print Screen launches Snipping Tool, disable that option in Windows keyboard settings or choose another shortcut. In the selection overlay, **Space** captures/selects the monitor under the cursor and **Escape** cancels.
+Open the [latest release](https://github.com/sebastienlevert/hotshot/releases/latest) and choose **one** of these downloads:
 
-Screenshots are saved as PNG and copied to the clipboard as both an image and PNG data before disk saving. Captures are silent: no preview/editor window opens automatically, including for older settings profiles. Hotshot's Settings window can be captured normally, including click-to-select window captures, so you can share screenshots for feedback. The editor and recording controls remain excluded from captures.
+| Your Windows PC | Recommended installer | Portable alternative |
+|---|---|---|
+| Intel or AMD processor, x64 | [Hotshot-win-x64-Setup.exe](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-x64-Setup.exe) | [Hotshot-win-x64-Portable.zip](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-x64-Portable.zip) |
+| ARM processor, ARM64 | [Hotshot-win-arm64-Setup.exe](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-arm64-Setup.exe) | [Hotshot-win-arm64-Portable.zip](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-arm64-Portable.zip) |
 
-Click the tray icon to open or focus **Editor and history**. It starts with a compact filename list and an empty editor, not the most recent screenshot. Select a filename or use the arrow keys to move through the list; the selected screenshot appears directly in the editor, without separate thumbnail previews. Add arrows, shapes, text, freehand ink, highlights, numbered steps or pixelated regions, or crop it. Undo/redo covers annotations and crops. **Save** updates the PNG while retaining the pristine original and an editable annotation sidecar under `%AppData%\Hotshot\originals`; **Copy** copies the edited image without saving it. Switching or closing prompts before discarding unsaved edits. Video entries have Open/Copy/Convert to GIF actions. Right-click the tray for capture commands, recording controls, settings, the captures folder, and exit.
+Not sure which one you need? Check **Windows Settings > System > About > System type**.
 
-Recording produces H.264 MP4 with optional system audio and/or microphone audio. Turn both audio options off for silent video. A countdown and recording control window provide pause/resume and stop/save; closing the recording control stops and saves. Window targets and single-monitor regions are supported. Regions cannot span monitors. A closed target stops recording, including when paused.
+Run the installer and launch Hotshot. Installation is for your Windows user and does not require administrator privileges. The first launch opens Settings; closing that window keeps Hotshot running in the tray.
 
-Use **Convert to GIF** on an MP4 in history, enable automatic GIF creation, or bind the Record as GIF shortcut. GIF conversion runs in the background, supports frame rate, width, dithering and looping, and keeps the original MP4. GIFs cannot contain audio and are limited to 256 colors per palette, so photographic/complex gradients are necessarily lossy. MP4/GIF clipboard copies are files rather than static images.
+For the portable version, extract the **entire ZIP** to a permanent, writable folder and run `Hotshot.exe`. Keep its files together. Moving it later may require updating the **Start with Windows** setting.
 
-**Start with Windows** uses the current user's Run registry entry and is enabled by default in Release builds. Debug builds never modify that entry. Keep a portable installation in its permanent location; moving it requires running the new copy and changing the startup setting to refresh its path. Exit via the tray menu or `Hotshot.exe --exit`.
+> [!NOTE]
+> Release packages are currently unsigned, so Windows may display a SmartScreen warning. Download only from this repository's official releases. The `.nupkg`, delta, JSON, and `RELEASES` assets are update-system files, not the downloads you need to start using Hotshot.
 
-## Native workbench
+## Your first screenshot
 
-The ShareX-inspired workbench keeps the WinUI experience and silent captures:
+1. Start Hotshot. Look for its amber-and-coral lightning icon near the Windows clock; it may be under **Show hidden icons**.
+2. Press **Print Screen**. Drag to select a region, or click a window.
+3. Paste into another app with **Ctrl+V**. By default, the screenshot is also saved under **Hotshot in your Pictures folder**, with date-based subfolders.
+4. Click the tray icon when you want to review or edit it. Choose its filename to load it into the editor.
 
-- **Organize:** mark favorites, edit tags in **Details and tags**, and filter by capture type or date. Search terms match filename, tags, application, AI description and recognized text. Favorites are retained beyond the ordinary recent-history limit.
-- **Local OCR:** **Extract text** recognizes the edited image and lets you copy the result. **Screenshots > Recognize screenshot text locally** optionally indexes new captures automatically. Windows OCR language support is required; no image or text is uploaded.
-- **Edit:** choose annotations from the layer selector, duplicate them with **Ctrl+D**, bring them forward/backward, resize using handles, and nudge a selected annotation with arrow keys (**Shift** moves 10 pixels). Shape fill and text size controls are available in the annotation toolbar.
-- **Redact:** the **Redact** tool uses opaque black rectangles above all annotation layers. Saved redactions discard old AI/OCR text metadata so hidden content is not leaked through descriptions. Pristine originals and editable sidecars still contain the original content and remain private; share only the flattened exported image.
-- **Export:** save a separate PNG/JPEG with proportional resizing, padding, backgrounds, rounded corners and shadows. Export copies omit AI/OCR metadata and never replace the editable capture. **Import image** adds existing PNG/JPEG/BMP images without changing the clipboard.
-- **Capture delay:** set 0–30 seconds under **Screenshots**; the default remains immediate capture.
-- **Navigate precisely:** wheel zoom stays at your chosen level; **Ctrl+1** uses actual physical-pixel 100%, **Ctrl+0** fits the image, and Space-drag/middle-drag pans. **V/A/R/T/C/P** select tools. Focus the canvas and press **Insert** to create an annotation, arrow keys to move it, or **Ctrl+arrows** to resize a box/line; Shift changes the step to 10 pixels.
-- **Pin and compare:** Pin image opens an always-on-top copy without writing or copying anything. Ctrl-select two same-size screenshots and choose Compare selected screenshots for before/after/diff views, changed-pixel percentage and bounds.
-- **Durable library:** saved captures remain searchable beyond the recent-history limit by default; only temporary captures are trimmed. Toggle this under General. History uses atomic replacement, a previous-valid backup and visible recovery/write errors. Missing saved files remain listed instead of silently losing their records.
-- **Projects and searches:** organize selected captures into a project, add tags in batches, save named searches, rename captures, export selected flattened files or delete selected files to the Recycle Bin. Filters live in a collapsible panel. Search supports substrings and `project:`, `tag:`, `app:`, `type:`, `text:` and quoted phrases; a rebuildable in-memory trigram index accelerates single-term lookups.
-- **Guided scrolling:** choose Scrolling capture from the tray/editor or `Hotshot.exe --scrolling`, select the scrolling content, scroll it yourself, and add overlapping frames. Ambiguous overlap is rejected without appending. Fixed headers should be excluded; frames must keep their position/size. The output is limited to 16,384 pixels tall / 64 megapixels.
-- **Recordings:** play videos inside the workspace, extract the paused/current frame, and trim to a separate MP4. Choose a microphone in Settings; live recording controls have microphone/system mute and level meters. The recovery journal can restore a finalized playable MP4 after interruption, or archive its notice without changing the source. Unfinalized/unreadable MP4 data is preserved and explicitly reported, not claimed recovered.
+**No window appears after a screenshot. That is intentional.** Capturing, copying, and saving happen without opening the editor or changing its selection.
 
-### Consolidated local workflows
+If Print Screen opens Snipping Tool instead, see [Troubleshooting](#troubleshooting).
 
-- **Export presets, not sharing:** export remembers its last format, width, padding, radius, shadow and background. Save/reuse/delete up to 50 named presets. No capture-sharing, uploader or Markdown-copy feature is added; only portable settings roam through OneDrive.
-- **Storage and privacy:** Library actions shows measured capture/thumbnail/original/index sizes. Preview orphan cleanup or explicitly include all private originals/sidecars, then confirm permanent deletion in a second dialog. Saved capture files are not cleaned up automatically. Removing originals discards editable history; the current flattened capture remains. File-size changes and symbolic-link targets are rejected during cleanup.
-- **Local backup/restore:** ZIP backups contain existing captures and metadata; private originals are separately opt-in. Restores are previewed and imported into a new capture subfolder without replacing existing files/IDs or scheduling cloud analysis. Paths and archive sizes/counts are validated. Relink missing capture selects an existing matching-format file; screenshot dimensions must match.
-- **Scalable history:** `history.json` is a compatible checkpoint with a previous-valid backup. Small changes append durable transactions to `history.json.journal`; checkpoints compact every 256 transactions/8 MB and at clean exit. An incomplete final transaction is preserved for inspection and recovered; invalid completed transactions pause writes. The workspace renders bounded pages rather than rebuilding all capture rows.
-- **Visual verification:** comparison keeps full-resolution sources, synchronized zoom/pan and a swipe slider. Adjust pixel tolerance, align After with X/Y offsets, and draw/type ignored rectangles. Counts/percentages exclude ignored/unmatched pixels. Set a project's favorite baseline, compare new captures against it, or export a local JSON report plus flattened before/after/diff PNGs. No overlap is reported as “nothing compared,” not a successful visual match.
-- **Unobscured windows:** selected window screenshots use a bounded Windows.Graphics.Capture float16 pipeline by default, without focusing/moving the window. Hidden/minimized/protected/stale/moved/resized/DPI-changed targets fail explicitly. Disable this setting for legacy visible-screen pixels; no silent fallback occurs. The cursor setting is respected and Windows may draw its capture border. Mica/backdrop composition can differ from desktop pixels. HDR scRGB is explicitly tone-mapped to SDR sRGB with Reinhard; negative out-of-gamut values are clipped and warnings are logged/returned. PNG output does not preserve HDR brightness/gamut. Monitor/region captures still use the 8-bit GDI path.
-- **Native finishing touches:** Settings/workspace bounds and splitter width are remembered and clamped to connected monitor work areas on restore. Pinned images have 20–100% opacity and reversible click-through: an independent Resume control stays clickable and a 20-second timer restores input. Trim uses video preview plus keyboard-accessible start/end sliders. Long backup/restore, copy, trimming and comparison work has cancellation. About includes a short local quick-start guide, also shown on first run.
+### Shortcuts and tray controls
 
-Settings now use Windows Community Toolkit **SettingsCard** and **SettingsExpander** controls, and the editor/history split uses **GridSplitter**. Toolkit `8.3.260402-preview2` is pinned because its split WinUI dependency is compatible with Hotshot's Windows App SDK 2.x; the older stable Toolkit pulls in conflicting App SDK 1.6 build targets.
+| Shortcut | Action |
+|---|---|
+| **Print Screen** | Select a region or click a window. |
+| **Ctrl+Print Screen** | Capture the monitor under the pointer. |
+| **Shift+Print Screen** | Capture all monitors. |
+| **Ctrl+Shift+Print Screen** | Start or stop a screen recording. |
+| **Space**, in the capture overlay | Select/capture the monitor under the pointer. |
+| **Escape**, in the capture overlay | Cancel without taking a screenshot. |
 
-Feature research used [REA](https://github.com/morluto/rea) static inspection of the official ShareX 21.0.0 assemblies. Observed capability boundaries informed independent native implementations; no ShareX GPL source, binaries or UI are included in Hotshot. This is not a full ShareX clone: scrolling is guided rather than automated and upload services are not included.
+Change shortcuts under **Settings > Keyboard shortcuts**. Select a shortcut, press the new combination, then choose **Apply** or **Clear**. Hotshot reports invalid, duplicate, or unavailable shortcuts.
 
-## AI screenshot descriptions
+**Click the tray icon** to open or focus Editor and history. **Right-click it** for capture commands, recording controls, Settings, the captures folder, and Exit. Closing Settings or the editor does not quit the tray app.
 
-Enable **Screenshots > Describe screenshots with Copilot** to describe new screenshots after they are saved. This is **off by default**. Enabling it sends screenshot pixels to the signed-in GitHub Copilot account and consumes that account's model quota; screenshots can contain sensitive information. No image is sent while the setting is off. Recordings and GIFs are not submitted.
+## Set it up your way
 
-The SDK's pinned runtime is bundled with Hotshot. An existing GitHub Copilot sign-in and an available image-capable model are required. Hotshot chooses the available vision model with the lowest reported quota multiplier, allows no tools, and does not load workspace instructions, skills, or session-store memory. Each image uses a separate session, which is deleted after processing. Turning the setting off cancels in-flight and queued analysis; unfinished work can resume on the next launch while the setting remains enabled.
+Right-click the tray icon and open **Settings**. Changes save automatically when valid; there is no global Save button. Invalid edits show an explanation and remain unapplied.
 
-Generated summaries and descriptions are searchable in **Editor and history**. PNG files also receive lossless Unicode **Title** (summary) and **Description** metadata; pixels are not re-encoded. Metadata is retained when saving edits, and enabled descriptions are refreshed after an edited screenshot is saved. Windows Explorer does not reliably display these fields for PNG, but metadata-aware image tools can read them. Failed/offline descriptions do not lose the saved screenshot and are reported visibly.
+| Setting | Where to find it |
+|---|---|
+| Light, dark, or Windows-default appearance | **General > App theme** |
+| Choose where captures go | **General > Captures folder**; use the folder picker |
+| Turn clipboard copying or file saving on/off | **General > Copy captures to clipboard / Save captures to files** |
+| Run when you sign into Windows | **General > Start with Windows**; enabled by default in release builds |
+| Keep preferences in OneDrive or only on this PC | **General > Settings across devices** |
+| Delay a screenshot, include the pointer, or recognize text | **Screenshots** |
+| Choose audio sources, microphone, quality, and frame rate | **Screen recording** |
+| Set GIF size, frame rate, dithering, and looping | **GIF conversion** |
+| Customize shortcuts or filenames | **Keyboard shortcuts / File naming** |
 
-Automatic analysis remains available. **Review before cloud analysis** optionally holds new captures until you review/redact and save, then explicitly approve Analyze selected screenshot in the workspace. **Exclude applications from AI** accepts process names; this uses the capture's recorded application, not sensitive-content detection across the whole desktop. Use review mode for monitor captures containing other apps. The queue is bounded to 32 waiting jobs, deduplicates a capture already queued, and reports overflow. View AI processing shows queued/held/failed items and cancellation; analyze can retry a saved capture after explicit confirmation. Settings show the connected vision model and its reported quota multiplier; remaining account quota is not fabricated.
+The search box stays inside the Settings title bar, including on narrow windows. Press **Ctrl+F**, search for a setting, and choose a result to jump to it.
 
-## Coding agents
+## Capture screenshots
 
-**Settings > Coding agents** offers opt-in native screenshot tools through a bundled local stdio MCP server, plus ready-to-copy configurations for Copilot CLI, Claude Code, VS Code, Cursor and Codex. Agent access and historical-capture access are separately disabled by default. Enabled agents use Hotshot's existing capture/output/analysis settings; they cannot change settings, execute commands, or control the mouse/keyboard.
+For most captures, use the shortcuts above. Under **Screenshots**, you can add a delay of up to 30 seconds to make time for opening a menu or preparing a window.
 
-The repository marketplace includes capture, visual-verification and history-search skills. Returned screenshots may be sent to the requesting coding agent's model provider. See the [agent integration guide](agents/README.md) for permissions, installation commands, tools and limits.
+**Window captures:** by default, **Unobscured window screenshots** captures the selected window even if another window overlaps it, without moving or focusing it. Windows may show a capture border. Hidden, minimized, protected, or changed targets can fail explicitly; Hotshot does not silently substitute a desktop screenshot. Turn this setting off if you specifically want the visible-screen version.
 
-Agent tools also offer saved-image region reads, local OCR with word coordinates, pixel comparisons and bounded request activity. Allowed-app restrictions filter live targets and historical captures and disable broad region/monitor capture; separate toggles can disable those capture modes even without an app list. These restrictions do not remove occluding windows from visible-screen pixels.
+**Scrolling captures:** choose **Scrolling capture** from the tray or workspace. Select the content, scroll it yourself, and add overlapping frames. Exclude fixed headers and keep the capture area in the same position and size. Hotshot rejects ambiguous overlaps rather than stitching a misleading result. This is guided capture, not automatic scrolling.
 
-**Test connection with generated image** exercises the bundled stdio companion and native pipe without screen/history/model access, even while agent access is off. Settings shows actual native client process IDs/names and last-seen state—not inferred coding-workspace/model identities. Optionally require a timed grant for this app run and/or native Allow once/Deny approval for content requests. No grant survives restart. Status/activity/synthetic tests do not require content approval. Selected flattened screenshots can be packaged as a local evidence ZIP with a minimal manifest; no originals, AI/OCR text, absolute paths or upload is included.
+You can capture Hotshot's own Settings window for feedback. The editor and recording controls are excluded from capture.
 
-The release keeps a self-contained .NET runtime for both executable processes for dependable deployment. The MCP host targets plain .NET rather than the Windows SDK projection, and packaging removes only the byte-identical in-process Copilot alias after hash verification; the app explicitly uses stdio. An SDK-compatible external runtime can be selected, and developer packaging supports `-IncludeCopilotRuntime:$false`; the default public update channel still bundles it. No component is downloaded automatically.
+## Edit, organize, and compare
 
-**About Hotshot > Show diagnostics** reports startup time, current memory, installed-file size, library health, interrupted-recording state, AI/provider status and agent/update state. Diagnostics stay local. Packages remain unsigned by choice; no signing identity or secret is required.
+Click the tray icon and select a filename. The workspace opens with an empty editor until you choose a capture; arrow keys move between filenames and load the selected item directly.
 
-## Output naming
+### Edit and export
 
-The default captures folder is `Pictures\Hotshot`; change it using the native folder picker under **General > Captures folder**. Canceling leaves the current folder unchanged. The default pattern, `{yyyy}\{MM}\{timestamp}`, produces paths such as `2026\10\2026-10-09_09-15-30.png`. Configure separate screenshot and recording/GIF patterns under **File naming**, with a live preview and token dropdowns showing example results. Choosing a token inserts it at the cursor or replaces the selected text.
+Annotate with arrows, shapes, text, ink, highlights, numbered steps, or pixelation. Crop the image, manage layers, and undo/redo edits. Use **Redact** for an opaque black cover over sensitive content.
 
-Supported tokens include date/time (`{yyyy}`, `{MM}`, `{dd}`, `{HH}`, `{mm}`, `{ss}`, `{fff}`, `{timestamp}`, `{date}`, `{time}`, `{unix}`, `{now:yyyyMMdd}`), context (`{type}`, `{app}`, `{title}`, `{monitor}`, `{width}`, `{height}`), and identifiers (`{counter:4}`, `{rand:8}`, `{guid}`, `{computer}`, `{user}`). Separators create folders, extensions are automatic, invalid filename characters are sanitized, and collisions receive numeric suffixes.
+| Action | What it does |
+|---|---|
+| **Save** | Updates the capture while retaining a private original and editable annotation sidecar. |
+| **Copy** | Copies the edited image without saving it. |
+| **Export** | Creates a separate flattened PNG/JPEG with optional resizing, padding, background, rounded corners, and shadow. Does not replace the editable capture. |
+| **Import image** | Adds an existing PNG/JPEG/BMP without changing the clipboard. |
 
-Settings, history, thumbnails and logs are stored under `%AppData%\Hotshot`. History trimming does not delete saved captures. With file saving disabled, captures are held in temporary files for clipboard/history and removed when their history entries are trimmed.
+Export remembers your last style. Save named presets to reuse a look; up to 50 presets are supported. Flattened exports omit AI/OCR text metadata.
 
-## OneDrive settings across machines
+> [!WARNING]
+> **Redacting the visible image does not erase its private original or editable sidecar.** Saved redactions remove old AI/OCR text metadata, but originals can still contain sensitive content. Share only the flattened exported image, not the application-data folder or a backup containing originals. Pixelation is not the same as opaque redaction.
 
-When a local OneDrive folder is available, Hotshot automatically stores portable preferences in **`<OneDrive>\Apps\Hotshot\settings.json`**. Sign into the same OneDrive account on your other Windows machines and install a current Hotshot release; the shared file is loaded there. You can also choose the local root of a shared OneDrive folder under **General > Settings across devices**. Hotshot does not share the folder with other people or change OneDrive permissions.
+<details>
+<summary>Editor keyboard and navigation reference</summary>
 
-Theme, hotkeys, filename patterns, capture/recording options, local-OCR preferences, export presets and saved searches roam. Absolute capture/runtime paths, window positions/splitter width, microphone device IDs, filename counters, first-run state, project baseline IDs, cloud-AI enable/review choices and all coding-agent permissions stay device-local. Enabling agent or cloud-image access on one machine never grants it on another. Captures, history, originals, logs and credentials are not synchronized by this feature.
+| Control | Action |
+|---|---|
+| Mouse wheel | Zoom. |
+| **Ctrl+1** | View at actual physical-pixel size, 100%. |
+| **Ctrl+0** | Fit the image. |
+| **Space+drag** or middle-button drag | Pan. |
+| **V / A / R / T / C / P** | Select / arrow / rectangle / text / crop / pen. |
+| **Ctrl+D** | Duplicate the selected annotation. |
+| Arrow keys, with the canvas focused | Move the selected annotation; **Shift** uses a larger step. |
+| **Ctrl+arrow keys** | Resize a box or line. |
+| **Insert**, with the canvas focused | Create an annotation. |
 
-The existing `%AppData%\Hotshot\settings.json` remains a full local cache/device-override file. `settings-sync.json` in that same directory records this machine's selected location and last shared baseline. Without OneDrive or while its files cannot be read, the local cache stays active and edits are queued for a later retry. Hotshot never creates a fake OneDrive root or overwrites an invalid/unavailable shared document with defaults. The OneDrive desktop client—not Hotshot—uploads/downloads the file; folder availability is not a guarantee that cloud transfer has completed.
+</details>
 
-Valid incoming changes reload every few seconds when Hotshot is idle and Settings is not actively being edited. **Reload shared preferences** applies them explicitly after pending edits are resolved. Independent field edits are merged; conflicting same-field edits are preserved locally and require an explicit resolution. The shared file keeps a backup, and invalid documents are preserved separately before explicit replacement. OneDrive may create extra conflict-copy JSON files after simultaneous offline edits: review/move those copies before resolving, or use OneDrive version history. This is not a distributed locking service.
+### Find and organize captures
 
-**Use local preferences only** stops settings roaming on this device without deleting the OneDrive file. **Choose another OneDrive folder** selects the root whose `Apps\Hotshot\settings.json` should be used. The native page shows the exact shared-file path, local cache and current status.
+Search by filename, application, tags, recognized text, or AI description. Use **Details and tags** to add tags and favorites, or organize multiple selected captures into a project. Save searches you use often.
 
-## Build and package
+Search understands ordinary words, quoted phrases, and filters such as `project:`, `tag:`, `app:`, `type:`, and `text:`. For example, `project:website tag:bug` narrows the library to captures matching both filters.
 
-Requires Windows and the .NET 10 SDK, not Visual Studio.
+Saved captures stay searchable beyond the recent-history limit by default. History trimming does **not** delete your saved capture files. With file saving disabled, temporary captures can be removed when their history entries are trimmed.
 
-```powershell
-dotnet tool restore
-dotnet build src\Hotshot.App\Hotshot.App.csproj -p:Platform=x64
-dotnet build src\Hotshot.App\Hotshot.App.csproj -p:Platform=ARM64
-pwsh build\package.ps1 -Version 0.1.0 -Runtime win-x64
-pwsh build\package.ps1 -Version 0.1.0 -Runtime win-arm64
+### Pin, compare, and protect your library
+
+**Pin image** keeps a capture on top of other windows. Adjust its opacity or temporarily enable click-through; a separate Resume control and a 20-second timeout let you regain input.
+
+Ctrl-select two same-size screenshots and choose **Compare selected screenshots**. Switch between before/after/diff views, use synchronized zoom and a swipe slider, and adjust tolerance, alignment, or ignored rectangles. Set project baselines for repeat comparisons. Export local JSON/PNG reports when you need evidence of a change.
+
+Open **Library actions** for reviewed storage cleanup, local ZIP backup/restore, missing-file relinking, batch export, and deletion to the Recycle Bin. Including private originals in backups is opt-in. Restores add a new subfolder rather than replacing your existing library. Cleanup that removes originals also removes their editable history.
+
+## Record video and make GIFs
+
+1. Press **Ctrl+Shift+Print Screen** or use the tray recording command to choose a window or a region on one monitor.
+2. Use the recording controls to pause/resume, mute microphone/system audio, and watch audio levels.
+3. Stop with the shortcut or recording controls. Hotshot saves an H.264 MP4. Closing the recording controls also stops and saves.
+
+Turn both audio options off under **Screen recording** for a silent video. Closing the recorded target ends the recording, even while paused. Recording regions cannot span monitors.
+
+Select a video in the workspace to play it, extract a frame, or trim it to a **separate MP4** using the start/end sliders. If recording was interrupted, the recovery action can recover a finalized, playable MP4; unreadable or unfinalized data is preserved and reported rather than claimed recovered.
+
+For a GIF, select an MP4 and choose **Convert to GIF**, enable automatic GIF creation, or assign the **Record as GIF** shortcut. Conversion runs in the background and keeps the MP4. GIFs have no audio and use at most 256 colors per palette, so complex gradients and photographs lose detail. MP4/GIF clipboard copies are files, not static images.
+
+## Choose folders and filenames
+
+The default location is **Hotshot in your Pictures folder**. Change it under **General > Captures folder**. Canceling the picker keeps the current location.
+
+Under **File naming**, set separate patterns for screenshots and recordings/GIFs. The live preview shows the result; the token dropdown includes examples and inserts a token at the cursor.
+
+| Pattern | Example relative to your captures folder |
+|---|---|
+| `{yyyy}/{MM}/{timestamp}` (default) | `2026\10\2026-10-11_14-30-05.png` |
+| `{app}\{timestamp}` | `notepad\2026-10-11_14-30-05.png` |
+| `{date}-{counter:4}` | `2026-10-11-0001.png` |
+
+Both `/` and `\` create subfolders in a naming pattern. Hotshot supplies the file extension, sanitizes invalid filename characters, and adds a numeric suffix when a filename already exists.
+
+<details>
+<summary>All filename tokens</summary>
+
+| Category | Tokens |
+|---|---|
+| Calendar | `{yyyy}`, `{yy}`, `{MM}`, `{MMM}`, `{MMMM}`, `{dd}`, `{ddd}` |
+| Clock | `{HH}`, `{hh}`, `{tt}`, `{mm}`, `{ss}`, `{fff}` |
+| Combined/custom time | `{timestamp}`, `{date}`, `{time}`, `{unix}`, `{now:yyyyMMdd}`; `now:` accepts custom .NET date formats |
+| Capture context | `{type}`, `{app}`, `{title}`, `{monitor}`, `{width}`, `{height}` |
+| Identifiers | `{counter}`, `{counter:4}`, `{rand}`, `{rand:8}`, `{guid}`, `{computer}`, `{user}` |
+
+Counters are local to each machine; they are not a shared OneDrive sequence.
+
+</details>
+
+## Keep settings across machines with OneDrive
+
+When a local OneDrive folder is available, Hotshot automatically creates or loads:
+
+```text
+<OneDrive>\Apps\Hotshot\settings.json
 ```
 
-The pinned local `vpk` tool creates installers, managed portable ZIPs, full/delta packages and architecture-specific feeds under `artifacts\releases\win-x64` and `artifacts\releases\win-arm64`. Published binaries are versioned under `artifacts\publish\<version>\<runtime>` so packaging does not replace a running development build. ARM64 can be cross-built on x64; runtime validation on a real ARM64 machine is still required.
+On your other Windows machines, sign into the same OneDrive account, let that folder synchronize, and install a current Hotshot release. Each machine reads the portable preferences while keeping its own device settings.
 
-## Release management
+| Shared preferences | Kept on each machine |
+|---|---|
+| Theme, startup preference, hotkeys, filename patterns | Capture folder, runtime path, microphone device ID |
+| Clipboard/save choices, capture and recording options, GIF options | Window positions, splitter width, counters, first-run state |
+| Local-OCR preference, AI exclusion list, export presets, saved searches | Cloud-AI enable/review choices, all coding-agent permissions, project baseline IDs |
 
-[Release Please](https://github.com/googleapis/release-please) opens version/changelog pull requests from Conventional Commits on `main`: use `feat:`, `fix:`, and `BREAKING CHANGE:` where appropriate. It keeps `version.txt`, `Directory.Build.props`, `CHANGELOG.md`, `.release-please-manifest.json` and both agent plugin manifests in sync.
+**This syncs settings, not captures or history.** Hotshot does not share a folder with other people or change OneDrive permissions. The OneDrive desktop client handles uploads/downloads; seeing a local file does not prove cloud transfer is complete.
 
-Merge the release PR to create a tagged draft release. The same workflow tests the code, builds both architectures, generates Velopack delta packages when a previous release exists, uploads all installers/portable/update-feed assets, and only then publishes the release as latest. Clients never discover an incomplete draft. This combined workflow works with the repository's `GITHUB_TOKEN` without requiring a personal token to trigger a second release workflow.
+Under **General > Settings across devices**, choose another OneDrive root, reload shared preferences, or select **Use local preferences only**. The page shows the exact file paths and status. Local-only mode does not delete the shared file.
 
-For bootstrap or repair, manually dispatch **Release Please and publish** with an existing tagged version (for example, `0.1.0`). **Build and test** validates x64/ARM64 on pushes and PRs. GitHub must allow Actions to create pull requests; no PAT, signing certificate or private token belongs in source control.
+Offline edits stay in the local cache and are retried. Incoming changes apply when the app is idle and Settings is not being edited. Independent field edits merge; conflicting edits require you to choose which preferences to keep. If OneDrive creates extra settings conflict-copy JSON files, review and move those copies before resolving the conflict. Invalid files are not silently replaced with defaults.
 
-```powershell
-dotnet test --project tests\Hotshot.Core.Tests\Hotshot.Core.Tests.csproj
-dotnet test --project tests\Hotshot.Capture.Tests\Hotshot.Capture.Tests.csproj
-dotnet test --project tests\Hotshot.Gif.Tests\Hotshot.Gif.Tests.csproj
-dotnet test --project tests\Hotshot.Editor.Tests\Hotshot.Editor.Tests.csproj
-dotnet run --project tests\Hotshot.Recording.Harness\Hotshot.Recording.Harness.csproj -- --window-only
-dotnet run --project tests\Hotshot.Recording.Harness\Hotshot.Recording.Harness.csproj -- --window-screenshot
-dotnet run --project tests\Hotshot.Recording.Harness\Hotshot.Recording.Harness.csproj -- --soak-seconds 120
-dotnet run --project tests\Hotshot.Library.Harness\Hotshot.Library.Harness.csproj
-dotnet run --project tests\Hotshot.Updates.Harness\Hotshot.Updates.Harness.csproj
-dotnet run --project tests\Hotshot.Descriptions.Harness\Hotshot.Descriptions.Harness.csproj
-dotnet run --project tests\Hotshot.Workbench.Harness\Hotshot.Workbench.Harness.csproj -p:Platform=x64 -- --ocr
-pwsh tests\Hotshot.App.Smoke.ps1 -Exe <path-to-built-Hotshot.exe>
-```
+## Optional AI and coding agents
 
-Tests use xUnit and Microsoft Testing Platform. The window-only harness records its own synthetic windows, verifies PNG/clipboard, pause, target closing, GPU/CPU encoding and MP4-to-GIF, and writes media under `%TEMP%\hotshot-harness`. It changes the clipboard to a synthetic test screenshot. Omitting `--window-only` additionally records the monitor and exercises microphone capture; only do that when the desktop/audio are safe to capture.
+### Search screenshots by description
 
-The update harness calls the actual static GitHub release source for both architectures and validates version-pinned full/delta URLs using headers only. It requires internet access but does not install, apply an update or touch user data.
-The description harness verifies Windows PNG metadata and pixel preservation with a generated image. Add `-- --copilot` to submit only that generated image through the production SDK provider; this requires Copilot sign-in and uses model quota, but never reads or submits a real screenshot.
-The workbench harness renders generated text and annotations to verify local OCR, solid-redaction layering, styled PNG and JPEG output without capturing the desktop or sending data to any provider.
+Enable **Screenshots > Describe screenshots with Copilot** to generate searchable summaries and descriptions. This is **off by default**, requires an existing GitHub Copilot sign-in and an image-capable model, and uses your account's quota. The required runtime is bundled with normal releases.
 
-The app smoke test exercises native settings, global shortcuts, capture selection, filename tokens, recording controls, history and GIF conversion. It temporarily replaces and then restores settings/history, captures the real desktop locally into its own temporary directory, and changes the clipboard. Close Hotshot before running it and use a desktop that is safe to capture. Use an unmanaged Debug/publish build for this smoke so automatic updates cannot restart a fixture.
-Pass `-VerifyStartup` only with a Release build to additionally exercise Start with Windows; the original Hotshot Run entry is restored afterward.
-Pass `-SettingsControlsOnly` to exercise folder selection/cancellation and filename-token dropdown examples/insertion without taking captures or changing the clipboard.
-Pass `-SettingsCaptureOnly` to verify that Settings can be selected and captured as a window, with the correct pixels and clipboard output, without capturing other desktop areas.
-Pass `-HistoryNavigationOnly` to verify filename-only browsing and automatic editor loading with generated PNG fixtures; it does not capture the desktop or change the clipboard.
-Pass `-HeaderSearchOnly` to check embedded title-bar search, caption-button separation, resizing, theme changes and search navigation without running unrelated capture or clipboard checks.
-Pass `-WorkbenchOnly` to verify physical-pixel zoom, pinned windows, multi-selection and measured native visual comparisons using generated images. Supply a generated MP4 via `-VideoFixture` to verify in-app video preview/frame extraction too.
-Pass `-AgentSettingsOnly` to verify native agent configuration and optional review-mode persistence without contacting any AI provider.
+Descriptions are added after saving, without delaying the clipboard. PNG files also receive Unicode **Title** and **Description** metadata. Windows Explorer may not display those PNG fields even though metadata-aware tools can read them. Recordings and GIFs are not sent for descriptions.
 
-Consolidation coverage includes a 10,000-entry persistence/search/restart benchmark, interrupted-journal and archive-path recovery tests, a two-minute synthetic-window recording soak with pause/resize and memory checks, unobscured capture under a synthetic occluder, mixed DPI-awareness HWNDs, native per-request consent, generated connection testing, and UI Automation checks for comparison/pin/keyboard controls. Physical mixed-scale monitor movement, HDR-display fidelity, Narrator user experience and execution on real ARM64 hardware require those environments; cross-builds and synthetic/UIA checks are not claimed as substitutes.
+For more control, enable **Review before cloud analysis**, review/redact and save the screenshot, then choose **Analyze selected screenshot**. **Exclude applications from AI** uses process names and the capture's recorded application; it does not detect sensitive content in other windows on a monitor capture. Use **View AI processing** to inspect, cancel, or retry work.
+
+Want searchable text without cloud AI? Enable **Screenshots > Recognize screenshot text locally**, or choose **Extract text** for a selected image. Windows OCR language support is required.
+
+### Let a coding agent use Hotshot
+
+Open **Settings > Coding agents** to connect Copilot CLI, Claude Code, VS Code, Cursor, or Codex through the bundled local MCP server. Copy the generated configuration into your client's configuration, or use the repository's plugins and skills.
+
+**Agent access** and **Allow history access** are separate, off-by-default permissions. You can restrict target apps/capture modes, require a timed grant, or approve each content request with **Allow once / Deny**. Test the connection with a generated image without reading your screen or library.
+
+Agents can request screenshots, read permitted captures, use OCR, and compare images. They cannot change settings, execute shell commands, control mouse/keyboard input, or record video through Hotshot.
+
+Read the [coding-agent setup and tool reference](https://github.com/sebastienlevert/hotshot/blob/main/agents/README.md) for installation commands, supported tools, and permission details.
+
+### Know what leaves your machine
+
+| Feature | Data handling |
+|---|---|
+| Capture, editing, comparison, local OCR | Processed locally by Hotshot; no image upload is required. |
+| Copilot descriptions, if enabled | Screenshot pixels go to your signed-in GitHub Copilot account and consume model quota. |
+| Coding-agent access, if enabled | The requesting client receives permitted images/text and may send them to its own model provider. |
+| OneDrive settings | Portable preferences go into your local OneDrive folder; the OneDrive client handles cloud transport. |
+
+If your **captures folder** is backed up by OneDrive or another service, that service may upload images independently of Hotshot's settings-sync feature. Review your chosen folder as well as your AI/agent permissions.
+
+## Updates and local data
+
+Installed and managed-portable releases check for updates shortly after startup and hourly. Updates download in the background and restart Hotshot only when capture, recording, conversion, AI work, and editing are idle, with no active editor/Settings window or unsaved work.
+
+Check status or choose **Check now** under **Settings > About Hotshot > Automatic updates**. Downloading updates does not require a GitHub account. Older development ZIPs and raw build outputs cannot update themselves; use a current installer or managed-portable bundle.
+
+| Location | Contents |
+|---|---|
+| Your chosen captures folder | Saved PNG, MP4, GIF, and exported files |
+| `%AppData%\Hotshot` | Local settings/cache, sync configuration, history, thumbnails, logs, and private originals/sidecars |
+| `<OneDrive>\Apps\Hotshot\settings.json` | Portable preferences, when settings roaming is enabled |
+| `%LocalAppData%\Hotshot` | Installer-managed application files; not the place to keep user captures |
+
+Updates keep your profile outside the installer directory. Use the workspace's backup/cleanup actions instead of manually deleting application-data files.
+
+## Troubleshooting
+
+| What you see | What to try |
+|---|---|
+| Print Screen opens Snipping Tool | Disable Windows' Print Screen shortcut for screen snipping, or assign a different shortcut in Hotshot. |
+| Nothing opens after a screenshot | This is expected. Paste with **Ctrl+V**, open the captures folder, or click the tray icon and select a filename. |
+| You cannot find the tray icon | Check Windows' hidden tray icons and confirm Hotshot is running. |
+| A capture is not copied or saved | Check the clipboard/file switches under General and your capture-folder permissions. An MP4/GIF clipboard item is a file. |
+| A window capture fails | Restore/show the window and select it again. Protected targets cannot be captured. For visible-screen capture, explicitly disable **Unobscured window screenshots**. |
+| OCR finds no text | Check Windows OCR language support and whether the image contains readable text. |
+| Copilot descriptions fail | Check your Copilot sign-in/model availability and **View AI processing**. The saved screenshot remains available. |
+| A coding agent cannot connect | Keep Hotshot running in the same Windows session; check permissions, timed grants, and the copied executable path. Reconnect the client's MCP server after an update. |
+| OneDrive settings do not change on another PC | Check both OneDrive clients, the shared path, and sync/conflict status. Resolve pending edits and use **Reload shared preferences** when idle. |
+| An update is ready but not applied | Finish current work and leave the editor/Settings inactive or closed. Hotshot will not interrupt active work to restart. |
+
+For a bug report, include your Hotshot version, Windows build, architecture, steps to reproduce, and expected/actual behavior. **About Hotshot > Show diagnostics** provides local diagnostic information; review and redact paths or private details before attaching it. Never attach private originals, a whole app-data folder, or credentials.
+
+## Current boundaries
+
+Hotshot is Windows-only. It does not include upload services, public capture sharing, or fully automated scrolling. HDR window captures are tone-mapped to SDR PNG rather than preserving HDR brightness/gamut; monitor/region captures use the visible-screen 8-bit path. Guided scrolling is limited to 16,384 pixels in height and 64 megapixels. GIF output is necessarily lossy.
+
+## Contribute
+
+Bug reports, documentation improvements, accessibility feedback, and focused code changes are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for Windows development setup, architecture, testing, pull requests, and releases. If you are reading an installed copy, use the [online contributor guide](https://github.com/sebastienlevert/hotshot/blob/main/CONTRIBUTING.md).
+
+Hotshot is licensed under the [MIT license](https://github.com/sebastienlevert/hotshot/blob/main/LICENSE). ShareX-inspired workflows are implemented independently; Hotshot does not include ShareX GPL source, binaries, or UI.
