@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.12](https://github.com/sebastienlevert/hotshot/compare/v0.1.11...v0.1.12) (2026-10-12)
+
+
+### Features
+
+* consolidate local workflows and capture reliability ([9a8c72a](https://github.com/sebastienlevert/hotshot/commit/9a8c72a635ae567bcbbab6b89d6f82e3ef3a2280))
+
+
+### Bug Fixes
+
+* resolve runtime health probe paths before isolated startup ([837e630](https://github.com/sebastienlevert/hotshot/commit/837e6302d0fbc4891ad2aa5d2238c77dc24fbe3c))
+
 ## [0.1.11](https://github.com/sebastienlevert/hotshot/compare/v0.1.10...v0.1.11) (2026-10-11)
 
 
