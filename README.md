@@ -30,8 +30,8 @@ Open the [latest release](https://github.com/sebastienlevert/hotshot/releases/la
 
 | Your Windows PC | Recommended installer | Portable alternative |
 |---|---|---|
-| Intel or AMD processor, x64 | [Hotshot-win-x64-Setup.exe](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-x64-Setup.exe) | [Hotshot-win-x64-Portable.zip](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-x64-Portable.zip) |
-| ARM processor, ARM64 | [Hotshot-win-arm64-Setup.exe](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-arm64-Setup.exe) | [Hotshot-win-arm64-Portable.zip](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-arm64-Portable.zip) |
+| Intel or AMD processor, x64 | [Hotshot-Core-win-x64-Setup.exe](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-Core-win-x64-Setup.exe) | [Hotshot-Core-win-x64-Portable.zip](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-Core-win-x64-Portable.zip) |
+| ARM processor, ARM64 | [Hotshot-Core-win-arm64-Setup.exe](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-Core-win-arm64-Setup.exe) | [Hotshot-Core-win-arm64-Portable.zip](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-Core-win-arm64-Portable.zip) |
 
 Not sure which one you need? Check **Windows Settings > System > About > System type**.
 
@@ -40,6 +40,8 @@ Run the installer and launch Hotshot. Installation is for your Windows user and 
 ### Core or Full?
 
 Releases from **0.1.14** offer two editions. **Core** is the smaller download: capture, editing, recording, OCR, comparisons, OneDrive settings, and MCP tools are included; the cloud-AI runtime is optional. Core assets have `Hotshot-Core-` in their name. **Full** includes the Copilot runtime and keeps the existing `Hotshot-win-` asset names.
+
+For Full, choose the [x64 installer](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-x64-Setup.exe) or [ARM64 installer](https://github.com/sebastienlevert/hotshot/releases/latest/download/Hotshot-win-arm64-Setup.exe); Full portable ZIPs are also on the release page. The 0.1.14 x64 Core installer is about **151 MB**, versus **206 MB** for Full.
 
 Choose one edition, not both. Both use the same native app and local data; each updates on its own architecture/edition channel. Existing Full installations remain Full and are not silently switched to Core.
 

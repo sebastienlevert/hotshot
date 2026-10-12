@@ -264,6 +264,8 @@ input[type="range"] { accent-color: var(--cp-accent); min-width: 0; width: 100%;
 .download-card .button.primary:hover .icon { stroke: var(--cp-brand-ink); }
 .portable { display: block; margin-top: 16px; color: var(--cp-brand-ink); font-size: .875rem; }
 .portable .icon { width: 16px; height: 16px; stroke: var(--cp-brand-ink); }
+.download-card .full-alternative { margin: 20px 0 0; font-size: .8125rem; color: var(--cp-brand-ink); }
+.full-alternative a { color: var(--cp-brand-ink); }
 .download-note { font-size: .8125rem; color: var(--cp-brand-ink); max-width: 100ch; margin: 24px 0 0; }
 .download-note a { color: var(--cp-brand-ink); font-weight: 650; }
 .download-section :focus-visible { outline-color: var(--cp-brand-ink); }

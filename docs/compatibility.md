@@ -6,7 +6,7 @@
 
 | Area | Evidence | What it does not prove |
 |---|---|---|
-| x64/ARM64 builds | Hosted Windows CI builds and package/protocol checks. | Physical ARM64 UI/capture/audio behavior. |
+| x64/ARM64 builds and runtime | Hosted Windows CI builds; Full/Core MCP protocol and optional-component stdio startup run natively on x64 and `windows-11-arm` for 0.1.14. | Physical ARM64 UI/capture/audio behavior. |
 | Native screenshots and video | Fixture-owned windows through real Windows.Graphics.Capture, GDI/clipboard harnesses, MP4/GIF checks, and target-state tests. | Fidelity of every GPU driver or HDR display. |
 | Native UI | Real WinUI settings/editor/comparison rendering with isolated generated library data. | Narrator user experience or every display layout. |
 | Settings roaming | Independent isolated-machine stores, offline merges/conflicts, native reload safety, and real local OneDrive file persistence. | Completed OneDrive cloud transfer or a second physical PC unless explicitly tested there. |

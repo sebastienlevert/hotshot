@@ -165,9 +165,12 @@ export function home({ base, version, logo }) {
 
 function downloadCard(architecture, title, description) {
   const file = `Hotshot-win-${architecture}`;
+  const core = `Hotshot-Core-win-${architecture}`;
   return `<article class="download-card"><div class="download-card-title"><h3>${title}</h3><span>${architecture.toUpperCase()}</span></div>
-    <p>${description}</p><a class="button primary" href="${repository}/releases/latest/download/${file}-Setup.exe">${icon('download')}Download ${architecture} installer</a>
-    <a class="portable" href="${repository}/releases/latest/download/${file}-Portable.zip">Or get the ${architecture} portable ZIP ${icon('arrow')}</a></article>`;
+    <p>${description} <strong>Core is the smaller recommended download.</strong> All local capture/editor/recording and MCP tools are included; Copilot is an optional component.</p>
+    <a class="button primary" href="${repository}/releases/latest/download/${core}-Setup.exe">${icon('download')}Download ${architecture} installer</a>
+    <a class="portable" href="${repository}/releases/latest/download/${core}-Portable.zip">Or get the ${architecture} Core portable ZIP ${icon('arrow')}</a>
+    <p class="full-alternative">Want the Copilot runtime bundled? <a href="${repository}/releases/latest/download/${file}-Setup.exe">Full installer</a> · <a href="${repository}/releases/latest/download/${file}-Portable.zip">Full portable</a>. Existing Full installs stay on Full updates.</p></article>`;
 }
 
 function workflowDemo(logo) {
