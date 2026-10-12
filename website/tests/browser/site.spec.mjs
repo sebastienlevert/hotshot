@@ -6,7 +6,11 @@ for (const theme of ['light', 'dark']) {
   test(`landing page is accessible and complete in ${theme} theme`, async ({ page }) => {
     await page.goto(`?scoutTheme=${theme}`);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Keep your momentum');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Make your');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('point.');
+    await page.evaluate(() => document.fonts.ready);
+    expect(await page.evaluate(() => document.fonts.check('800 24px "Hotshot Display"'))).toBeTruthy();
+    await expect(page.locator('html')).toHaveAttribute('data-brand', 'hotshot');
     await expect(page.getByRole('link', { name: 'Download x64 installer', exact: true })).toHaveAttribute('href', /win-x64-Setup\.exe$/);
     await expect(page.getByRole('link', { name: 'Download arm64 installer', exact: true })).toHaveAttribute('href', /win-arm64-Setup\.exe$/);
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
@@ -114,4 +118,15 @@ test('search failure is visible and recoverable instead of returning fake result
   await page.unroute('**/search.json');
   await page.getByRole('searchbox').fill('OneDrive settings');
   await expect(page.locator('.search-results a').first()).toHaveAttribute('href', /docs\/onedrive\//);
+});
+
+test('the rebrand respects reduced motion and keeps its real content at 200% text size', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('');
+  expect(await page.locator('.capture-outline').evaluate(element => getComputedStyle(element).animationName)).toBe('none');
+  await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Get Hotshot for Windows', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });

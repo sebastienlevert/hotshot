@@ -49,6 +49,12 @@ test('all documented pages, search entries, and SEO files are generated', async 
   assert.ok(searchDocuments(index, 'hotshot_capture_window').some(result => result.url.includes('agents')));
   for (const file of ['sitemap.xml', 'robots.txt', '404.html', '.nojekyll'])
     await fs.access(path.join(output, file));
+  await fs.access(path.join(output, 'assets', 'display-font-license.txt'));
+  const landing = await fs.readFile(path.join(output, 'index.html'), 'utf8');
+  assert.match(landing, /data-brand="hotshot"/);
+  assert.match(landing, /data:font\/woff2;base64,/);
+  assert.doesNotMatch(landing, /__HOTSHOT_DISPLAY_FONT__/);
+  assert.doesNotMatch(landing, /class="feature-grid"/);
 });
 
 test('all internal links, assets, fragments and search URLs resolve under the project base path', async () => {

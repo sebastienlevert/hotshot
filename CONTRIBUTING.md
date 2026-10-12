@@ -202,6 +202,8 @@ The preview is at `http://127.0.0.1:4173/hotshot/`. `npm run build` writes gener
 
 Page definitions and section mappings are in `website\src\content.mjs`. When renaming a source heading, update its mapping; the build fails if a required heading disappears. Update the common templates/theme for visual changes. Preserve the `/hotshot/` project base path for routes, search, assets, sitemap, and the 404 page. `HOTSHOT_SITE_BASE` and `HOTSHOT_SITE_ORIGIN` support another deployment location; rebuild before previewing with different values.
 
+The website's orange/coral-and-ink identity follows [Impeccable's design guidance](https://github.com/pbakaus/impeccable): expressive, editorial marketing; quieter, readable documentation. Site-specific color roles remap the shared `--cp-*` tokens instead of hardcoding component colors. Barlow Condensed is self-hosted for the wordmark and display headings; normal prose retains native typography. Only the Latin extra-bold font is embedded, and its OFL license is emitted with the site. Keep the native app's name and icon unchanged, respect reduced motion, and label the interactive example as illustrative rather than a real product screenshot.
+
 The **Website and documentation** workflow builds and checks source links/search, runs desktop/mobile browser and accessibility checks, and deploys only from `main`. Pull requests are checked without publishing. Repository Settings > Pages must use **GitHub Actions** as the source. Changes to the guides, release version, or logo also rebuild the site.
 
 ## Submit a pull request

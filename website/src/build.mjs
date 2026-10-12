@@ -69,7 +69,10 @@ async function build() {
   const version = (await fs.readFile(path.join(root, 'version.txt'), 'utf8')).trim();
   const logoBytes = await fs.readFile(path.join(root, 'src', 'Hotshot.App', 'Assets', 'Logo.png'));
   const logo = `data:image/png;base64,${logoBytes.toString('base64')}`;
-  const css = await fs.readFile(path.join(root, 'website', 'src', 'theme.css'), 'utf8');
+  const fontDirectory = path.join(root, 'website', 'node_modules', '@fontsource', 'barlow-condensed');
+  const displayFont = await fs.readFile(path.join(fontDirectory, 'files', 'barlow-condensed-latin-800-normal.woff2'));
+  const css = (await fs.readFile(path.join(root, 'website', 'src', 'theme.css'), 'utf8'))
+    .replace('__HOTSHOT_DISPLAY_FONT__', `data:font/woff2;base64,${displayFont.toString('base64')}`);
   const client = await fs.readFile(path.join(root, 'website', 'src', 'client.js'), 'utf8');
   const search = (await fs.readFile(path.join(root, 'website', 'src', 'search.mjs'), 'utf8')).replace('export function', 'function');
   const assets = { base, logo, version };
@@ -92,10 +95,10 @@ async function build() {
   function page({ title, description, route = '', content, docs = false, noindex = false }) {
     const canonical = `${origin}${base}${route}`;
     return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en" data-brand="hotshot"><head><meta charset="utf-8">
 <script>${theme}</script><script>${preferences}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}${title === 'Hotshot' ? ' — Capture fast. Keep your momentum.' : ' | Hotshot'}</title>
+<title>${escapeHtml(title)}${title === 'Hotshot' ? ' — Make your point.' : ' | Hotshot'}</title>
 <meta name="description" content="${escapeHtml(description)}">
 ${noindex ? '<meta name="robots" content="noindex">' : `<link rel="canonical" href="${canonical}">`}
 <meta property="og:type" content="website"><meta property="og:title" content="${escapeHtml(title)}">
@@ -136,6 +139,7 @@ ${header({ ...assets, docs })}${content}${footer(assets)}${searchDialog()}
   files.set('robots.txt', `User-agent: *\nAllow: ${base}\nSitemap: ${origin}${base}sitemap.xml\n`);
   files.set('.nojekyll', '');
   files.set('assets/logo.png', logoBytes);
+  files.set('assets/display-font-license.txt', await fs.readFile(path.join(fontDirectory, 'LICENSE'), 'utf8'));
   await fs.mkdir(output, { recursive: true });
   const manifestPath = path.join(output, '.generated-files.json');
   let previous = [];

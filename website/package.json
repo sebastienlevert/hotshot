@@ -9,7 +9,10 @@
     "test": "npm run build && node --test tests/site.test.mjs",
     "test:browser": "playwright test"
   },
-  "dependencies": { "marked": "18.0.14" },
+  "dependencies": {
+    "@fontsource/barlow-condensed": "5.3.0",
+    "marked": "18.0.14"
+  },
   "devDependencies": {
     "@axe-core/playwright": "4.11.1",
     "@playwright/test": "1.58.2",
