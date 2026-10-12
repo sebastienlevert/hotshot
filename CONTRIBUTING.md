@@ -23,7 +23,7 @@ Review diagnostics and screenshots before attaching them. Remove private paths, 
 
 Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and [PowerShell](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-windows) if needed. Plan for substantial free disk space: self-contained x64/ARM64 builds include native dependencies and the Copilot runtime.
 
-The repository's [global.json](global.json) selects **Microsoft Testing Platform**; it does not pin an SDK version. [dotnet-tools.json](dotnet-tools.json) pins the `vpk` packaging tool. A Copilot account is needed only for optional live AI checks, not ordinary builds or local image tests.
+The repository's [global.json](global.json) selects **.NET SDK 10.0.303**, permits newer servicing patches within that feature band, rejects prerelease SDKs, and selects **Microsoft Testing Platform**. CI installs the same SDK baseline. [dotnet-tools.json](dotnet-tools.json) pins the `vpk` packaging tool. A Copilot account is needed only for optional live AI checks, not ordinary builds or local image tests.
 
 ## Get the source and build
 
@@ -45,6 +45,28 @@ dotnet build src\Hotshot.App\Hotshot.App.csproj -c Release -p:Platform=x64
 ```
 
 ARM64 can be cross-built on x64. A successful cross-build does **not** establish runtime behavior on physical ARM64 hardware.
+
+To build every .NET project, including the integration harnesses:
+
+```powershell
+dotnet build Hotshot.slnx -c Release -p:Platform=x64 -m:1
+```
+
+The solution explicitly maps native platforms. Its ARM64 configuration excludes the four interactive harnesses that are intentionally x64-only; cross-build the native app and MCP companion separately when checking ARM64 delivery. Serial solution builds avoid competing WinUI/XAML intermediate-file writers.
+
+### Enforced .NET quality bar
+
+[Directory.Build.props](Directory.Build.props) and [.editorconfig](.editorconfig) enforce C# 14, nullable reference types, .NET 10 **Recommended** analyzers, cancellation-token forwarding, correct `ValueTask` consumption, and **warnings as errors**. Managed compilation is deterministic; CI also normalizes compiler/source-path metadata. This does not claim byte-for-byte reproducible installer archives. A clean build is required, not a growing warning baseline.
+
+Do not fix a failing gate by globally disabling a diagnostic. Correct the underlying ownership, cancellation, culture, allocation, visibility, or error-handling problem. The two window-level `CA1001` annotations explain a genuine framework boundary: WinUI owns window lifetime, and `Closed`/operation `finally` blocks release resources. They are not blanket project suppressions.
+
+Core and MCP disallow unsafe blocks. Native GDI ownership uses `SafeHandle`; COM/D3D/media buffers use deterministic ownership and exception-safe construction. Keep caller-owned objects distinct from owned resources, unwind workers before disposing their dependencies, and make repeated disposal safe.
+
+UI work may resume on the dispatcher; reusable asynchronous IO must not require a UI synchronization context. Native event handlers may be `async void`, but launched operations must be observed and errors logged/reported at an explicit boundary rather than discovered later by garbage collection. Never block the dispatcher on `.Result`, `.Wait()` or synchronous task completion.
+
+File publication must use a private, same-directory staging file, close it before replacement, honor cancellation before commit, preserve the previous destination on failure, and retain the original exception if cleanup also fails. Tests cover competing writes, cancellation, journal recovery, shared preference isolation, resource lifetimes, and encoder/decoder failures.
+
+The app assembly owns Windows App SDK initialization for the Product/Agents integration hosts. Their own duplicate initializers are disabled and their entry points explicitly initialize the referenced app module; do not mask generated type conflicts with `NoWarn`.
 
 ### Run a development copy safely
 
@@ -98,7 +120,7 @@ Show actionable errors. A protected, unavailable, or changed capture target must
 
 ### Follow the codebase
 
-Use the latest configured C#, nullable annotations, file-scoped namespaces, and sealed classes by default. Reuse existing helpers and keep changes scoped to the requested behavior.
+Use the configured C# version, nullable annotations, file-scoped namespaces, and sealed classes by default. Reuse existing helpers and keep changes scoped to the requested behavior.
 
 Win32 interop uses source-generated `[LibraryImport]` in project-specific `Native*.cs` files; COM, D3D, and Media Foundation use Vortice. Libraries must not contain `.xaml` files: build reusable library UI in code because unpackaged PRI merging is fragile. XAML is allowed in the app.
 
@@ -224,7 +246,7 @@ Explain the user-visible result, why the change is needed, how you verified it, 
 
 Before requesting review, confirm that the branch builds for the affected architectures, the relevant tests pass, no secrets/private fixtures/build outputs are included, and settings/history/permission behavior is preserved. Keep unrelated refactoring and dependency upgrades in separate PRs.
 
-The **Build and test** workflow builds x64/ARM64, checks version consistency and agent manifests, runs the x64 MCP contract and unit suites, and exercises the large-library benchmark. Native/hardware checks that cannot run in hosted CI should be described in the PR.
+The **Build and test** workflow builds every .NET project with strict analyzers on x64, builds the native app/MCP for x64/ARM64, checks version consistency and agent manifests, runs the x64 MCP contract and unit suites, and exercises the large-library benchmark. Native/hardware checks that cannot run in hosted CI should be described in the PR.
 
 ## Packaging and releases
 

@@ -13,7 +13,7 @@ public sealed class SettingsAndHistoryTests : IDisposable
     public void Dispose() => Directory.Delete(_dir, recursive: true);
 
     [Fact]
-    public void Defaults_MatchProductDecisions()
+    public void DefaultsMatchProductDecisions()
     {
         var s = new AppSettings().Normalize();
         Assert.Equal("PrintScreen", s.Hotkeys.RegionScreenshot);
@@ -32,7 +32,7 @@ public sealed class SettingsAndHistoryTests : IDisposable
     }
 
     [Fact]
-    public void SettingsStore_RoundTrips_AndRecoversFromCorruption()
+    public void SettingsStoreRoundTripsAndRecoversFromCorruption()
     {
         var store = new SettingsStore(Path.Combine(_dir, "settings.json"));
         var s = store.Load();
@@ -56,7 +56,7 @@ public sealed class SettingsAndHistoryTests : IDisposable
     }
 
     [Fact]
-    public void Settings_MissingSectionsAreFilled()
+    public void SettingsMissingSectionsAreFilled()
     {
         var s = SettingsStore.Deserialize("{\"version\":1,\"general\":{\"saveFolder\":\"\"}}");
         Assert.NotNull(s.Hotkeys);
@@ -64,7 +64,7 @@ public sealed class SettingsAndHistoryTests : IDisposable
     }
 
     [Fact]
-    public void Settings_KeepLegacyCapturesSilent_AndRoundTripTheme()
+    public void SettingsKeepLegacyCapturesSilentAndRoundTripTheme()
     {
         var settings = SettingsStore.Deserialize("""
             {"general":{"showPreview":true,"openEditorAfterCapture":true,"theme":"dark"}}
@@ -76,7 +76,7 @@ public sealed class SettingsAndHistoryTests : IDisposable
     }
 
     [Fact]
-    public void History_AddsNewestFirst_TrimsAndPrunes()
+    public void HistoryAddsNewestFirstTrimsAndPrunes()
     {
         var store = new HistoryStore(Path.Combine(_dir, "history.json"), maxItems: 3);
         var files = Enumerable.Range(0, 5).Select(i =>
@@ -104,7 +104,7 @@ public sealed class SettingsAndHistoryTests : IDisposable
     }
 
     [Fact]
-    public void History_ReAddingSamePathMovesToTop()
+    public void HistoryReAddingSamePathMovesToTop()
     {
         var store = new HistoryStore(Path.Combine(_dir, "history.json"), 10);
         store.Add(new HistoryItem { Path = "a.png" });
@@ -114,7 +114,7 @@ public sealed class SettingsAndHistoryTests : IDisposable
     }
 
     [Fact]
-    public void History_PreservesCaptureNamingContext()
+    public void HistoryPreservesCaptureNamingContext()
     {
         var path = Path.Combine(_dir, "recording.mp4");
         File.WriteAllText(path, "test");
@@ -141,7 +141,7 @@ public sealed class SettingsAndHistoryTests : IDisposable
     }
 
     [Fact]
-    public void Descriptions_AreOptIn_AndSearchableAfterReload()
+    public void DescriptionsAreOptInAndSearchableAfterReload()
     {
         var settings = SettingsStore.Deserialize("""{"general":{"describeScreenshots":true}}""");
         Assert.True(settings.General.DescribeScreenshots);

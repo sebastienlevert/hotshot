@@ -163,6 +163,7 @@ public sealed class RoamingSettingsStore
 
     public AppSettings Configure(AppSettings current, SettingsSyncMode mode, string? oneDriveRoot)
     {
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown settings sync mode.");
         lock (_gate)
         {
             if (_forceLocal) throw new InvalidOperationException("This isolated test instance uses local settings only.");

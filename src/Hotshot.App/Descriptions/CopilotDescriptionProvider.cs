@@ -3,6 +3,7 @@ using GitHub.Copilot.Rpc;
 using Hotshot.Core.Descriptions;
 using Hotshot.Core.Updates;
 using System.Runtime.InteropServices;
+using System.Globalization;
 
 namespace Hotshot.Descriptions;
 
@@ -47,7 +48,7 @@ internal sealed class CopilotDescriptionProvider(string directory, Func<string?>
                 .FirstOrDefault()
                 ?? throw new InvalidOperationException("Your Copilot account has no available image-capable model.");
             _model = selected.Id;
-            Status = $"Signed in - model: {_model}; quota multiplier: {selected.Billing?.Multiplier?.ToString() ?? "unreported"}. Remaining quota is not reported here.";
+            Status = $"Signed in - model: {_model}; quota multiplier: {selected.Billing?.Multiplier?.ToString(CultureInfo.CurrentCulture) ?? "unreported"}. Remaining quota is not reported here.";
         }
         var session = await _client.CreateSessionAsync(new SessionConfig
         {

@@ -33,7 +33,15 @@ public static class WindowScreenshot
     /// is limited to five seconds; cancellation and target changes are checked throughout.
     /// Completion is published only after native resources have been torn down.
     /// </summary>
-    public static Task<WindowScreenshotResult> CaptureAsync(nint window, CancellationToken cancellationToken = default, bool includeCursor = false)
+    public static Task<WindowScreenshotResult> CaptureAsync(nint window, CancellationToken cancellationToken) =>
+        CaptureAsync(window, includeCursor: false, cancellationToken);
+
+    /// <summary>
+    /// Captures a top-level HWND on a dedicated MTA thread. The first-frame/GPU-readback wait
+    /// is limited to five seconds; cancellation and target changes are checked throughout.
+    /// Completion is published only after native resources have been torn down.
+    /// </summary>
+    public static Task<WindowScreenshotResult> CaptureAsync(nint window, bool includeCursor = false, CancellationToken cancellationToken = default)
     {
         if (cancellationToken.IsCancellationRequested)
         {
@@ -58,7 +66,7 @@ public static class WindowScreenshot
         }
 
         var completion = new TaskCompletionSource<WindowScreenshotResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() => Run(window, identity, cancellationToken, completion, includeCursor))
+        var thread = new Thread(() => Run(window, identity, completion, includeCursor, cancellationToken))
         {
             IsBackground = true,
             Name = "Hotshot window screenshot",
@@ -68,8 +76,8 @@ public static class WindowScreenshot
         return completion.Task;
     }
 
-    private static void Run(nint window, WindowIdentity identity, CancellationToken cancellationToken,
-        TaskCompletionSource<WindowScreenshotResult> completion, bool includeCursor)
+    private static void Run(nint window, WindowIdentity identity,
+        TaskCompletionSource<WindowScreenshotResult> completion, bool includeCursor, CancellationToken cancellationToken)
     {
         try
         {
@@ -86,7 +94,7 @@ public static class WindowScreenshot
 
                 try
                 {
-                    result = CaptureCore(window, identity, cancellationToken, includeCursor);
+                    result = CaptureCore(window, identity, includeCursor, cancellationToken);
                 }
                 finally
                 {
@@ -118,7 +126,7 @@ public static class WindowScreenshot
         }
     }
 
-    private static WindowScreenshotResult CaptureCore(nint window, WindowIdentity identity, CancellationToken cancellationToken, bool includeCursor)
+    private static WindowScreenshotResult CaptureCore(nint window, WindowIdentity identity, bool includeCursor, CancellationToken cancellationToken)
     {
         bool supported;
         try

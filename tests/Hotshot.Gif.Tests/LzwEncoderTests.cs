@@ -11,7 +11,7 @@ public sealed class LzwEncoderTests
     [InlineData(4, 300, 200)]
     [InlineData(8, 641, 359)]
     [InlineData(8, 1000, 1000)]
-    public void RandomData_RoundTrips(int minCodeSize, int width, int height)
+    public void RandomDataRoundTrips(int minCodeSize, int width, int height)
     {
         var random = new Random(minCodeSize * 7919 + width);
         int alphabet = 1 << minCodeSize;
@@ -25,7 +25,7 @@ public sealed class LzwEncoderTests
     }
 
     [Fact]
-    public void LowEntropyData_WithLongStrings_RoundTrips()
+    public void LowEntropyDataWithLongStringsRoundTrips()
     {
         // Runs and repeated patterns produce long dictionary strings, code width growth to 12 bits and table resets.
         const int width = 2000, height = 700;
@@ -45,14 +45,14 @@ public sealed class LzwEncoderTests
     }
 
     [Fact]
-    public void UniformData_RoundTrips()
+    public void UniformDataRoundTrips()
     {
         var indices = new byte[1920 * 1080];
         AssertRoundTrip(indices, 1920, 1080, 2);
     }
 
     [Fact]
-    public void SubRectangle_WithStride_RoundTrips()
+    public void SubRectangleWithStrideRoundTrips()
     {
         const int stride = 50;
         var random = new Random(7);
@@ -69,7 +69,7 @@ public sealed class LzwEncoderTests
     }
 
     [Fact]
-    public void Output_UsesSubBlocksOfAtMost255Bytes()
+    public void OutputUsesSubBlocksOfAtMost255Bytes()
     {
         var random = new Random(3);
         var indices = new byte[100_000];

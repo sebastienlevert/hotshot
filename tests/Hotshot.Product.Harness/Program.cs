@@ -12,6 +12,8 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // The referenced app module is the sole owner of Windows App SDK initialization.
+        System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(typeof(AppServices).Module.ModuleHandle);
         if (args.Length is not (2 or 3) || args[0] != "--output" || !Path.IsPathFullyQualified(args[1]) ||
             args.Length == 3 && args[2] != "--settings-header-only")
             throw new ArgumentException("Use --output <absolute task-owned media directory> [--settings-header-only].");

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -108,6 +109,11 @@ public sealed class HistoryStore
         lock (_gate)
         {
             _search = null;
+            _dirty.Clear();
+            _removed.Clear();
+            _journalRecords = 0;
+            _recoveredCorruptFile = false;
+            LastError = null;
             try
             {
                 _writeBlocked = false;
@@ -117,7 +123,7 @@ public sealed class HistoryStore
             }
             catch (JsonException ex)
             {
-                var corrupt = _path + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N")[..8];
+                var corrupt = _path + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8];
                 try
                 {
                     File.Copy(_path, corrupt);
@@ -168,22 +174,32 @@ public sealed class HistoryStore
 
     public void Add(HistoryItem item)
     {
+        ValidateItem(item);
         List<HistoryItem> removed;
+        bool persisted;
         lock (_gate)
         {
-            _items.RemoveAll(i => string.Equals(i.Path, item.Path, StringComparison.OrdinalIgnoreCase));
+            foreach (var existing in _items.Where(i => i.Id == item.Id ||
+                string.Equals(i.Path, item.Path, StringComparison.OrdinalIgnoreCase)))
+            {
+                _removed.Add(existing.Id);
+                _dirty.Remove(existing.Id);
+            }
+            _items.RemoveAll(i => i.Id == item.Id || string.Equals(i.Path, item.Path, StringComparison.OrdinalIgnoreCase));
             _items.Insert(0, item);
+            _removed.Remove(item.Id);
             _dirty.Add(item.Id);
             removed = Trim();
-            SaveLocked();
+            persisted = SaveLocked();
         }
 
-        DeleteArtifacts(removed);
+        if (persisted) DeleteArtifacts(removed);
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
     public void Update(HistoryItem item)
     {
+        ValidateItem(item);
         lock (_gate)
         {
             var index = _items.FindIndex(i => i.Id == item.Id);
@@ -319,6 +335,7 @@ public sealed class HistoryStore
     public void Remove(string id)
     {
         HistoryItem? removed;
+        bool persisted;
         lock (_gate)
         {
             removed = _items.FirstOrDefault(i => i.Id == id);
@@ -330,10 +347,10 @@ public sealed class HistoryStore
             _items.Remove(removed);
             _removed.Add(removed.Id);
             _dirty.Remove(removed.Id);
-            SaveLocked();
+            persisted = SaveLocked();
         }
 
-        DeleteArtifacts([removed]);
+        if (persisted) DeleteArtifacts([removed]);
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -341,6 +358,7 @@ public sealed class HistoryStore
     public void Prune()
     {
         List<HistoryItem> removed;
+        var persisted = false;
         lock (_gate)
         {
             removed = _items.Where(i => (!KeepSavedCaptures || i.IsTemporary) && !File.Exists(i.Path)).ToList();
@@ -349,13 +367,13 @@ public sealed class HistoryStore
             removed.AddRange(Trim());
             if (removed.Count > 0)
             {
-                SaveLocked();
+                persisted = SaveLocked();
             }
         }
 
         if (removed.Count > 0)
         {
-            DeleteArtifacts(removed);
+            if (persisted) DeleteArtifacts(removed);
             Changed?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -368,13 +386,13 @@ public sealed class HistoryStore
         return extra;
     }
 
-    private void SaveLocked()
+    private bool SaveLocked()
     {
         _search = null;
         if (_writeBlocked)
         {
             Report("History changes are in memory only. Fix the read/recovery failure and restart Hotshot before saving the library.");
-            return;
+            return false;
         }
         try
         {
@@ -389,11 +407,13 @@ public sealed class HistoryStore
             }
             _dirty.Clear(); _removed.Clear();
             LastError = null;
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
             _writeBlocked = true;
             Report($"The capture file is safe, but library changes could not be saved: {ex.Message}");
+            return false;
         }
     }
 
@@ -428,9 +448,10 @@ public sealed class HistoryStore
 
     public void AddRange(IEnumerable<HistoryItem> items)
     {
+        ArgumentNullException.ThrowIfNull(items);
         var added = items.ToArray();
-        if (added.Any(item => string.IsNullOrWhiteSpace(item.Id) || string.IsNullOrWhiteSpace(item.Path)) ||
-            added.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != added.Length)
+        foreach (var item in added) ValidateItem(item);
+        if (added.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != added.Length)
             throw new ArgumentException("Invalid or duplicate capture IDs.");
         lock (_gate)
         {
@@ -488,6 +509,13 @@ public sealed class HistoryStore
         return items;
     }
 
+    private static void ValidateItem(HistoryItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (string.IsNullOrWhiteSpace(item.Id) || string.IsNullOrWhiteSpace(item.Path))
+            throw new ArgumentException("Capture ID and path must not be empty.", nameof(item));
+    }
+
     private void DeleteArtifacts(IEnumerable<HistoryItem> items)
     {
         foreach (var item in items)
@@ -507,13 +535,18 @@ public sealed class HistoryStore
             return;
         }
 
-        try
+        lock (_gate)
         {
-            File.Delete(path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Report($"Could not remove a capture artifact: {ex.Message}");
+            if (_items.Any(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(item.ThumbnailPath, path, StringComparison.OrdinalIgnoreCase))) return;
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Report($"Could not remove a capture artifact: {ex.Message}");
+            }
         }
     }
 }

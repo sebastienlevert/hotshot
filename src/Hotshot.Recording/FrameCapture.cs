@@ -68,11 +68,31 @@ internal sealed class FrameCapture : IDisposable
         _sourceY = source.Y;
 
         var description = new Texture2DDescription(Format.B8G8R8A8_UNorm, (uint)Width, (uint)Height, 1, 1, BindFlags.RenderTarget | BindFlags.ShaderResource, ResourceUsage.Default, CpuAccessFlags.None, 1, 0, ResourceOptionFlags.None);
-        Latest = device.CreateTexture2D(description);
-        _latestView = device.CreateRenderTargetView(Latest);
-        lock (_gpuLock)
+        var latest = device.CreateTexture2D(description);
+        ID3D11RenderTargetView? latestView = null;
+        try
         {
-            _context.ClearRenderTargetView(_latestView, new Color4(0, 0, 0, 1));
+            latestView = device.CreateRenderTargetView(latest);
+            lock (_gpuLock)
+            {
+                _context.ClearRenderTargetView(latestView, new Color4(0, 0, 0, 1));
+            }
+
+            Latest = latest;
+            _latestView = latestView;
+        }
+        catch
+        {
+            try
+            {
+                latestView?.Dispose();
+            }
+            finally
+            {
+                latest.Dispose();
+            }
+
+            throw;
         }
 
         _frameArrivedHandler = OnFrameArrived;

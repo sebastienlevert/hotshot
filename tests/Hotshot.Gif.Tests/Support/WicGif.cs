@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
@@ -40,19 +41,19 @@ internal sealed class WicGif
                 PixelWidth = (int)frame.PixelWidth,
                 PixelHeight = (int)frame.PixelHeight,
                 Pixels = pixels.DetachPixelData(),
-                Delay = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/grctlext/Delay") ?? -1),
-                Left = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/imgdesc/Left") ?? -1),
-                Top = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/imgdesc/Top") ?? -1),
-                DescriptorWidth = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/imgdesc/Width") ?? -1),
-                DescriptorHeight = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/imgdesc/Height") ?? -1),
+                Delay = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/grctlext/Delay") ?? -1, CultureInfo.InvariantCulture),
+                Left = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/imgdesc/Left") ?? -1, CultureInfo.InvariantCulture),
+                Top = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/imgdesc/Top") ?? -1, CultureInfo.InvariantCulture),
+                DescriptorWidth = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/imgdesc/Width") ?? -1, CultureInfo.InvariantCulture),
+                DescriptorHeight = Convert.ToInt32(await TryGetAsync(frame.BitmapProperties, "/imgdesc/Height") ?? -1, CultureInfo.InvariantCulture),
             });
         }
 
         return new WicGif
         {
             FrameCount = decoder.FrameCount,
-            LogicalWidth = Convert.ToInt32(await TryGetAsync(container, "/logscrdesc/Width") ?? -1),
-            LogicalHeight = Convert.ToInt32(await TryGetAsync(container, "/logscrdesc/Height") ?? -1),
+            LogicalWidth = Convert.ToInt32(await TryGetAsync(container, "/logscrdesc/Width") ?? -1, CultureInfo.InvariantCulture),
+            LogicalHeight = Convert.ToInt32(await TryGetAsync(container, "/logscrdesc/Height") ?? -1, CultureInfo.InvariantCulture),
             ApplicationId = await TryGetAsync(container, "/appext/Application") as byte[],
             ApplicationData = await TryGetAsync(container, "/appext/Data") as byte[],
             Frames = frames,

@@ -49,8 +49,8 @@ public sealed class ScreenRecorder : IAsyncDisposable
     private long _adapterLuid;
     private bool _mfAcquired;
     private bool _paused;
-    private bool _microphoneMuted;
-    private bool _systemAudioMuted;
+    private volatile bool _microphoneMuted;
+    private volatile bool _systemAudioMuted;
     private volatile bool _stopping;
     private Task<RecordingResult>? _stopTask;
     private int _targetClosedRaised;
@@ -108,9 +108,10 @@ public sealed class ScreenRecorder : IAsyncDisposable
         set
         {
             _microphoneMuted = value;
-            if (_microphone is not null)
+            var microphone = _microphone;
+            if (microphone is not null)
             {
-                _microphone.Muted = value;
+                microphone.Muted = value;
             }
         }
     }
@@ -121,9 +122,10 @@ public sealed class ScreenRecorder : IAsyncDisposable
         set
         {
             _systemAudioMuted = value;
-            if (_systemAudio is not null)
+            var systemAudio = _systemAudio;
+            if (systemAudio is not null)
             {
-                _systemAudio.Muted = value;
+                systemAudio.Muted = value;
             }
         }
     }
@@ -297,13 +299,14 @@ public sealed class ScreenRecorder : IAsyncDisposable
             _runSignal.Set();
         }
 
-        _videoThread = new Thread(VideoLoop)
+        var videoThread = new Thread(VideoLoop)
         {
             IsBackground = true,
             Name = "Hotshot video pump",
             Priority = ThreadPriority.AboveNormal,
         };
-        _videoThread.Start();
+        videoThread.Start();
+        _videoThread = videoThread;
         _audioPump?.Start();
     }
 
@@ -563,8 +566,13 @@ public sealed class ScreenRecorder : IAsyncDisposable
     /// <summary>Releases every native resource. Safe on partially initialized instances.</summary>
     private void Teardown()
     {
+        _clock.Pause();
         _stopping = true;
         _runSignal.Set();
+        _videoThread?.Join();
+        _videoThread = null;
+        _audioPump?.Dispose();
+        _audioPump = null;
         foreach (var source in _audioSources)
         {
             source.Dispose();
@@ -599,6 +607,8 @@ public sealed class ScreenRecorder : IAsyncDisposable
             _mfAcquired = false;
             MediaFoundationRuntime.Release();
         }
+
+        _runSignal.Dispose();
     }
 
     private void RaiseTargetClosed()

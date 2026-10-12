@@ -16,7 +16,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     public void Dispose() => Directory.Delete(_directory, true);
 
     [Fact]
-    public void Metadata_RoundTripsUnicode_WithoutChangingPixels()
+    public void MetadataRoundTripsUnicodeWithoutChangingPixels()
     {
         var png = Png();
         var description = new CaptureDescription("A caf\u00e9 chart", "A blue chart beside a \u732b icon.");
@@ -30,7 +30,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     }
 
     [Fact]
-    public void Metadata_RejectsMalformedPng_AndInvalidModelOutput()
+    public void MetadataRejectsMalformedPngAndInvalidModelOutput()
     {
         Assert.Throws<InvalidDataException>(() => PngDescriptionMetadata.Read([1, 2, 3]));
         var png = Png();
@@ -43,7 +43,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     }
 
     [Fact]
-    public async Task OptOut_DoesNotCreateProvider_OrChangeTheImage()
+    public async Task OptOutDoesNotCreateProviderOrChangeTheImage()
     {
         var (history, item) = Fixture();
         var original = await File.ReadAllBytesAsync(item.Path, TestContext.Current.CancellationToken);
@@ -54,7 +54,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     }
 
     [Fact]
-    public async Task Description_IsEmbedded_Indexed_AndPreservedByEditorSave()
+    public async Task DescriptionIsEmbeddedIndexedAndPreservedByEditorSave()
     {
         var (history, item) = Fixture();
         var description = new CaptureDescription("Revenue chart", "A chart of monthly revenue.");
@@ -71,7 +71,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     }
 
     [Fact]
-    public async Task Disabling_CancelsRequests_AndLeavesTheSavedImageIntact()
+    public async Task DisablingCancelsRequestsAndLeavesTheSavedImageIntact()
     {
         var (history, item) = Fixture();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -112,7 +112,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     }
 
     [Fact]
-    public async Task ImageChangedDuringDescription_IsReprocessedWithoutOverwritingEdits()
+    public async Task ImageChangedDuringDescriptionIsReprocessedWithoutOverwritingEdits()
     {
         var (history, item) = Fixture();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -140,7 +140,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     }
 
     [Fact]
-    public async Task Shutdown_PreservesPendingWorkForNextLaunch()
+    public async Task ShutdownPreservesPendingWorkForNextLaunch()
     {
         var (history, item) = Fixture();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -159,7 +159,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     }
 
     [Fact]
-    public async Task Failure_IsVisible_WithoutLosingCapture()
+    public async Task FailureIsVisibleWithoutLosingCapture()
     {
         var (history, item) = Fixture();
         await using var service = new ScreenshotDescriptions(history,
@@ -173,7 +173,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
     }
 
     [Fact]
-    public async Task RedactionSave_RemovesOldDescriptionAndRecognizedText()
+    public async Task RedactionSaveRemovesOldDescriptionAndRecognizedText()
     {
         var (history, item) = Fixture();
         await using var service = new ScreenshotDescriptions(history,
@@ -213,6 +213,40 @@ public sealed class ScreenshotDescriptionTests : IDisposable
         });
         Assert.True(await service.EnqueueAsync(item));
         Assert.Equal(2, created);
+    }
+
+    [Fact]
+    public async Task AtomicCommitFailureRemainsPrimaryWhenStagingCleanupAlsoFails()
+    {
+        var destination = Path.Combine(_directory, "directory-instead-of-image.png");
+        Directory.CreateDirectory(destination);
+        var cleanupError = new IOException("Synthetic staging cleanup failure.");
+
+        var error = await Record.ExceptionAsync(() => ScreenshotDescriptions.WriteAtomicAsync(
+            destination, Png(), _ => throw cleanupError, TestContext.Current.CancellationToken));
+
+        Assert.NotNull(error);
+        Assert.True(error is IOException or UnauthorizedAccessException);
+        Assert.NotSame(cleanupError, error);
+        Assert.Same(cleanupError, error.Data["Hotshot.AtomicWriteCleanupError"]);
+        Assert.True(Directory.Exists(destination));
+        Assert.Single(Directory.GetFiles(_directory, "*.tmp"));
+    }
+
+    [Fact]
+    public async Task AtomicCancellationPreservesExistingImageAndLeavesNoStagingFile()
+    {
+        var (_, item) = Fixture();
+        var original = File.ReadAllBytes(item.Path);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            ScreenshotDescriptions.WriteAtomicAsync(item.Path, [1, 2, 3], File.Delete, cancellation.Token));
+
+        Assert.Equal(cancellation.Token, error.CancellationToken);
+        Assert.Equal(original, File.ReadAllBytes(item.Path));
+        Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
     }
 
     private (HistoryStore History, HistoryItem Item) Fixture()

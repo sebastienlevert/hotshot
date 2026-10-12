@@ -57,17 +57,28 @@ internal sealed class CaptureActions(AppServices app)
 
     public void CopyPath(HistoryItem item) => ClipboardService.SetText(app.MessageWindowHandle, item.Path);
 
-    public void Open(HistoryItem item) => OpenPath(item.Path);
+    public void Open(HistoryItem item)
+    {
+        if (!OpenPath(item.Path)) Failed?.Invoke("The capture could not be opened. See the diagnostic log.");
+    }
 
     public void ShowInFolder(HistoryItem item)
     {
-        if (File.Exists(item.Path))
+        try
         {
-            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{item.Path}\"") { UseShellExecute = true });
+            if (File.Exists(item.Path))
+            {
+                using var process = Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{item.Path}\"") { UseShellExecute = true });
+            }
+            else if (!OpenFolder(Path.GetDirectoryName(item.Path)!))
+            {
+                Failed?.Invoke("The capture folder could not be opened. See the diagnostic log.");
+            }
         }
-        else
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or InvalidOperationException or ArgumentException)
         {
-            OpenFolder(Path.GetDirectoryName(item.Path)!);
+            Log.Error("Could not show the capture in its folder", ex);
+            Failed?.Invoke($"The capture folder could not be opened: {ex.Message}");
         }
     }
 
@@ -95,27 +106,31 @@ internal sealed class CaptureActions(AppServices app)
         OpenFolder(folder);
     }
 
-    public static void OpenPath(string path)
+    public static bool OpenPath(string path)
     {
         try
         {
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            using var process = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            return true;
         }
         catch (Exception ex)
         {
             Log.Error($"Could not open {path}", ex);
+            return false;
         }
     }
 
-    public static void OpenFolder(string folder)
+    public static bool OpenFolder(string folder)
     {
         try
         {
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+            using var process = Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+            return true;
         }
         catch (Exception ex)
         {
             Log.Error($"Could not open {folder}", ex);
+            return false;
         }
     }
 

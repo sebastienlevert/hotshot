@@ -11,7 +11,7 @@ public sealed class HotkeyTests
     [InlineData("Win+Alt+F12", HotkeyModifiers.Win | HotkeyModifiers.Alt, 0x7B)]
     [InlineData("Ctrl+Shift+2", HotkeyModifiers.Ctrl | HotkeyModifiers.Shift, 0x32)]
     [InlineData("Control+0x2C", HotkeyModifiers.Ctrl, 0x2C)]
-    public void Parse_Valid(string text, HotkeyModifiers modifiers, int key)
+    public void ParseValid(string text, HotkeyModifiers modifiers, int key)
     {
         Assert.True(Hotkey.TryParse(text, out var hotkey));
         Assert.Equal(new Hotkey(modifiers, key), hotkey);
@@ -21,13 +21,13 @@ public sealed class HotkeyTests
     [InlineData("Ctrl")]
     [InlineData("Ctrl+A+B")]
     [InlineData("Ctrl+Banana")]
-    public void Parse_Invalid(string text)
+    public void ParseInvalid(string text)
     {
         Assert.False(Hotkey.TryParse(text, out _));
     }
 
     [Fact]
-    public void Empty_IsValidAndEmpty()
+    public void EmptyIsValidAndEmpty()
     {
         Assert.True(Hotkey.TryParse("", out var hotkey));
         Assert.True(hotkey.IsEmpty);
@@ -35,7 +35,7 @@ public sealed class HotkeyTests
     }
 
     [Fact]
-    public void ToString_RoundTrips_InCanonicalOrder()
+    public void ToStringRoundTripsInCanonicalOrder()
     {
         var hotkey = Hotkey.Parse("shift+win+ctrl+alt+s");
         Assert.Equal("Ctrl+Alt+Shift+Win+S", hotkey.ToString());
@@ -44,7 +44,7 @@ public sealed class HotkeyTests
     }
 
     [Fact]
-    public void DisplayString_UsesFriendlyLabels()
+    public void DisplayStringUsesFriendlyLabels()
     {
         Assert.Equal("Ctrl + Shift + PrtScn", Hotkey.Parse("Ctrl+Shift+PrintScreen").ToDisplayString());
     }

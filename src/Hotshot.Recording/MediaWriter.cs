@@ -195,20 +195,28 @@ internal sealed unsafe class MediaWriter : IDisposable
     private IMFMediaType CreateVideoInputType(int fps, bool gpu)
     {
         var type = MediaFactory.MFCreateMediaType();
-        type.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Video);
-        // ARGB32 maps to DXGI_FORMAT_B8G8R8A8_UNORM, the WGC frame format; RGB32 + positive stride = top-down BGRX in memory.
-        type.Set(MediaTypeAttributeKeys.Subtype, gpu ? VideoFormatGuids.Argb32 : VideoFormatGuids.Rgb32);
-        type.Set(MediaTypeAttributeKeys.InterlaceMode, InterlaceProgressive);
-        MediaFactory.MFSetAttributeSize(type, MediaTypeAttributeKeys.FrameSize, (uint)_width, (uint)_height);
-        MediaFactory.MFSetAttributeRatio(type, MediaTypeAttributeKeys.FrameRate, (uint)fps, 1);
-        MediaFactory.MFSetAttributeRatio(type, MediaTypeAttributeKeys.PixelAspectRatio, 1, 1);
-        if (!gpu)
+        try
         {
-            type.Set(MediaTypeAttributeKeys.DefaultStride, (uint)(_width * 4));
-            type.Set(MediaTypeAttributeKeys.AllSamplesIndependent, 1u);
-        }
+            type.Set(MediaTypeAttributeKeys.MajorType, MediaTypeGuids.Video).CheckError();
+            // ARGB32 maps to DXGI_FORMAT_B8G8R8A8_UNORM, the WGC frame format; RGB32 + positive stride = top-down BGRX in memory.
+            type.Set(MediaTypeAttributeKeys.Subtype, gpu ? VideoFormatGuids.Argb32 : VideoFormatGuids.Rgb32).CheckError();
+            type.Set(MediaTypeAttributeKeys.InterlaceMode, InterlaceProgressive).CheckError();
+            MediaFactory.MFSetAttributeSize(type, MediaTypeAttributeKeys.FrameSize, (uint)_width, (uint)_height).CheckError();
+            MediaFactory.MFSetAttributeRatio(type, MediaTypeAttributeKeys.FrameRate, (uint)fps, 1).CheckError();
+            MediaFactory.MFSetAttributeRatio(type, MediaTypeAttributeKeys.PixelAspectRatio, 1, 1).CheckError();
+            if (!gpu)
+            {
+                type.Set(MediaTypeAttributeKeys.DefaultStride, (uint)(_width * 4)).CheckError();
+                type.Set(MediaTypeAttributeKeys.AllSamplesIndependent, 1u).CheckError();
+            }
 
-        return type;
+            return type;
+        }
+        catch
+        {
+            type.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -296,8 +304,16 @@ internal sealed unsafe class MediaWriter : IDisposable
 
             buffer.CurrentLength = size;
             var sample = MediaFactory.MFCreateSample();
-            sample.AddBuffer(buffer);
-            return sample;
+            try
+            {
+                sample.AddBuffer(buffer);
+                return sample;
+            }
+            catch
+            {
+                sample.Dispose();
+                throw;
+            }
         }
         finally
         {

@@ -6,7 +6,7 @@ namespace Hotshot.Editor.Tests;
 public sealed class EditorStateTests
 {
     [Fact]
-    public void Style_change_updates_selection_with_undo_and_tool_style()
+    public void StyleChangeUpdatesSelectionWithUndoAndToolStyle()
     {
         var doc = new AnnotationDocument(800, 600);
         var state = new EditorState(doc);
@@ -29,7 +29,7 @@ public sealed class EditorStateTests
     }
 
     [Fact]
-    public void Style_without_selection_only_changes_tool_style()
+    public void StyleWithoutSelectionOnlyChangesToolStyle()
     {
         var doc = new AnnotationDocument(800, 600);
         var state = new EditorState(doc) { Tool = EditorTool.Rectangle };
@@ -43,7 +43,7 @@ public sealed class EditorStateTests
     }
 
     [Fact]
-    public void Font_size_applies_to_text_and_steps()
+    public void FontSizeAppliesToTextAndSteps()
     {
         var doc = new AnnotationDocument(800, 600);
         var state = new EditorState(doc) { Tool = EditorTool.Step };
@@ -55,7 +55,7 @@ public sealed class EditorStateTests
     }
 
     [Fact]
-    public void Delete_selected_clears_selection_and_undo_restores()
+    public void DeleteSelectedClearsSelectionAndUndoRestores()
     {
         var doc = new AnnotationDocument(800, 600);
         var state = new EditorState(doc);
@@ -70,7 +70,7 @@ public sealed class EditorStateTests
     }
 
     [Fact]
-    public void Selection_is_dropped_when_undo_removes_it()
+    public void SelectionIsDroppedWhenUndoRemovesIt()
     {
         var doc = new AnnotationDocument(800, 600);
         var state = new EditorState(doc);

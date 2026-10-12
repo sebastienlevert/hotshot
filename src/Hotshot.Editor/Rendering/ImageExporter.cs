@@ -101,18 +101,21 @@ internal static class ImageExporter
             Directory.CreateDirectory(directory);
         }
 
-        var temp = path + ".tmp-" + Guid.NewGuid().ToString("N")[..8];
+        var destination = Path.GetFullPath(path);
+        var temp = destination + ".tmp-" + Guid.NewGuid().ToString("N");
         try
         {
             await File.WriteAllBytesAsync(temp, bytes);
-            File.Move(temp, path, overwrite: true);
+            File.Move(temp, destination, overwrite: true);
         }
-        finally
+        catch
         {
-            if (File.Exists(temp))
+            try { File.Delete(temp); }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
             {
-                File.Delete(temp);
+                System.Diagnostics.Trace.TraceWarning("Could not remove failed editor staging file: {0}", cleanup.Message);
             }
+            throw;
         }
     }
 }

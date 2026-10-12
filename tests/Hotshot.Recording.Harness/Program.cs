@@ -8,6 +8,12 @@ using Vortice.MediaFoundation;
 const double DurationTolerance = 0.6;
 bool windowOnly = args.Contains("--window-only", StringComparer.OrdinalIgnoreCase);
 
+if (args.Contains("--managed-checks", StringComparer.OrdinalIgnoreCase))
+{
+    await ManagedChecks.RunAsync();
+    return 0;
+}
+
 if (args.Contains("--window-screenshot", StringComparer.OrdinalIgnoreCase))
 {
     Native.SetProcessDpiAwarenessContext(Native.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -345,7 +351,8 @@ return results.All(r => r.Passed) ? 0 : 1;
 
 async Task Run(string name, Func<Task<string>> scenario)
 {
-    if (windowOnly && (name.StartsWith("1.") || name.StartsWith("2.") || name.StartsWith("7.") || name.StartsWith("8.")))
+    if (windowOnly && (name.StartsWith("1.", StringComparison.Ordinal) || name.StartsWith("2.", StringComparison.Ordinal) ||
+        name.StartsWith("7.", StringComparison.Ordinal) || name.StartsWith("8.", StringComparison.Ordinal)))
     {
         Console.WriteLine($"SKIP {name} (--window-only)");
         return;

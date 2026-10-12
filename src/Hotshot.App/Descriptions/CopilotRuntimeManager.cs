@@ -70,7 +70,7 @@ internal sealed class CopilotRuntimeManager : IDisposable
         {
             await Task.Run(() => _store.InstallAsync(new ReleaseAssetDownloader(_http), TestRuntimeAsync,
                 progress, cancellationToken), cancellationToken);
-            await RefreshAsync();
+            await RefreshAsync(CancellationToken.None);
         }
         finally { StatusChanged?.Invoke(); }
     }

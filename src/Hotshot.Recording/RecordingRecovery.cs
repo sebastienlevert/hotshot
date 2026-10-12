@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Windows.Storage;
@@ -14,10 +15,18 @@ public static class RecordingRecovery
     public static async Task BeginAsync(string journal, PendingRecording recording)
     {
         if (File.Exists(journal)) throw new InvalidOperationException("An interrupted recording needs review. Recover it or dismiss its notice in the workspace before starting another recording.");
-        Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
-        var temp = journal + ".tmp";
-        await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(recording, RecoveryJsonContext.Default.PendingRecording));
-        File.Move(temp, journal, overwrite: true);
+        var fullPath = Path.GetFullPath(journal);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        var temp = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await File.WriteAllTextAsync(temp, JsonSerializer.Serialize(recording, RecoveryJsonContext.Default.PendingRecording));
+            File.Move(temp, fullPath, overwrite: false);
+        }
+        finally
+        {
+            if (File.Exists(temp)) File.Delete(temp);
+        }
     }
 
     public static async Task<RecordingResult?> InspectAsync(string journal)
@@ -39,6 +48,6 @@ public static class RecordingRecovery
     public static void Dismiss(string journal)
     {
         if (!File.Exists(journal)) throw new FileNotFoundException("No recovery notice exists.");
-        File.Move(journal, journal + ".archived-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N")[..8]);
+        File.Move(journal, journal + ".archived-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8]);
     }
 }

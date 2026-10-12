@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using Hotshot.Interop;
 
 namespace Hotshot.Capture;
@@ -7,8 +8,7 @@ namespace Hotshot.Capture;
 /// <summary>A 32bpp top-down DIB section selected into its own memory DC.</summary>
 public sealed unsafe class GdiBitmap : IDisposable
 {
-    private readonly nint _oldBitmap;
-    private bool _disposed;
+    private readonly BitmapDcHandle _resource;
 
     public GdiBitmap(int width, int height)
     {
@@ -16,11 +16,12 @@ public sealed unsafe class GdiBitmap : IDisposable
         ArgumentOutOfRangeException.ThrowIfLessThan(height, 1);
         Width = width;
         Height = height;
+        _ = checked(checked(width * 4) * height);
 
-        var screen = Native.GetDC(0);
+        using var screen = new ScreenDcHandle();
+        _resource = new BitmapDcHandle(screen.DangerousGetHandle());
         try
         {
-            Dc = Native.CreateCompatibleDC(screen);
             var header = new BITMAPINFOHEADER
             {
                 biSize = sizeof(BITMAPINFOHEADER),
@@ -30,30 +31,23 @@ public sealed unsafe class GdiBitmap : IDisposable
                 biBitCount = 32,
                 biCompression = Native.BI_RGB,
             };
-            Handle = Native.CreateDIBSection(screen, &header, Native.DIB_RGB_COLORS, out var bits, 0, 0);
-            if (Handle == 0 || Dc == 0)
-            {
-                Native.DeleteDC(Dc);
-                throw new InvalidOperationException($"Could not allocate a {width}x{height} bitmap.");
-            }
-
-            Bits = (byte*)bits;
-            _oldBitmap = Native.SelectObject(Dc, Handle);
+            _resource.CreateBitmap(screen.DangerousGetHandle(), &header);
         }
-        finally
+        catch
         {
-            Native.ReleaseDC(0, screen);
+            _resource.Dispose();
+            throw;
         }
     }
 
     public int Width { get; }
     public int Height { get; }
     public int Stride => Width * 4;
-    public nint Dc { get; }
-    public nint Handle { get; }
-    public byte* Bits { get; }
+    public nint Dc { get { ThrowIfDisposed(); return _resource.DangerousGetHandle(); } }
+    public nint Handle { get { ThrowIfDisposed(); return _resource.Bitmap; } }
+    public byte* Bits { get { ThrowIfDisposed(); return _resource.Bits; } }
 
-    public Span<byte> Span => new(Bits, Stride * Height);
+    public Span<byte> Span => new(Bits, checked(Stride * Height));
 
     /// <summary>Copies a sub-rectangle (in bitmap coordinates) into a managed, opaque BGRA image.</summary>
     public CapturedImage Copy(PixelRect area)
@@ -64,7 +58,7 @@ public sealed unsafe class GdiBitmap : IDisposable
             throw new ArgumentException("The requested area is outside the captured image.", nameof(area));
         }
 
-        Native.GdiFlush();
+        if (!Native.GdiFlush()) throw new InvalidOperationException("GDI could not finish copying the capture pixels.");
         var rowBytes = area.Width * 4;
         var pixels = new byte[rowBytes * area.Height];
         for (var y = 0; y < area.Height; y++)
@@ -74,13 +68,14 @@ public sealed unsafe class GdiBitmap : IDisposable
         }
 
         CapturedImage.ForceOpaque(pixels);
+        GC.KeepAlive(_resource);
         return new CapturedImage(area.Width, area.Height, pixels);
     }
 
     /// <summary>Creates a darker copy of this bitmap (used as the overlay backdrop).</summary>
     public GdiBitmap CreateDimmedCopy(byte keep = 140)
     {
-        Native.GdiFlush();
+        if (!Native.GdiFlush()) throw new InvalidOperationException("GDI could not finish preparing the capture backdrop.");
         var copy = new GdiBitmap(Width, Height);
         var src = Span;
         var dst = copy.Span;
@@ -107,23 +102,56 @@ public sealed unsafe class GdiBitmap : IDisposable
         return copy;
     }
 
-    public void Dispose()
+    public void Dispose() => _resource.Dispose();
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_resource.IsClosed, this);
+
+    private sealed class BitmapDcHandle : SafeHandleZeroOrMinusOneIsInvalid
     {
-        if (_disposed)
+        private nint _previous;
+        internal nint Bitmap { get; private set; }
+        internal byte* Bits { get; private set; }
+
+        internal BitmapDcHandle(nint screen) : base(ownsHandle: true)
         {
-            return;
+            SetHandle(Native.CreateCompatibleDC(screen));
+            if (IsInvalid) throw new InvalidOperationException("GDI could not allocate a capture device context.");
         }
 
-        _disposed = true;
-        Native.SelectObject(Dc, _oldBitmap);
-        Native.DeleteObject(Handle);
-        Native.DeleteDC(Dc);
-        GC.SuppressFinalize(this);
+        internal void CreateBitmap(nint screen, BITMAPINFOHEADER* header)
+        {
+            Bitmap = Native.CreateDIBSection(screen, header, Native.DIB_RGB_COLORS, out var bits, 0, 0);
+            if (Bitmap == 0) throw new InvalidOperationException("GDI could not allocate a capture bitmap.");
+            _previous = Native.SelectObject(handle, Bitmap);
+            if (_previous == 0 || _previous == -1)
+                throw new InvalidOperationException("GDI could not select the capture bitmap.");
+            Bits = (byte*)bits;
+        }
+
+        protected override bool ReleaseHandle()
+        {
+            if (_previous != 0 && _previous != -1) Native.SelectObject(handle, _previous);
+            var released = Bitmap == 0 || Native.DeleteObject(Bitmap);
+            released = Native.DeleteDC(handle) && released;
+            if (!released) System.Diagnostics.Trace.TraceWarning("GDI could not release a capture bitmap/device context.");
+            return released;
+        }
+    }
+}
+
+internal sealed class ScreenDcHandle : SafeHandleZeroOrMinusOneIsInvalid
+{
+    internal ScreenDcHandle() : base(ownsHandle: true)
+    {
+        SetHandle(Native.GetDC(0));
+        if (IsInvalid) throw new InvalidOperationException("The screen device context is unavailable.");
     }
 
-    ~GdiBitmap()
+    protected override bool ReleaseHandle()
     {
-        Dispose();
+        var released = Native.ReleaseDC(0, handle) == 1;
+        if (!released) System.Diagnostics.Trace.TraceWarning("GDI could not release the screen device context.");
+        return released;
     }
 }
 
@@ -151,11 +179,11 @@ public sealed class ScreenSnapshot : IDisposable
         var bounds = area ?? Monitors.VirtualScreen;
         if (bounds.IsEmpty || (long)bounds.Width * bounds.Height > 64_000_000)
             throw new ArgumentException("Capture bounds must be non-empty and at most 64 megapixels.");
+        using var screen = new ScreenDcHandle();
         var bitmap = new GdiBitmap(bounds.Width, bounds.Height);
-        var screen = Native.GetDC(0);
         try
         {
-            if (screen == 0 || !Native.BitBlt(bitmap.Dc, 0, 0, bounds.Width, bounds.Height, screen, bounds.X, bounds.Y, Native.SRCCOPY | Native.CAPTUREBLT))
+            if (!Native.BitBlt(bitmap.Dc, 0, 0, bounds.Width, bounds.Height, screen.DangerousGetHandle(), bounds.X, bounds.Y, Native.SRCCOPY | Native.CAPTUREBLT))
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError(), "The screen pixels could not be captured.");
         }
         catch
@@ -163,11 +191,6 @@ public sealed class ScreenSnapshot : IDisposable
             bitmap.Dispose();
             throw;
         }
-        finally
-        {
-            Native.ReleaseDC(0, screen);
-        }
-
         var cursor = new CURSORINFO { cbSize = Marshal.SizeOf<CURSORINFO>() };
         if (!Native.GetCursorInfo(ref cursor))
         {

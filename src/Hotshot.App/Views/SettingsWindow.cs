@@ -22,6 +22,7 @@ namespace Hotshot.Views;
 
 internal sealed partial class SettingsWindow : Window
 {
+    private static readonly int[] FrameRates = [15, 24, 30, 60];
     private readonly AppServices _app;
     private readonly HotkeyManager _hotkeys;
     private AppSettings _draft;
@@ -460,7 +461,7 @@ internal sealed partial class SettingsWindow : Window
                 break;
             case SettingsPage.Recording:
                 Section(panel, "Video");
-                Choice(panel, "Frame rate", "Frames recorded each second.", new[] { 15, 24, 30, 60 }, _draft.Recording.FramesPerSecond, v => _draft.Recording.FramesPerSecond = v);
+                Choice(panel, "Frame rate", "Frames recorded each second.", FrameRates, _draft.Recording.FramesPerSecond, v => _draft.Recording.FramesPerSecond = v);
                 Choice(panel, "Quality", "Higher quality increases file size.", Enum.GetValues<RecordingQuality>(), _draft.Recording.Quality, v => _draft.Recording.Quality = v);
                 Toggle(panel, "Include cursor", "Show the pointer in the recording.", _draft.Recording.IncludeCursor, v => _draft.Recording.IncludeCursor = v);
                 Number(panel, "Countdown", "Seconds before recording begins.", _draft.Recording.CountdownSeconds, 0, 10, v => _draft.Recording.CountdownSeconds = v);

@@ -229,10 +229,10 @@ public static class WindowScreenshotChecks
         finally
         {
             if (brush != 0) WindowScreenshotNative.DeleteObject(brush);
-            if (dc != 0) WindowScreenshotNative.ReleaseDC(window, dc);
+            if (dc != 0) Check(WindowScreenshotNative.ReleaseDC(window, dc) != 0, "Cannot release synthetic occluder device context.");
         }
 
-        WindowScreenshotNative.DwmFlush();
+        System.Runtime.InteropServices.Marshal.ThrowExceptionForHR(WindowScreenshotNative.DwmFlush());
     }
 
     private static void CheckStateChangeRejected(TestWindow target)

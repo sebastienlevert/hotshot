@@ -77,7 +77,7 @@ public struct ICONINFO
 }
 
 /// <summary>Win32 functions shared by the capture library and the app.</summary>
-public static unsafe partial class Native
+internal static unsafe partial class Native
 {
     public const int SM_XVIRTUALSCREEN = 76;
     public const int SM_YVIRTUALSCREEN = 77;

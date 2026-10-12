@@ -12,7 +12,7 @@ using Hotshot.Descriptions;
 namespace Hotshot;
 
 /// <summary>Process-wide state shared by the controller, capture flows and windows. UI-thread affine.</summary>
-internal sealed class AppServices
+internal sealed class AppServices : IDisposable
 {
     private readonly RoamingSettingsStore _settingsStore;
     private readonly DispatcherQueueTimer _saveTimer;
@@ -21,6 +21,7 @@ internal sealed class AppServices
     private bool _draftSyncConflict;
     private AppSettings? _deferredSharedSettings;
     private AppSettings? _deferredSharedBaseline;
+    private bool _disposed;
 
     public AppServices(AppPaths paths, DispatcherQueue dispatcher, string? sharedSettingsRoot = null)
     {
@@ -240,6 +241,25 @@ internal sealed class AppServices
     }
 
     public void StopSettingsSync() => _syncTimer.Stop();
+
+    public async Task RunObservedAsync(Func<Task> operation, string description)
+    {
+        try { await operation(); }
+        catch (Exception ex)
+        {
+            Log.Error(description, ex);
+            Post(() => Failed?.Invoke($"{description}: {ex.Message}"));
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _saveTimer.Stop();
+        _syncTimer.Stop();
+        _saveGate.Dispose();
+    }
 
     private AppSettings MergeDeferredSharedSettings(AppSettings candidate) =>
         _deferredSharedSettings is null || _deferredSharedBaseline is null ? candidate :

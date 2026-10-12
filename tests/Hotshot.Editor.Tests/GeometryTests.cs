@@ -6,7 +6,7 @@ namespace Hotshot.Editor.Tests;
 public sealed class GeometryTests
 {
     [Fact]
-    public void Line_and_arrow_hit_testing()
+    public void LineAndArrowHitTesting()
     {
         var line = new LineAnnotation { Start = new(0, 0), End = new(100, 0), StrokeWidth = 6 };
         Assert.True(line.HitTest(new Vector2(50, 2), 1));
@@ -21,7 +21,7 @@ public sealed class GeometryTests
     }
 
     [Fact]
-    public void Arrow_head_scales_with_stroke_and_shrinks_for_short_arrows()
+    public void ArrowHeadScalesWithStrokeAndShrinksForShortArrows()
     {
         var thin = ArrowGeometry.Compute(Vector2.Zero, new Vector2(500, 0), 3);
         var thick = ArrowGeometry.Compute(Vector2.Zero, new Vector2(500, 0), 10);
@@ -35,7 +35,7 @@ public sealed class GeometryTests
     }
 
     [Fact]
-    public void Rectangle_outline_vs_filled_hit_testing()
+    public void RectangleOutlineVsFilledHitTesting()
     {
         var outline = new RectangleAnnotation { Rect = new RectF(100, 100, 200, 100), StrokeWidth = 4 };
         Assert.True(outline.HitTest(new Vector2(100, 150), 2));
@@ -48,7 +48,7 @@ public sealed class GeometryTests
     }
 
     [Fact]
-    public void Ellipse_hit_testing()
+    public void EllipseHitTesting()
     {
         var e = new EllipseAnnotation { Rect = new RectF(0, 0, 200, 100), StrokeWidth = 4 };
         Assert.True(e.HitTest(new Vector2(100, 1), 2));
@@ -60,7 +60,7 @@ public sealed class GeometryTests
     }
 
     [Fact]
-    public void Pen_text_step_blur_hit_testing()
+    public void PenTextStepBlurHitTesting()
     {
         var pen = new PenAnnotation { Points = [new(0, 0), new(100, 100)], StrokeWidth = 4 };
         Assert.True(pen.HitTest(new Vector2(50, 52), 1));
@@ -88,7 +88,7 @@ public sealed class GeometryTests
     }
 
     [Fact]
-    public void Crop_normalization()
+    public void CropNormalization()
     {
         Assert.Null(CropMath.Normalize(null, 100, 100));
         Assert.Null(CropMath.Normalize(new RectF(0, 0, 100, 100), 100, 100));
@@ -102,7 +102,7 @@ public sealed class GeometryTests
     }
 
     [Fact]
-    public void Resize_rect_edges_and_square()
+    public void ResizeRectEdgesAndSquare()
     {
         var r = new RectF(10, 10, 100, 50);
         Assert.Equal(new RectF(10, 0, 100, 60), GeometryMath.ResizeRect(r, HandleKind.Top, new Vector2(999, 0), false));
@@ -114,7 +114,7 @@ public sealed class GeometryTests
     }
 
     [Fact]
-    public void Simplify_keeps_endpoints_and_corners()
+    public void SimplifyKeepsEndpointsAndCorners()
     {
         var pts = new List<Vector2>();
         for (var i = 0; i <= 100; i++)
@@ -135,7 +135,7 @@ public sealed class GeometryTests
     }
 
     [Fact]
-    public void Pixelate_averages_blocks()
+    public void PixelateAveragesBlocks()
     {
         // 4x2 image; region covers the right 4x2 with block 2 → two blocks.
         const int w = 6, h = 2;
@@ -174,7 +174,7 @@ public sealed class GeometryTests
     }
 
     [Fact]
-    public void Pixelate_obscures_detail()
+    public void PixelateObscuresDetail()
     {
         // Fine checkerboard ("text") collapses to a uniform gray inside each block.
         const int w = 32, h = 32;

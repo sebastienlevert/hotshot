@@ -284,7 +284,7 @@ internal sealed class DocumentRenderer : IDisposable
         ds.DrawGeometry(head, color, MathF.Max(1f, arrow.StrokeWidth * 0.25f), _round);
     }
 
-    private void DrawPolyline(CanvasDrawingSession ds, IReadOnlyList<Vector2> points, Color color, float width)
+    private void DrawPolyline(CanvasDrawingSession ds, List<Vector2> points, Color color, float width)
     {
         if (points.Count == 0)
         {

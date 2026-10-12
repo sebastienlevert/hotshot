@@ -33,5 +33,9 @@ internal static class OneDriveFolders
         return folders;
     }
 
-    public static string? GetDefault() => GetAvailable().FirstOrDefault()?.Path;
+    public static string? GetDefault()
+    {
+        var folders = GetAvailable();
+        return folders.Count > 0 ? folders[0].Path : null;
+    }
 }

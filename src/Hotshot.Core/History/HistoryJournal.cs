@@ -38,7 +38,8 @@ internal static class HistoryJournal
                 return (items.Values.OrderByDescending(item => item.CreatedAt).ToList(),
                     "Capture journal contains an invalid completed transaction; completed earlier changes are visible, original data is retained and writes are paused. " + ex.Message, count, true);
             }
-            if (mutation.Removed is null || mutation.Upserts is null || mutation.Upserts.Any(item =>
+            if (mutation.Removed is null || mutation.Removed.Any(string.IsNullOrWhiteSpace) ||
+                mutation.Upserts is null || mutation.Upserts.Any(item =>
                 item is null || string.IsNullOrWhiteSpace(item.Id) || string.IsNullOrWhiteSpace(item.Path)))
                 return (items.Values.OrderByDescending(item => item.CreatedAt).ToList(),
                     "Capture journal has an invalid transaction record; completed earlier changes are visible, original data is retained and writes are paused.", count, true);

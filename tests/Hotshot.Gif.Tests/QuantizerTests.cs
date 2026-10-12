@@ -12,7 +12,7 @@ public sealed class QuantizerTests
     [InlineData(200, false)]
     [InlineData(255, true)]
     [InlineData(256, false)]
-    public void FewColors_GiveExactPalette(int colorCount, bool reserveTransparent)
+    public void FewColorsGiveExactPalette(int colorCount, bool reserveTransparent)
     {
         var random = new Random(colorCount);
         var colors = new HashSet<uint>();
@@ -46,7 +46,7 @@ public sealed class QuantizerTests
     [InlineData(64, true)]
     [InlineData(256, false)]
     [InlineData(256, true)]
-    public void ManyColors_RespectMaxColors(int maxColors, bool reserveTransparent)
+    public void ManyColorsRespectMaxColors(int maxColors, bool reserveTransparent)
     {
         uint[] pixels = TestImages.Gradient(300, 200);
         var histogram = new ColorHistogram();
@@ -63,7 +63,7 @@ public sealed class QuantizerTests
     }
 
     [Fact]
-    public void DominantExactColors_AreKeptExact()
+    public void DominantExactColorsAreKeptExact()
     {
         // Typical screen content: a flat background plus anti-aliased/gradient content.
         uint[] pixels = TestImages.Gradient(256, 256);
@@ -83,7 +83,7 @@ public sealed class QuantizerTests
     }
 
     [Fact]
-    public void CachedNearestLookup_IsCloseToBruteForce()
+    public void CachedNearestLookupIsCloseToBruteForce()
     {
         var histogram = new ColorHistogram();
         histogram.AddPixels(TestImages.Gradient(300, 200));
@@ -107,7 +107,7 @@ public sealed class QuantizerTests
     }
 
     [Fact]
-    public void OrderedDither_ReproducesIntermediateColorsOnAverage_AndIsPositionStable()
+    public void OrderedDitherReproducesIntermediateColorsOnAverageAndIsPositionStable()
     {
         var palette = new Palette([0x000000u, 0xFFFFFFu], reserveTransparent: false, baselineError: 0);
         foreach (int level in new[] { 64, 96, 128, 200 })
@@ -130,7 +130,7 @@ public sealed class QuantizerTests
     }
 
     [Fact]
-    public void Histogram_CountsRunsAndWeights()
+    public void HistogramCountsRunsAndWeights()
     {
         var histogram = new ColorHistogram();
         uint[] pixels = [0xFF000001, 0xFF000001, 0x00000001, 0xFF000002, 0xFF000001];

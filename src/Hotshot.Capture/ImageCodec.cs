@@ -7,6 +7,8 @@ namespace Hotshot.Capture;
 
 public static class ImageCodec
 {
+    // Windows replacements of the same destination must not race; staging writes remain concurrent.
+    private static readonly SemaphoreSlim CommitGate = new(1, 1);
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp", ".heic",
@@ -80,12 +82,34 @@ public static class ImageCodec
         await WriteAtomicAsync(path, bytes);
     }
 
-    public static async Task WriteAtomicAsync(string path, byte[] bytes)
+    public static async Task WriteAtomicAsync(string path, byte[] bytes, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temp = path + ".tmp";
-        await File.WriteAllBytesAsync(temp, bytes);
-        File.Move(temp, path, overwrite: true);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ArgumentNullException.ThrowIfNull(bytes);
+        cancellationToken.ThrowIfCancellationRequested();
+        var destination = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        var temp = destination + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await File.WriteAllBytesAsync(temp, bytes, cancellationToken).ConfigureAwait(false);
+            await CommitGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(temp, destination, overwrite: true);
+            }
+            finally { CommitGate.Release(); }
+        }
+        catch
+        {
+            try { File.Delete(temp); }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                System.Diagnostics.Trace.TraceWarning("Could not remove failed image staging file: {0}", cleanup.Message);
+            }
+            throw;
+        }
     }
 
     /// <summary>Writes a small PNG thumbnail for an in-memory capture.</summary>
@@ -117,9 +141,10 @@ public static class ImageCodec
             await SavePngAsync(decoded, thumbnailPath);
             return true;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+            System.Runtime.InteropServices.COMException or ArgumentException)
         {
-            // Thumbnails are best effort; the history shows a placeholder instead.
+            System.Diagnostics.Trace.TraceWarning("Could not create a capture thumbnail: {0}", ex.Message);
             return false;
         }
     }
@@ -143,7 +168,7 @@ public static class ImageCodec
         }
     }
 
-    private static async Task<byte[]> ReadAllAsync(IRandomAccessStream stream)
+    private static async Task<byte[]> ReadAllAsync(InMemoryRandomAccessStream stream)
     {
         var size = (uint)stream.Size;
         var bytes = new byte[size];

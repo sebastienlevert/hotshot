@@ -20,4 +20,5 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace);
 builder.Services.AddSingleton<IHotshotConnection, HotshotConnection>();
 builder.Services.AddMcpServer().WithStdioServerTransport().WithTools<HotshotTools>();
-await builder.Build().RunAsync();
+using var host = builder.Build();
+await host.RunAsync();

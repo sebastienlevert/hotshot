@@ -30,12 +30,13 @@ internal sealed class AudioSource : IDisposable
     private readonly int _blockAlign;
     private readonly BufferedWaveProvider _output;
     private readonly BufferedWaveProvider? _resampleInput;
-    private readonly ISampleProvider? _resampler;
+    private readonly WdlResamplingSampleProvider? _resampler;
     private float[] _convertBuffer = new float[4096];
     private readonly float[] _resampleBuffer = new float[4096];
     private readonly byte[] _discardBuffer = new byte[16384];
     private volatile bool _accepting;
     private volatile bool _faulted;
+    private volatile bool _muted;
     private bool _started;
     private bool _disposed;
     private float _peak;
@@ -84,7 +85,11 @@ internal sealed class AudioSource : IDisposable
 
     public string Name => _name;
 
-    public bool Muted { get; set; }
+    public bool Muted
+    {
+        get => _muted;
+        set => _muted = value;
+    }
 
     /// <summary>Opens the default render endpoint in loopback mode. Returns null (with a warning) if unavailable.</summary>
     public static AudioSource? TryCreateSystemAudio(Action<string> warn)

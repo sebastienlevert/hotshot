@@ -1,9 +1,19 @@
 <Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="ARM64" />
+  </Configurations>
   <Folder Name="/src/">
-    <Project Path="src/Hotshot.App/Hotshot.App.csproj" />
+    <Project Path="src/Hotshot.App/Hotshot.App.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
+    </Project>
     <Project Path="src/Hotshot.Capture/Hotshot.Capture.csproj" />
     <Project Path="src/Hotshot.Core/Hotshot.Core.csproj" />
-    <Project Path="src/Hotshot.Editor/Hotshot.Editor.csproj" />
+    <Project Path="src/Hotshot.Editor/Hotshot.Editor.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
+    </Project>
     <Project Path="src/Hotshot.Gif/Hotshot.Gif.csproj" />
     <Project Path="src/Hotshot.Mcp/Hotshot.Mcp.csproj" />
     <Project Path="src/Hotshot.Recording/Hotshot.Recording.csproj" />
@@ -15,10 +25,24 @@
     <Project Path="tests/Hotshot.Capture.Tests/Hotshot.Capture.Tests.csproj" />
     <Project Path="tests/Hotshot.Editor.Tests/Hotshot.Editor.Tests.csproj" />
     <Project Path="tests/Hotshot.Gif.Tests/Hotshot.Gif.Tests.csproj" />
-    <Project Path="tests/Hotshot.Product.Harness/Hotshot.Product.Harness.csproj" />
+    <Project Path="tests/Hotshot.Product.Harness/Hotshot.Product.Harness.csproj">
+      <Platform Project="x64" />
+      <Build Solution="*|ARM64" Project="false" />
+    </Project>
     <Project Path="tests/Hotshot.Recording.Harness/Hotshot.Recording.Harness.csproj" />
     <Project Path="tests/Hotshot.Updates.Harness/Hotshot.Updates.Harness.csproj" />
     <Project Path="tests/Hotshot.Mcp.Harness/Hotshot.Mcp.Harness.csproj" />
-    <Project Path="tests/Hotshot.Agents.Harness/Hotshot.Agents.Harness.csproj" />
+    <Project Path="tests/Hotshot.Agents.Harness/Hotshot.Agents.Harness.csproj">
+      <Platform Project="x64" />
+      <Build Solution="*|ARM64" Project="false" />
+    </Project>
+    <Project Path="tests/Hotshot.Workbench.Harness/Hotshot.Workbench.Harness.csproj">
+      <Platform Project="x64" />
+      <Build Solution="*|ARM64" Project="false" />
+    </Project>
+    <Project Path="tests/Hotshot.Descriptions.Harness/Hotshot.Descriptions.Harness.csproj">
+      <Platform Project="x64" />
+      <Build Solution="*|ARM64" Project="false" />
+    </Project>
   </Folder>
 </Solution>

@@ -12,7 +12,7 @@ public sealed class GifWriterTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task SolidFrames_DecodeWithWic(bool optimize)
+    public async Task SolidFramesDecodeWithWic(bool optimize)
     {
         string path = TestPaths.Unique("solid", ".gif");
         var options = new GifOptions { OptimizeFrames = optimize };
@@ -53,7 +53,7 @@ public sealed class GifWriterTests
     [InlineData(1)]
     [InlineData(5)]
     [InlineData(300)]
-    public async Task LoopCount_IsWrittenToNetscapeExtension(int loopCount)
+    public async Task LoopCountIsWrittenToNetscapeExtension(int loopCount)
     {
         string path = TestPaths.Unique("loop", ".gif");
         await using (var file = File.Create(path))
@@ -73,7 +73,7 @@ public sealed class GifWriterTests
     }
 
     [Fact]
-    public void Delays_AccumulateCentisecondRounding()
+    public void DelaysAccumulateCentisecondRounding()
     {
         using var stream = new MemoryStream();
         using (var writer = new GifWriter(stream, 4, 4, new GifOptions { OptimizeFrames = false }))
@@ -93,7 +93,7 @@ public sealed class GifWriterTests
     [Theory]
     [InlineData(true, 2)]
     [InlineData(false, 4)]
-    public void IdenticalFrames_AreMergedOnlyWhenOptimizing(bool optimize, int expectedFrames)
+    public void IdenticalFramesAreMergedOnlyWhenOptimizing(bool optimize, int expectedFrames)
     {
         using var stream = new MemoryStream();
         int frameCount;
@@ -118,7 +118,7 @@ public sealed class GifWriterTests
     }
 
     [Fact]
-    public async Task SinglePixelChange_ProducesOneByOneSubFrame_OnOddSizedDitheredImage()
+    public async Task SinglePixelChangeProducesOneByOneSubFrameOnOddSizedDitheredImage()
     {
         const int width = 641, height = 359;
         uint[] background = TestImages.Gradient(width, height);
@@ -163,7 +163,7 @@ public sealed class GifWriterTests
     }
 
     [Fact]
-    public void ChangedRegion_IsCroppedToBoundsAndUsesTransparency()
+    public void ChangedRegionIsCroppedToBoundsAndUsesTransparency()
     {
         const int width = 120, height = 80;
         uint[] first = TestImages.Gradient(width, height);
@@ -198,7 +198,7 @@ public sealed class GifWriterTests
     [InlineData(256, false, false)]
     [InlineData(256, false, true)]
     [InlineData(17, true, true)]
-    public void ImagesWithFewColors_AreReproducedExactly(int colorCount, bool optimize, bool dither)
+    public void ImagesWithFewColorsAreReproducedExactly(int colorCount, bool optimize, bool dither)
     {
         const int width = 97, height = 61;
         var random = new Random(colorCount);
@@ -238,7 +238,7 @@ public sealed class GifWriterTests
     [InlineData(100, true)]
     [InlineData(256, true)]
     [InlineData(256, false)]
-    public void Palettes_RespectMaxColors(int maxColors, bool optimize)
+    public void PalettesRespectMaxColors(int maxColors, bool optimize)
     {
         const int width = 200, height = 150;
         using var stream = new MemoryStream();
@@ -275,7 +275,7 @@ public sealed class GifWriterTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void GradientQuality_IsHigh(bool dither)
+    public void GradientQualityIsHigh(bool dither)
     {
         const int width = 320, height = 240;
         uint[] source = TestImages.Gradient(width, height);
@@ -295,7 +295,7 @@ public sealed class GifWriterTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SmoothGradientQuality_IsHigh(bool dither)
+    public void SmoothGradientQualityIsHigh(bool dither)
     {
         const int width = 320, height = 240;
         var source = new uint[width * height];
@@ -320,7 +320,7 @@ public sealed class GifWriterTests
     }
 
     [Fact]
-    public void ColorShift_FallsBackToLocalPalette()
+    public void ColorShiftFallsBackToLocalPalette()
     {
         const int width = 160, height = 120;
         uint[] gray = new uint[width * height];
@@ -349,7 +349,7 @@ public sealed class GifWriterTests
     }
 
     [Fact]
-    public void TwoColorOptimizedOutput_HasNoTransparencyAndStaysValid()
+    public void TwoColorOptimizedOutputHasNoTransparencyAndStaysValid()
     {
         const int width = 40, height = 30;
         using var stream = new MemoryStream();
@@ -370,7 +370,7 @@ public sealed class GifWriterTests
     }
 
     [Fact]
-    public void Dispose_WritesTrailer_AndLeavesStreamOpen()
+    public void DisposeWritesTrailerAndLeavesStreamOpen()
     {
         var stream = new MemoryStream();
         var writer = new GifWriter(stream, 2, 2, new GifOptions());
@@ -383,7 +383,7 @@ public sealed class GifWriterTests
     }
 
     [Fact]
-    public void LoopDisabled_OmitsLoopExtension()
+    public void LoopDisabledOmitsLoopExtension()
     {
         using var stream = new MemoryStream();
         using (var writer = new GifWriter(stream, 8, 8, new GifOptions { Loop = false }))
@@ -399,7 +399,7 @@ public sealed class GifWriterTests
     }
 
     [Fact]
-    public void InvalidArguments_Throw()
+    public void InvalidArgumentsThrow()
     {
         using var stream = new MemoryStream();
         Assert.Throws<ArgumentOutOfRangeException>(() => new GifWriter(stream, 0, 10, new GifOptions()));
@@ -412,7 +412,7 @@ public sealed class GifWriterTests
     }
 
     [Fact]
-    public void StridePadding_IsIgnored()
+    public void StridePaddingIsIgnored()
     {
         const int width = 5, height = 3, stride = 32;
         var data = new byte[stride * height];

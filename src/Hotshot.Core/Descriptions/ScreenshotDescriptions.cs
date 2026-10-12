@@ -298,16 +298,33 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
         }
     }
 
-    private static async Task WriteAtomicAsync(string path, byte[] data, CancellationToken cancellationToken)
+    private static Task WriteAtomicAsync(string path, byte[] data, CancellationToken cancellationToken) =>
+        WriteAtomicAsync(path, data, File.Delete, cancellationToken);
+
+    internal static async Task WriteAtomicAsync(string path, byte[] data, Action<string> deleteTemporary,
+        CancellationToken cancellationToken)
     {
         var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        Exception? primaryFailure = null;
         try
         {
             await File.WriteAllBytesAsync(temp, data, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             File.Move(temp, path, overwrite: true);
         }
-        finally { if (File.Exists(temp)) File.Delete(temp); }
+        catch (Exception ex)
+        {
+            primaryFailure = ex;
+            throw;
+        }
+        finally
+        {
+            try { if (File.Exists(temp)) deleteTemporary(temp); }
+            catch (Exception cleanupFailure) when (primaryFailure is not null)
+            {
+                primaryFailure.Data["Hotshot.AtomicWriteCleanupError"] = cleanupFailure;
+            }
+        }
     }
 
     public async ValueTask DisposeAsync()

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Hotshot.Core.Hotkeys;
 
 /// <summary>Bidirectional mapping between Win32 virtual-key codes and stable names used in settings.</summary>
@@ -21,9 +23,9 @@ public static class KeyNames
     static KeyNames()
     {
         for (var c = 'A'; c <= 'Z'; c++) Add(c, c.ToString());
-        for (var d = 0; d <= 9; d++) Add('0' + d, d.ToString());
-        for (var f = 1; f <= 24; f++) Add(0x70 + f - 1, $"F{f}");
-        for (var n = 0; n <= 9; n++) Add(0x60 + n, $"NumPad{n}");
+        for (var d = 0; d <= 9; d++) Add('0' + d, d.ToString(CultureInfo.InvariantCulture));
+        for (var f = 1; f <= 24; f++) Add(0x70 + f - 1, FormattableString.Invariant($"F{f}"));
+        for (var n = 0; n <= 9; n++) Add(0x60 + n, FormattableString.Invariant($"NumPad{n}"));
 
         Add(0x08, "Backspace");
         Add(0x09, "Tab");
@@ -70,7 +72,7 @@ public static class KeyNames
     }
 
     public static string GetName(int key) =>
-        NameByKey.TryGetValue(key, out var name) ? name : $"0x{key:X2}";
+        NameByKey.TryGetValue(key, out var name) ? name : FormattableString.Invariant($"0x{key:X2}");
 
     public static string GetDisplayLabel(string name) =>
         DisplayLabels.TryGetValue(name, out var label) ? label : name;
@@ -85,7 +87,7 @@ public static class KeyNames
         }
 
         if (name.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
-            int.TryParse(name.AsSpan(2), System.Globalization.NumberStyles.HexNumber, null, out key) &&
+            int.TryParse(name.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out key) &&
             key is > 0 and < 0xFF)
         {
             return true;

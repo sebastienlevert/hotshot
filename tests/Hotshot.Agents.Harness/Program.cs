@@ -21,6 +21,8 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // The referenced app module is the sole owner of Windows App SDK initialization.
+        System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(typeof(AppServices).Module.ModuleHandle);
         HarnessNative.SetProcessDpiAwarenessContext(-4);
         WinRT.ComWrappersSupport.InitializeComWrappers();
         if (args.Contains("--fixture"))
@@ -60,6 +62,7 @@ internal static class Harness
         var name = "Hotshot.Agent.Test." + Guid.NewGuid().ToString("N");
         AgentCaptureServer? server = null;
         AppServices? services = null;
+        CaptureCoordinator? coordinator = null;
         Process? target = null;
         var artifacts = new List<string>();
         try
@@ -75,6 +78,7 @@ internal static class Harness
             app.Settings.Capture.IncludeCursor = false;
             var pipeline = new OutputPipeline(app);
             var capture = new CaptureCoordinator(app, pipeline);
+            coordinator = capture;
             var unavailable = false;
             server = new AgentCaptureServer(app, capture, () => unavailable);
             server.Start(name);
@@ -217,7 +221,9 @@ internal static class Harness
         finally
         {
             services?.StopSettingsSync();
-            if (server is not null) { await server.StopAsync(); server.Dispose(); }
+            if (server is not null) await server.DisposeAsync();
+            if (coordinator is not null) { await coordinator.ShutdownAsync(); coordinator.Dispose(); }
+            services?.Dispose();
             if (target is not null)
             {
                 await target.StandardInput.WriteLineAsync("exit");

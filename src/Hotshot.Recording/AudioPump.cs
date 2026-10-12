@@ -4,7 +4,7 @@ namespace Hotshot.Recording;
 /// Clock-driven audio mixer: every ~20 ms it writes exactly as many 48 kHz frames as the recording clock says should
 /// exist, pulling each source (silence on underrun or mute). Audio stays continuous and locked to the video timeline.
 /// </summary>
-internal sealed class AudioPump
+internal sealed class AudioPump : IDisposable
 {
     private const int Rate = MediaWriter.AudioSampleRate;
     private const int Channels = MediaWriter.AudioChannels;
@@ -24,6 +24,7 @@ internal sealed class AudioPump
     private Thread? _thread;
     private long _framesWritten;
     private bool _faulted;
+    private bool _disposed;
 
     public AudioPump(MediaWriter writer, RecordingClock clock, IReadOnlyList<AudioSource> sources, Action<Exception> onError)
     {
@@ -35,19 +36,21 @@ internal sealed class AudioPump
 
     public void Start()
     {
-        _thread = new Thread(Run)
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var thread = new Thread(Run)
         {
             IsBackground = true,
             Name = "Hotshot audio pump",
             Priority = ThreadPriority.AboveNormal,
         };
-        _thread.Start();
+        thread.Start();
+        _thread = thread;
     }
 
     /// <summary>Stops the pump thread, then writes the remainder up to the (frozen) clock so audio ends with the video.</summary>
     public void Stop()
     {
-        if (_stopSignal.IsSet)
+        if (_disposed || _stopSignal.IsSet)
         {
             return;
         }
@@ -55,13 +58,26 @@ internal sealed class AudioPump
         _stopSignal.Set();
         _thread?.Join();
         _thread = null;
+        WriteUpTo(_clock.ElapsedHns);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
         try
         {
-            WriteUpTo(_clock.ElapsedHns);
+            _stopSignal.Set();
+            _thread?.Join();
+            _thread = null;
         }
-        catch
+        finally
         {
-            // The pump already reported the failure, or the writer is gone; nothing to add at shutdown.
+            _disposed = true;
+            _stopSignal.Dispose();
         }
     }
 

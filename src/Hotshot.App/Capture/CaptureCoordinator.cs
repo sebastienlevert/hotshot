@@ -8,13 +8,14 @@ using Hotshot.Recording;
 namespace Hotshot.CaptureFlow;
 
 /// <summary>Runs the screenshot flows (region / monitor / all monitors / repeat last region).</summary>
-internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipeline, Func<nint>? capturableWindow = null)
+internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipeline, Func<nint>? capturableWindow = null) : IDisposable
 {
     private bool _busy;
     private PixelRect? _lastRegion;
     private readonly CancellationTokenSource _shutdown = new();
     private TaskCompletionSource? _idle;
     private ScrollingCaptureWindow? _scrollingWindow;
+    private bool _disposed;
 
     public bool IsBusy => _busy;
 
@@ -39,7 +40,7 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
             CapturedImage image;
             if (window != 0 && app.Settings.Capture.UnobscuredWindows)
             {
-                var result = await WindowScreenshot.CaptureAsync(window, token, app.Settings.Capture.IncludeCursor);
+                var result = await WindowScreenshot.CaptureAsync(window, app.Settings.Capture.IncludeCursor, token);
                 image = result.Image;
                 warnings.AddRange(result.Warnings);
                 if (!accessAllowed()) throw new InvalidOperationException("Target or agent access changed during window capture.");
@@ -85,7 +86,7 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         CapturedImage image;
         if (selection is WindowSelection selected && capture.UnobscuredWindows)
         {
-            var result = await WindowScreenshot.CaptureAsync(selected.Window.Handle, _shutdown.Token, capture.IncludeCursor);
+            var result = await WindowScreenshot.CaptureAsync(selected.Window.Handle, capture.IncludeCursor, _shutdown.Token);
             image = result.Image;
             foreach (var warning in result.Warnings) Log.Warn(warning);
         }
@@ -235,5 +236,12 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         _shutdown.Cancel();
         _scrollingWindow?.RequestClose();
         if (_idle is { } idle) await idle.Task;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _shutdown.Dispose();
     }
 }

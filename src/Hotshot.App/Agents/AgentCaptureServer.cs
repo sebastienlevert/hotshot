@@ -11,10 +11,12 @@ using Hotshot.Core.History;
 
 namespace Hotshot.Agents;
 
-internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator capture, Func<bool> isUnavailable, Func<nint>? settingsWindow = null) : IDisposable
+internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator capture, Func<bool> isUnavailable, Func<nint>? settingsWindow = null) : IDisposable, IAsyncDisposable
 {
     private readonly CancellationTokenSource _stop = new();
     private Task? _listener;
+    private Task? _disposal;
+    private bool _disposed;
     private int _requests;
     private readonly Queue<AgentActivity> _activity = new();
     private readonly Dictionary<int, AgentClient> _clients = [];
@@ -29,9 +31,14 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
 
     public void Start(string? pipeName = null)
     {
-        var identity = WindowsIdentity.GetCurrent().User?.Value
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_listener is not null) throw new InvalidOperationException("The native agent listener is already started.");
+        using var user = WindowsIdentity.GetCurrent();
+        using var process = Process.GetCurrentProcess();
+        var identity = user.User?.Value
             ?? throw new InvalidOperationException("The Windows user identity is unavailable for agent IPC.");
-        _listener = Task.Run(() => ListenAsync(pipeName ?? AgentProtocol.PipeName(identity, Process.GetCurrentProcess().SessionId)));
+        var name = pipeName ?? AgentProtocol.PipeName(identity, process.SessionId);
+        _listener = Task.Run(() => ListenAsync(name));
         RefreshStatus();
     }
 
@@ -171,11 +178,18 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
         catch (IOException) { request.Cancel(); }
     }
 
-    private Task<AgentResponse> OnUiAsync(Func<Task<AgentResponse>> action, CancellationToken token)
+    private async Task<AgentResponse> OnUiAsync(Func<Task<AgentResponse>> action, CancellationToken token)
     {
         var completion = new TaskCompletionSource<AgentResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Cancel queued work immediately; dispatched work must unwind before the listener can stop.
+        var dispatchState = 0;
+        using var cancellation = token.Register(() =>
+        {
+            if (Interlocked.CompareExchange(ref dispatchState, 2, 0) == 0) completion.TrySetCanceled(token);
+        });
         if (!app.Dispatcher.TryEnqueue(async () =>
         {
+            if (Interlocked.CompareExchange(ref dispatchState, 1, 0) != 0) return;
             try
             {
                 token.ThrowIfCancellationRequested();
@@ -187,8 +201,8 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                 Log.Error("Agent capture request failed", ex);
                 completion.TrySetResult(AgentResponse.Failure("operation_failed", ex.Message));
             }
-        })) completion.SetResult(AgentResponse.Failure("app_exiting", "Hotshot is shutting down."));
-        return completion.Task;
+        })) completion.TrySetResult(AgentResponse.Failure("app_exiting", "Hotshot is shutting down."));
+        return await completion.Task;
     }
 
     private async Task<AgentResponse> HandleAsync(AgentRequest request, CancellationToken token)
@@ -343,7 +357,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
         finally { RefreshStatus(); }
     }
 
-    private async Task<AgentCapture> ResultAsync(HistoryItem item, AgentRequest request, CancellationToken token)
+    private static async Task<AgentCapture> ResultAsync(HistoryItem item, AgentRequest request, CancellationToken token)
     {
         var result = Metadata(item);
         if (!request.IncludeImage || item.IsVideo) return result;
@@ -391,9 +405,29 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
 
     public async Task StopAsync()
     {
+        if (_disposal is { } disposal) { await disposal; return; }
         _stop.Cancel();
         if (_listener is not null) await _listener;
     }
 
-    public void Dispose() => _stop.Cancel();
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _stop.Cancel();
+        _disposal = DisposeCoreAsync();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return new ValueTask(_disposal!);
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        try { if (_listener is not null) await _listener; }
+        catch (Exception ex) { Log.Error("Native agent listener shutdown failed", ex); }
+        finally { _stop.Dispose(); }
+    }
 }

@@ -91,7 +91,7 @@ public sealed class PortableSettings
         result.Recording.AlsoCreateGif = Recording.AlsoCreateGif;
         result.Library.KeepSavedCaptures = Library.KeepSavedCaptures;
         result.Library.SavedSearches = Library.SavedSearches ?? [];
-        result.Normalize();
+        result = result.Clone();
         var errors = result.Validate();
         if (errors.Count > 0) throw new InvalidDataException("Shared settings are invalid: " + string.Join(" ", errors));
         return result;

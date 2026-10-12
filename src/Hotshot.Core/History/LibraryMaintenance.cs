@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text.Json;
 
@@ -100,11 +101,12 @@ public static class LibraryMaintenance
     public static async Task<int> RestoreAsync(string source, string destinationFolder, HistoryStore history, AppPaths paths,
         bool originals, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
         using var zip = ZipFile.OpenRead(source);
         var items = ReadManifest(zip);
         ValidateEntries(zip, items);
         var existing = history.Items.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
-        var import = Path.Combine(Path.GetFullPath(destinationFolder), "Restored-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6]);
+        var import = Path.Combine(Path.GetFullPath(destinationFolder), "Restored-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..6]);
         Directory.CreateDirectory(import);
         var created = new List<string>();
         var restored = new List<HistoryItem>();
@@ -127,6 +129,7 @@ public static class LibraryMaintenance
                             await ExtractAsync(entry, Path.Combine(paths.OriginalsDirectory, id + suffix), created, token);
                 restored.Add(item);
             }
+            token.ThrowIfCancellationRequested();
             history.AddRange(restored);
             if (history.LastError is not null) throw new IOException("Restored files were preserved, but the library could not be persisted: " + history.LastError);
             return restored.Count;

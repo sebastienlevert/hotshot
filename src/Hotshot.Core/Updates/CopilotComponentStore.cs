@@ -6,12 +6,13 @@ namespace Hotshot.Core.Updates;
 /// <summary>Machine-local receipts, never shared settings; installing does not grant AI or agent permissions.</summary>
 public sealed class CopilotComponentStore
 {
+    private static readonly string[] SupportedRuntimes = ["win-x64", "win-arm64"];
     private readonly string _root;
     private readonly string _appVersion;
     private readonly string _runtime;
     private readonly string _sdkVersion;
     private readonly Func<bool> _canChange;
-    private readonly SemaphoreSlim _operation = new(1, 1);
+    private int _operationActive;
     private string ReceiptPath => Path.Combine(_root, "installed.json");
 
     public CopilotComponentStore(string root, string appVersion, string runtime,
@@ -27,7 +28,7 @@ public sealed class CopilotComponentStore
         SafeComponentPaths.EnsureNotLinked(_root);
     }
 
-    public bool IsBusy => _operation.CurrentCount == 0;
+    public bool IsBusy => Volatile.Read(ref _operationActive) != 0;
     public bool HasReceipt => File.Exists(ReceiptPath);
 
     public CopilotComponentManifest? ReadInstalledManifest()
@@ -52,7 +53,7 @@ public sealed class CopilotComponentStore
     public async Task InstallAsync(ReleaseAssetDownloader downloader, Func<string, CancellationToken, Task> healthTest,
         IProgress<ComponentProgress>? progress, CancellationToken cancellationToken)
     {
-        if (!await _operation.WaitAsync(0, cancellationToken)) throw new InvalidOperationException("A component operation is already running.");
+        BeginOperation(cancellationToken);
         string? staging = null;
         string? createdDirectory = null;
         var committed = false;
@@ -120,13 +121,13 @@ public sealed class CopilotComponentStore
                 }
                 finally { if (staging is not null) SafeComponentPaths.DeleteTree(_root, staging); }
             }
-            finally { _operation.Release(); }
+            finally { Volatile.Write(ref _operationActive, 0); }
         }
     }
 
     public async Task RemoveAsync(Func<Task>? releaseRuntime = null, CancellationToken cancellationToken = default)
     {
-        if (!await _operation.WaitAsync(0, cancellationToken)) throw new InvalidOperationException("A component operation is already running.");
+        BeginOperation(cancellationToken);
         try
         {
             RequireIdle();
@@ -138,7 +139,7 @@ public sealed class CopilotComponentStore
                 if (!Directory.Exists(_root)) return;
                 var directories = new List<string>();
                 foreach (var sdkDirectory in Directory.EnumerateDirectories(_root).Where(path => ReleaseVersion.IsValid(Path.GetFileName(path))))
-                foreach (var runtime in new[] { "win-x64", "win-arm64" })
+                foreach (var runtime in SupportedRuntimes)
                 {
                     var runtimeDirectory = SafeComponentPaths.Child(sdkDirectory, runtime);
                     if (!Directory.Exists(runtimeDirectory)) continue;
@@ -161,7 +162,14 @@ public sealed class CopilotComponentStore
                 if (File.Exists(ReceiptPath)) File.Delete(ReceiptPath);
             }, cancellationToken);
         }
-        finally { _operation.Release(); }
+        finally { Volatile.Write(ref _operationActive, 0); }
+    }
+
+    private void BeginOperation(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Interlocked.CompareExchange(ref _operationActive, 1, 0) != 0)
+            throw new InvalidOperationException("A component operation is already running.");
     }
 
     private void RequireIdle()

@@ -48,7 +48,7 @@ internal sealed partial class WorkspaceWindow
         body.Children.Add(originals);
         body.Children.Add(UiStyles.Description("Creates a local ZIP of existing captures and library metadata. Originals may contain information hidden by saved redactions. No settings, credentials or uploads are included."));
         if (await DialogAsync("Local library backup", body, "Choose destination") != ContentDialogResult.Primary) return;
-        var picker = new FileSavePicker(AppWindow.Id) { SuggestedFileName = "Hotshot-library-" + DateTime.Now.ToString("yyyyMMdd") };
+        var picker = new FileSavePicker(AppWindow.Id) { SuggestedFileName = "Hotshot-library-" + DateTime.Now.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) };
         picker.FileTypeChoices.Add("Hotshot library backup", [".zip"]);
         var chosen = await picker.PickSaveFileAsync();
         if (chosen is null) return;
@@ -132,7 +132,7 @@ internal sealed partial class WorkspaceWindow
         if (_editor.IsDirty) throw new InvalidOperationException("Save redactions and edits before bundling saved evidence.");
         if (await DialogAsync("Create local evidence bundle?", UiStyles.Description(
             "Writes flattened screenshots and a minimal manifest (dimensions, timestamps, project). No originals, annotations, AI/OCR text, absolute paths, credentials or uploads."), "Choose destination") != ContentDialogResult.Primary) return;
-        var picker = new FileSavePicker(AppWindow.Id) { SuggestedFileName = "Hotshot-evidence-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") };
+        var picker = new FileSavePicker(AppWindow.Id) { SuggestedFileName = "Hotshot-evidence-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) };
         picker.FileTypeChoices.Add("Local ZIP bundle", [".zip"]);
         var chosen = await picker.PickSaveFileAsync();
         if (chosen is null) return;
@@ -159,11 +159,12 @@ internal sealed partial class WorkspaceWindow
                     var png = await ImageCodec.EncodePngAsync(image);
                     var name = $"capture-{index + 1}.png";
                     await using (var output = zip.CreateEntry(name, CompressionLevel.Fastest).Open()) await output.WriteAsync(png, OperationToken);
-                    entries.Add(new() { ["file"] = name, ["width"] = image.Width.ToString(), ["height"] = image.Height.ToString(),
-                        ["createdAt"] = item.CreatedAt.ToString("O"), ["project"] = item.Project });
+                    entries.Add(new() { ["file"] = name, ["width"] = image.Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        ["height"] = image.Height.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        ["createdAt"] = item.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture), ["project"] = item.Project });
                 }
                 await using var manifest = zip.CreateEntry("evidence.json").Open();
-                await JsonSerializer.SerializeAsync(manifest, entries, new JsonSerializerOptions { WriteIndented = true }, OperationToken);
+                await JsonSerializer.SerializeAsync(manifest, entries, EvidenceJsonOptions, OperationToken);
             }, OperationToken);
             OperationToken.ThrowIfCancellationRequested();
             File.Move(temp, chosen.Path, overwrite: true);

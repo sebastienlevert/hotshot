@@ -48,7 +48,7 @@ internal sealed partial class AppController
             _app.StopSettingsSync();
             Log.Info($"Applying update {release.Version} silently.");
             _updates.ScheduleRestart(release);
-            await _agentServer.StopAsync();
+            await _agentServer.DisposeAsync();
             await _descriptions.DisposeAsync();
             await _textIndex.DisposeAsync();
             await _app.CheckpointHistoryAsync();

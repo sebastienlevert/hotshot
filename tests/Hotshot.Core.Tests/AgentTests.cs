@@ -16,7 +16,7 @@ public sealed class AgentTests
         request.Validate();
     }
     [Fact]
-    public void Access_IsOptIn_AndRoundTrips()
+    public void AccessIsOptInAndRoundTrips()
     {
         var settings = SettingsStore.Deserialize("""{"agents":null}""");
         Assert.False(settings.Agents.Enabled);

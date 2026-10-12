@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Vortice.MediaFoundation;
 
 namespace Hotshot.Gif.Internal;
@@ -64,6 +65,11 @@ internal readonly struct ComApartmentScope : IDisposable
     {
         int hr = NativeMethods.CoInitializeEx(0, NativeMethods.COINIT_MULTITHREADED);
         // RPC_E_CHANGED_MODE (STA thread) is tolerated: the MF objects used here are free-threaded.
+        if (hr != unchecked((int)0x80010106))
+        {
+            Marshal.ThrowExceptionForHR(hr);
+        }
+
         return new ComApartmentScope(hr is NativeMethods.S_OK or NativeMethods.S_FALSE);
     }
 

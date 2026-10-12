@@ -14,7 +14,8 @@ if (args.Contains("--fixture"))
     builder.Logging.ClearProviders();
     builder.Services.AddSingleton<IHotshotConnection, SyntheticConnection>();
     builder.Services.AddMcpServer().WithStdioServerTransport().WithTools<HotshotTools>();
-    await builder.Build().RunAsync();
+    using var host = builder.Build();
+    await host.RunAsync();
     return;
 }
 

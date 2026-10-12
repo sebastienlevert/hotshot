@@ -18,7 +18,7 @@ public sealed class ReliabilityTests : IDisposable
         {
             var path = Path.Combine(_dir, id + ".png");
             File.WriteAllText(path, "test");
-            history.Add(new HistoryItem { Id = id, Path = path, IsTemporary = id.StartsWith("temporary") });
+            history.Add(new HistoryItem { Id = id, Path = path, IsTemporary = id.StartsWith("temporary", StringComparison.Ordinal) });
         }
         Assert.Equal(3, history.Items.Count);
         Assert.False(File.Exists(Path.Combine(_dir, "temporary1.png")));

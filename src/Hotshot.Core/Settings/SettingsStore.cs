@@ -30,29 +30,23 @@ public sealed class SettingsStore
         (JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings) ?? new AppSettings()).Normalize();
 
     /// <summary>Loads settings; a corrupt file is backed up and defaults are returned.</summary>
+    /// <exception cref="IOException">Existing settings could not be read or preserved.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access to existing settings or their backup was denied.</exception>
     public AppSettings Load()
     {
         lock (_gate)
         {
-            if (!File.Exists(_path))
-            {
-                return new AppSettings().Normalize();
-            }
-
             try
             {
                 return Deserialize(File.ReadAllText(_path));
             }
-            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
             {
-                try
-                {
-                    File.Copy(_path, _path + ".corrupt", overwrite: true);
-                }
-                catch (IOException)
-                {
-                }
-
+                return new AppSettings().Normalize();
+            }
+            catch (Exception ex) when (ex is JsonException or NotSupportedException)
+            {
+                File.Copy(_path, _path + ".corrupt", overwrite: true);
                 return new AppSettings().Normalize();
             }
         }
@@ -63,9 +57,13 @@ public sealed class SettingsStore
         lock (_gate)
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var temp = _path + ".tmp";
-            File.WriteAllText(temp, Serialize(settings.Normalize()));
-            File.Move(temp, _path, overwrite: true);
+            var temp = _path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllText(temp, Serialize(settings.Normalize()));
+                File.Move(temp, _path, overwrite: true);
+            }
+            finally { if (File.Exists(temp)) File.Delete(temp); }
         }
 
         Saved?.Invoke(this, settings);

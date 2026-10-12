@@ -26,7 +26,7 @@ internal sealed partial class AppController
 
     private bool IsRecording => _recorder is not null;
 
-    private bool RecordingAvailable => RecordingSupport.IsSupported;
+    private static bool RecordingAvailable => RecordingSupport.IsSupported;
 
     private void InitializeRecording() => _actions.ConvertToGifHandler = ConvertToGifAsync;
 
@@ -182,7 +182,7 @@ internal sealed partial class AppController
             {
                 if (_journalOutputPath is { } path && !File.Exists(path))
                 {
-                    try { await Task.Run(() => Hotshot.Recording.RecordingRecovery.Complete(RecordingJournal)); }
+                    try { await Task.Run(() => Hotshot.Recording.RecordingRecovery.Complete(RecordingJournal), CancellationToken.None); }
                     catch (IOException ex) { Log.Error("Canceled recording journal cleanup failed", ex); Notify("Recording recovery", ex.Message, isError: true); }
                 }
                 _recordingWindow?.Close();

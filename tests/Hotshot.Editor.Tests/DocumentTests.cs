@@ -5,12 +5,14 @@ namespace Hotshot.Editor.Tests;
 
 public sealed class DocumentTests
 {
+    private static readonly int[] FourSteps = [1, 2, 3, 4];
+    private static readonly int[] ThreeSteps = [1, 2, 3];
     private static AnnotationDocument NewDoc() => new(800, 600);
 
     private static RectangleAnnotation Rect(float x, float y, float w, float h) => new() { Rect = new RectF(x, y, w, h) };
 
     [Fact]
-    public void Add_and_remove_record_history()
+    public void AddAndRemoveRecordHistory()
     {
         var doc = NewDoc();
         var r = Rect(10, 10, 100, 50);
@@ -29,7 +31,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Undo_redo_walks_the_stacks()
+    public void UndoRedoWalksTheStacks()
     {
         var doc = NewDoc();
         var a = Rect(0, 0, 10, 10);
@@ -59,7 +61,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Undo_restores_independent_copies()
+    public void UndoRestoresIndependentCopies()
     {
         var doc = NewDoc();
         var r = Rect(10, 10, 100, 50);
@@ -74,7 +76,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Update_without_change_is_not_recorded()
+    public void UpdateWithoutChangeIsNotRecorded()
     {
         var doc = NewDoc();
         var r = Rect(10, 10, 100, 50);
@@ -84,7 +86,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Move_transaction_is_a_single_undo_step()
+    public void MoveTransactionIsASingleUndoStep()
     {
         var doc = NewDoc();
         var r = Rect(10, 10, 100, 50);
@@ -108,7 +110,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Transaction_without_change_records_nothing_and_cancel_restores()
+    public void TransactionWithoutChangeRecordsNothingAndCancelRestores()
     {
         var doc = NewDoc();
         var r = Rect(10, 10, 100, 50);
@@ -128,7 +130,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Draw_transaction_adds_with_one_undo_step()
+    public void DrawTransactionAddsWithOneUndoStep()
     {
         var doc = NewDoc();
         doc.BeginTransaction();
@@ -146,7 +148,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Resize_box_handles()
+    public void ResizeBoxHandles()
     {
         var doc = NewDoc();
         var r = Rect(100, 100, 100, 50);
@@ -173,7 +175,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Segment_handles_and_angle_snap()
+    public void SegmentHandlesAndAngleSnap()
     {
         var line = new LineAnnotation { Start = new Vector2(0, 0), End = new Vector2(100, 0) };
         line.MoveHandle(HandleKind.End, new Vector2(100, 8), constrain: true);
@@ -188,7 +190,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Pen_resize_scales_points()
+    public void PenResizeScalesPoints()
     {
         var pen = new PenAnnotation { Points = [new(0, 0), new(10, 5), new(20, 10)] };
         pen.MoveHandle(HandleKind.BottomRight, new Vector2(40, 20), constrain: false);
@@ -202,7 +204,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Steps_are_numbered_and_renumbered_on_delete()
+    public void StepsAreNumberedAndRenumberedOnDelete()
     {
         var doc = NewDoc();
         var steps = Enumerable.Range(0, 4).Select(i => new StepAnnotation { Center = new Vector2(50 * i, 50) }).ToList();
@@ -213,22 +215,22 @@ public sealed class DocumentTests
         }
 
         doc.Add(Rect(0, 0, 10, 10));
-        Assert.Equal(new[] { 1, 2, 3, 4 }, doc.Annotations.OfType<StepAnnotation>().Select(s => s.Number));
+        Assert.Equal(FourSteps, doc.Annotations.OfType<StepAnnotation>().Select(s => s.Number));
         Assert.Equal(5, doc.NextStepNumber);
 
         doc.Remove(steps[1].Id);
         var remaining = doc.Annotations.OfType<StepAnnotation>().ToList();
-        Assert.Equal(new[] { 1, 2, 3 }, remaining.Select(s => s.Number));
+        Assert.Equal(ThreeSteps, remaining.Select(s => s.Number));
         Assert.Equal(steps[2].Id, remaining[1].Id);
         Assert.Equal(4, doc.NextStepNumber);
 
         doc.Undo();
-        Assert.Equal(new[] { 1, 2, 3, 4 }, doc.Annotations.OfType<StepAnnotation>().Select(s => s.Number));
+        Assert.Equal(FourSteps, doc.Annotations.OfType<StepAnnotation>().Select(s => s.Number));
         Assert.Equal(steps[1].Id, doc.Annotations.OfType<StepAnnotation>().ElementAt(1).Id);
     }
 
     [Fact]
-    public void Dirty_tracking_follows_saved_version_through_undo()
+    public void DirtyTrackingFollowsSavedVersionThroughUndo()
     {
         var doc = NewDoc();
         Assert.False(doc.IsDirty);
@@ -251,7 +253,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void Crop_is_normalized_and_undoable()
+    public void CropIsNormalizedAndUndoable()
     {
         var doc = NewDoc();
         Assert.True(doc.SetCrop(new RectF(500.4f, 400.6f, -300.2f, -200.3f)));
@@ -269,7 +271,7 @@ public sealed class DocumentTests
     }
 
     [Fact]
-    public void HitTest_returns_topmost()
+    public void HitTestReturnsTopmost()
     {
         var doc = NewDoc();
         var bottom = new RectangleAnnotation { Rect = new RectF(0, 0, 200, 200), Filled = true };

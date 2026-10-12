@@ -5,8 +5,9 @@ namespace Hotshot.Editor.Tests;
 
 public sealed class SerializationTests
 {
+    private static readonly int[] TwoSteps = [1, 2];
     [Fact]
-    public void Json_round_trip_preserves_every_annotation_type()
+    public void JsonRoundTripPreservesEveryAnnotationType()
     {
         var doc = new AnnotationDocument(1920, 1080);
         var arrow = new ArrowAnnotation { Start = new(10, 20), End = new(300.5f, 400.25f), Color = RgbaColor.Blue, StrokeWidth = 10 };
@@ -42,7 +43,7 @@ public sealed class SerializationTests
         Assert.Equal(RgbaColor.Purple, text.Color);
         Assert.Equal(new RgbaColor(0xFF, 0x95, 0x00, 128), copy.Annotations[3].Color);
         Assert.Equal(new Vector2(300.5f, 400.25f), ((ArrowAnnotation)copy.Annotations[0]).End);
-        Assert.Equal(new[] { 1, 2 }, copy.Annotations.OfType<StepAnnotation>().Select(s => s.Number));
+        Assert.Equal(TwoSteps, copy.Annotations.OfType<StepAnnotation>().Select(s => s.Number));
         Assert.Equal(3, ((PenAnnotation)copy.Annotations[4]).Points.Count);
         Assert.False(copy.IsDirty);
         Assert.False(copy.CanUndo);
@@ -55,7 +56,7 @@ public sealed class SerializationTests
     }
 
     [Fact]
-    public void Invalid_json_is_rejected()
+    public void InvalidJsonIsRejected()
     {
         Assert.False(AnnotationDocument.TryFromJson("{ not json", out _));
         Assert.False(AnnotationDocument.TryFromJson("""{"version":1,"imageWidth":10,"imageHeight":10,"annotations":[{"type":"unknown"}]}""", out _));
@@ -67,7 +68,7 @@ public sealed class SerializationTests
     [Theory]
     [InlineData("#FF3B30", 255, 59, 48, 255)]
     [InlineData("0a84ff80", 10, 132, 255, 128)]
-    public void Color_parsing(string hex, int r, int g, int b, int a)
+    public void ColorParsing(string hex, int r, int g, int b, int a)
     {
         Assert.True(RgbaColor.TryParse(hex, out var c));
         Assert.Equal(new RgbaColor((byte)r, (byte)g, (byte)b, (byte)a), c);
@@ -76,7 +77,7 @@ public sealed class SerializationTests
     }
 
     [Fact]
-    public void Contrasting_text_color()
+    public void ContrastingTextColor()
     {
         Assert.Equal(RgbaColor.Black, RgbaColor.Yellow.Contrasting);
         Assert.Equal(RgbaColor.Black, RgbaColor.White.Contrasting);

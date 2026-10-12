@@ -13,7 +13,7 @@ public sealed class GifOptions
     public bool Dither { get; init; } = true;
 
     /// <summary>NETSCAPE2.0 loop count (number of repetitions); 0 = loop forever.</summary>
-    public int LoopCount { get; init; } = 0;
+    public int LoopCount { get; init; }
 
     /// <summary>When false, omit the loop extension so the animation plays once.</summary>
     public bool Loop { get; init; } = true;

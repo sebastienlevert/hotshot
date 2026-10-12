@@ -5,6 +5,8 @@ namespace Hotshot.Views;
 
 internal static class ComparisonExport
 {
+    private static readonly JsonSerializerOptions ReportJsonOptions = new() { WriteIndented = true };
+
     /// <summary>Creates a new local report directory; never overwrites existing files or uploads.</summary>
     public static async Task<string> SaveAsync(string folder, CapturedImage before, CapturedImage after,
         ImageComparisonResult result, ComparisonOptions options, CancellationToken token = default)
@@ -47,7 +49,7 @@ internal static class ComparisonExport
                 ImageComparison.MaximumPixels,
             };
             await File.WriteAllTextAsync(Path.Combine(destination, files[3]), JsonSerializer.Serialize(report,
-                new JsonSerializerOptions { WriteIndented = true }), token);
+                ReportJsonOptions), token);
             return destination;
         }
         catch

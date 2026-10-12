@@ -7,12 +7,22 @@ namespace Hotshot.Gif.Tests;
 public sealed unsafe class ImageScalerTests
 {
     [Theory]
+    [InlineData(65536, 16384, 1, 1, "srcWidth")]
+    [InlineData(1, 1, 65536, 16384, "dstWidth")]
+    [InlineData(int.MaxValue, 1, 1, 1, "srcWidth")]
+    public void OversizedImagesAreRejectedBeforeAllocatingOrAccessingPixels(int sw, int sh, int dw, int dh, string parameter)
+    {
+        var error = Assert.Throws<ArgumentOutOfRangeException>(() => new ImageScaler(sw, sh, dw, dh));
+        Assert.Equal(parameter, error.ParamName);
+    }
+
+    [Theory]
     [InlineData(641, 359, 320, 179)]
     [InlineData(1920, 1080, 800, 450)]
     [InlineData(7, 5, 3, 2)]
     [InlineData(641, 359, 641, 359)]
     [InlineData(100, 100, 1, 1)]
-    public void SolidColor_StaysExact(int sw, int sh, int dw, int dh)
+    public void SolidColorStaysExact(int sw, int sh, int dw, int dh)
     {
         byte[] src = TestImages.Solid(sw, sh, 0x00A1B2C3);
         var dst = new byte[dw * dh * 4];
@@ -22,7 +32,7 @@ public sealed unsafe class ImageScalerTests
     }
 
     [Fact]
-    public void Checkerboard_AveragesToGray()
+    public void CheckerboardAveragesToGray()
     {
         const int sw = 64, sh = 48;
         var src = new uint[sw * sh];
@@ -40,7 +50,7 @@ public sealed unsafe class ImageScalerTests
     }
 
     [Fact]
-    public void AreaWeights_AreExact()
+    public void AreaWeightsAreExact()
     {
         // 3 → 2: out0 = (0 * 1 + 90 * 0.5) / 1.5 = 30, out1 = (90 * 0.5 + 180 * 1) / 1.5 = 150.
         uint[] src = [0xFF000000, 0xFF00005A, 0xFF0000B4];
@@ -51,7 +61,7 @@ public sealed unsafe class ImageScalerTests
     }
 
     [Fact]
-    public void NegativePitch_ReadsBottomUpBuffers()
+    public void NegativePitchReadsBottomUpBuffers()
     {
         const int sw = 641, sh = 359, dw = 320, dh = 179;
         uint[] topDown = TestImages.Gradient(sw, sh);
@@ -75,7 +85,7 @@ public sealed unsafe class ImageScalerTests
     }
 
     [Fact]
-    public void Downscale_KeepsGradientStructure()
+    public void DownscaleKeepsGradientStructure()
     {
         const int sw = 641, sh = 359, dw = 320, dh = 179;
         uint[] src = TestImages.Gradient(sw, sh);
@@ -103,7 +113,7 @@ public sealed unsafe class ImageScalerTests
     [InlineData(4000, 10, 1.0, 100, 100, 1)]
     [InlineData(720, 480, 32.0 / 27.0, 0, 720, 405)]
     [InlineData(1440, 1080, 4.0 / 3.0, 800, 800, 450)]
-    public void OutputSize_KeepsAspectAndNeverUpscales(int sw, int sh, double par, int maxWidth, int ew, int eh)
+    public void OutputSizeKeepsAspectAndNeverUpscales(int sw, int sh, double par, int maxWidth, int ew, int eh)
     {
         Assert.Equal((ew, eh), GifConverter.ComputeOutputSize(sw, sh, par, maxWidth));
     }

@@ -11,9 +11,9 @@ namespace Hotshot.Core.Tests;
 
 public sealed class DistributionComponentTests : IDisposable
 {
-    private readonly string _directory = Path.Combine(Environment.CurrentDirectory, ".component-tests-" + Guid.NewGuid().ToString("N"));
+    private readonly string _directory = Path.Combine(AppContext.BaseDirectory, ".component-tests-" + Guid.NewGuid().ToString("N"));
     public DistributionComponentTests() => Directory.CreateDirectory(_directory);
-    public void Dispose() => SafeComponentPaths.DeleteTree(Environment.CurrentDirectory, _directory);
+    public void Dispose() => SafeComponentPaths.DeleteTree(AppContext.BaseDirectory, _directory);
 
     [Theory]
     [InlineData(Architecture.X64, "full", "win-x64")]
@@ -280,6 +280,49 @@ public sealed class DistributionComponentTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.RemoveAsync(cancellationToken: TestContext.Current.CancellationToken));
         Assert.Throws<InvalidDataException>(() => SafeComponentPaths.DeleteTree(Path.Combine(_directory, "managed"), _directory));
         Assert.Throws<InvalidDataException>(() => SafeComponentPaths.Child(_directory, "../images"));
+    }
+
+    [Fact]
+    public async Task ConcurrentOperationIsRejectedWithoutReleasingTheActiveGate()
+    {
+        var store = Store();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var active = store.RemoveAsync(async () =>
+        {
+            entered.TrySetResult();
+            await release.Task.WaitAsync(TestContext.Current.CancellationToken);
+        }, TestContext.Current.CancellationToken);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.True(store.IsBusy);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                store.RemoveAsync(cancellationToken: TestContext.Current.CancellationToken));
+            Assert.True(store.IsBusy);
+            using var cancelled = new CancellationTokenSource();
+            cancelled.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                store.RemoveAsync(cancellationToken: cancelled.Token));
+            Assert.True(store.IsBusy);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await active;
+        }
+        Assert.False(store.IsBusy);
+        await store.RemoveAsync(cancellationToken: TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task FailedRuntimeReleaseDoesNotLeaveOperationGateBusy()
+    {
+        var store = Store();
+        await Assert.ThrowsAsync<IOException>(() => store.RemoveAsync(
+            () => throw new IOException("Synthetic release failure."), TestContext.Current.CancellationToken));
+        Assert.False(store.IsBusy);
+        await store.RemoveAsync(cancellationToken: TestContext.Current.CancellationToken);
     }
 
     [Fact]

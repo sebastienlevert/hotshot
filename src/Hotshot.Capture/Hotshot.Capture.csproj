@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Hotshot" />
     <ProjectReference Include="..\Hotshot.Core\Hotshot.Core.csproj" />
   </ItemGroup>
 

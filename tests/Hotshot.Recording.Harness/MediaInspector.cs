@@ -1,3 +1,4 @@
+using System.Globalization;
 using Vortice.MediaFoundation;
 
 namespace Hotshot.Recording.Harness;
@@ -77,7 +78,7 @@ internal static unsafe class MediaInspector
             }
 
             var durationValue = reader.GetPresentationAttribute(SourceReaderIndex.MediaSource, PresentationDescriptionAttributeKeys.Duration);
-            duration = Convert.ToInt64(durationValue.Value) / 1e7;
+            duration = Convert.ToInt64(durationValue.Value, CultureInfo.InvariantCulture) / 1e7;
 
             try
             {

@@ -478,16 +478,25 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         try
         {
             var back = _back.Dc;
-            Win32.SelectClipRgn(back, hasRegion ? region : 0);
-            Render(back, _frame);
-            Win32.SelectClipRgn(back, 0);
+            RequireGdiResult(Win32.SelectClipRgn(back, hasRegion ? region : 0), "selecting the repaint region");
+            try { Render(back, _frame); }
+            finally
+            {
+                if (Win32.SelectClipRgn(back, 0) == 0) Log.Warn("GDI could not clear the overlay repaint region.");
+            }
             var r = ps.rcPaint;
             Native.BitBlt(hdc, r.Left, r.Top, r.Width, r.Height, back, r.Left, r.Top, Native.SRCCOPY);
+        }
+        catch (Exception ex)
+        {
+            _result.TrySetException(ex);
+            throw;
         }
         finally
         {
             Win32.EndPaint(Handle, &ps);
             Native.DeleteObject(region);
+            if (_result.Task.IsFaulted) Dispose();
         }
     }
 
@@ -505,8 +514,8 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         {
             var h = new RECT(0, f.CursorY, f.Width, f.CursorY + 1);
             var v = new RECT(f.CursorX, 0, f.CursorX + 1, f.Height);
-            Win32.FillRect(dc, &h, _whiteBrush);
-            Win32.FillRect(dc, &v, _whiteBrush);
+            RequireGdiResult(Win32.FillRect(dc, &h, _whiteBrush), "drawing the horizontal crosshair");
+            RequireGdiResult(Win32.FillRect(dc, &v, _whiteBrush), "drawing the vertical crosshair");
         }
 
         if (!s.IsEmpty)
@@ -532,7 +541,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
     {
         var m = f.Magnifier;
         var zoom = m.Width / MagnifierCells;
-        Native.SetStretchBltMode(dc, Native.COLORONCOLOR);
+        RequireGdiResult(Native.SetStretchBltMode(dc, Native.COLORONCOLOR), "configuring the magnifier");
         Native.StretchBlt(dc, m.X, m.Y, m.Width, m.Height, _snapshot.Bitmap.Dc,
             f.CursorX - MagnifierCells / 2, f.CursorY - MagnifierCells / 2, MagnifierCells, MagnifierCells, Native.SRCCOPY);
 
@@ -548,10 +557,10 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         var bottom = new RECT(r.Left, r.Bottom - thickness, r.Right, r.Bottom);
         var left = new RECT(r.Left, r.Top, r.Left + thickness, r.Bottom);
         var right = new RECT(r.Right - thickness, r.Top, r.Right, r.Bottom);
-        Win32.FillRect(dc, &top, brush);
-        Win32.FillRect(dc, &bottom, brush);
-        Win32.FillRect(dc, &left, brush);
-        Win32.FillRect(dc, &right, brush);
+        RequireGdiResult(Win32.FillRect(dc, &top, brush), "drawing the top capture border");
+        RequireGdiResult(Win32.FillRect(dc, &bottom, brush), "drawing the bottom capture border");
+        RequireGdiResult(Win32.FillRect(dc, &left, brush), "drawing the left capture border");
+        RequireGdiResult(Win32.FillRect(dc, &right, brush), "drawing the right capture border");
     }
 
     private void DrawPill(nint dc, PixelRect rect, string text, double scale)
@@ -569,11 +578,17 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         Native.SelectObject(dc, oldBrush);
 
         var oldFont = Native.SelectObject(dc, Font(scale));
-        Win32.SetBkMode(dc, Win32.TRANSPARENT);
-        Win32.SetTextColor(dc, Win32.Rgb(245, 245, 245));
+        RequireGdiResult(Win32.SetBkMode(dc, Win32.TRANSPARENT), "configuring overlay text");
+        if (Win32.SetTextColor(dc, Win32.Rgb(245, 245, 245)) == uint.MaxValue)
+            throw new InvalidOperationException("GDI could not set the overlay text color.");
         var r = rect.ToRect();
         Win32.DrawText(dc, text, text.Length, &r, Win32.DT_CENTER | Win32.DT_VCENTER | Win32.DT_SINGLELINE | Win32.DT_NOPREFIX);
         Native.SelectObject(dc, oldFont);
+    }
+
+    private static void RequireGdiResult(int result, string operation)
+    {
+        if (result == 0) throw new InvalidOperationException("GDI failed while " + operation + ".");
     }
 
     private (int Width, int Height) MeasureText(string text, double scale, out nint font)

@@ -18,8 +18,12 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Hotshot.Views;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001",
+    Justification = "WinUI owns the window lifetime; Closed releases the editor/player and each operation releases its cancellation source in finally.")]
 internal sealed partial class WorkspaceWindow : Window
 {
+    private static readonly System.Text.Json.JsonSerializerOptions EvidenceJsonOptions = new() { WriteIndented = true };
+    private static readonly string[] AllProjects = ["All projects"];
     private readonly AppServices _app;
     private readonly CaptureActions _actions;
     private readonly Action<AppCommand> _execute;
@@ -731,7 +735,7 @@ internal sealed partial class WorkspaceWindow : Window
         if (selectedIds.Count == 0 && selectedId is not null) selectedIds.Add(selectedId);
         _rendering = true;
         var selectedProject = _projects.SelectedItem as string;
-        _projects.ItemsSource = new[] { "All projects" }.Concat(_app.History.Items.Select(item => item.Project).Where(project => project.Length > 0)
+        _projects.ItemsSource = AllProjects.Concat(_app.History.Items.Select(item => item.Project).Where(project => project.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase).Order()).ToArray();
         _projects.SelectedItem = selectedProject ?? "All projects";
         var chosenSearch = _savedSearches.SelectedItem as SavedCaptureSearch;

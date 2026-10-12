@@ -100,49 +100,56 @@ public static class GifConverter
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
             using var queue = new BlockingCollection<(byte[] Pixels, long Delay)>(FrameBufferCount);
             using var free = new BlockingCollection<byte[]>(FrameBufferCount);
+            int frameBytes = checked(width * height * 4);
             for (int i = 0; i < FrameBufferCount; i++)
             {
-                free.Add(GC.AllocateUninitializedArray<byte>(width * height * 4, pinned: true));
+                free.Add(GC.AllocateUninitializedArray<byte>(frameBytes, pinned: true), ct);
             }
 
-            var stream = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 16);
-            var writer = new GifWriter(stream, width, height, options);
+            FileStream? stream = null;
+            GifWriter? writer = null;
+            Task? consumer = null;
             Exception? consumerError = null;
-            Task consumer = Task.Factory.StartNew(
-                () =>
-                {
-                    try
-                    {
-                        foreach ((byte[] pixels, long delay) in queue.GetConsumingEnumerable(linked.Token))
-                        {
-                            writer.AddFrame(pixels, width * 4, TimeSpan.FromTicks(delay));
-                            free.Add(pixels);
-                        }
-                    }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        consumerError = ex;
-                        linked.Cancel();
-                    }
-                },
-                CancellationToken.None,
-                TaskCreationOptions.LongRunning,
-                TaskScheduler.Default);
-
             bool success = false;
             try
             {
+                stream = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 16);
+                writer = new GifWriter(stream, width, height, options);
+                consumer = Task.Factory.StartNew(
+                    () =>
+                    {
+                        try
+                        {
+                            foreach ((byte[] pixels, long delay) in queue.GetConsumingEnumerable(linked.Token))
+                            {
+                                writer.AddFrame(pixels, width * 4, TimeSpan.FromTicks(delay));
+                                free.Add(pixels, linked.Token);
+                            }
+                        }
+                        catch (OperationCanceledException) when (linked.IsCancellationRequested)
+                        {
+                        }
+                        catch (Exception ex)
+                        {
+                            consumerError = ex;
+                            linked.Cancel();
+                        }
+                    },
+                    CancellationToken.None,
+                    TaskCreationOptions.LongRunning,
+                    TaskScheduler.Default);
+
                 try
                 {
                     Produce(reader, options.FramesPerSecond, width, height, queue, free, progress, linked.Token);
-                    queue.CompleteAdding();
-                    consumer.Wait(CancellationToken.None);
                 }
-                catch (OperationCanceledException) when (consumerError is not null)
+                catch (OperationCanceledException) when (linked.IsCancellationRequested)
                 {
-                    // The encoder failed and canceled decoding; its exception is rethrown below.
+                    // Join the encoder before choosing between its failure and caller cancellation.
                 }
 
+                queue.CompleteAdding();
+                consumer.GetAwaiter().GetResult();
                 if (consumerError is not null)
                 {
                     ExceptionDispatchInfo.Throw(consumerError);
@@ -166,21 +173,25 @@ public static class GifConverter
                     queue.CompleteAdding();
                     try
                     {
-                        consumer.Wait(CancellationToken.None);
+                        consumer?.GetAwaiter().GetResult();
                     }
-                    catch (AggregateException)
+                    finally
                     {
-                        // Already reported through consumerError.
+                        try
+                        {
+                            stream?.Dispose();
+                        }
+                        finally
+                        {
+                            TryDelete(partial);
+                        }
                     }
-
-                    stream.Dispose();
-                    TryDelete(partial);
                 }
             }
 
             progress?.Report(1.0);
-            return new GifResult(output, width, height, writer.FrameCount,
-                TimeSpan.FromMilliseconds(writer.TotalCentiseconds * 10.0), new FileInfo(output).Length);
+            return new GifResult(output, width, height, writer!.FrameCount,
+                TimeSpan.FromMilliseconds(writer!.TotalCentiseconds * 10.0), new FileInfo(output).Length);
         }
     }
 
@@ -194,6 +205,7 @@ public static class GifConverter
         ImageScaler? scaler = null;
         int scalerVersion = -1;
         IMFSample? held = null;
+        VideoFrameReader.FrameFormat heldFormat = default;
         long heldTime = 0, heldDuration = 0;
         int heldId = 0, nextId = 0, assignedId = -1;
         byte[]? pending = null;
@@ -209,17 +221,17 @@ public static class GifConverter
             }
 
             byte[] buffer = free.Take(token);
-            if (scaler is null || scalerVersion != reader.FormatVersion)
+            if (scaler is null || scalerVersion != heldFormat.Version)
             {
-                scaler = new ImageScaler(reader.Width, reader.Height, width, height);
-                scalerVersion = reader.FormatVersion;
+                scaler = new ImageScaler(heldFormat.Crop.Width, heldFormat.Crop.Height, width, height);
+                scalerVersion = heldFormat.Version;
             }
 
             fixed (byte* dst = buffer)
             {
                 nint dstPtr = (nint)dst;
                 ImageScaler s = scaler;
-                reader.WithPixels(held!, (src, pitch) => s.Scale(src, pitch, dstPtr));
+                VideoFrameReader.WithPixels(held!, heldFormat, (src, pitch) => s.Scale(src, pitch, dstPtr));
             }
 
             if (pending is not null)
@@ -234,8 +246,14 @@ public static class GifConverter
 
         try
         {
-            while (reader.TryReadFrame(out IMFSample sample, out long timestamp, out long sampleDuration))
+            while (true)
             {
+                token.ThrowIfCancellationRequested();
+                if (!reader.TryReadFrame(out IMFSample sample, out long timestamp, out long sampleDuration))
+                {
+                    break;
+                }
+
                 try
                 {
                     token.ThrowIfCancellationRequested();
@@ -257,6 +275,7 @@ public static class GifConverter
                 }
 
                 held = sample;
+                heldFormat = reader.Format;
                 heldTime = timestamp;
                 heldDuration = sampleDuration;
                 heldId = ++nextId;

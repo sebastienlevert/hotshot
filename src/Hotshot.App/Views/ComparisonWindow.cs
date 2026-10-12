@@ -9,6 +9,8 @@ using Windows.Storage.Streams;
 
 namespace Hotshot.Views;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001",
+    Justification = "WinUI owns the window lifetime; Closed cancels work and disposes the source after active operations unwind.")]
 internal sealed class ComparisonWindow : Window
 {
     private readonly CapturedImage _before;
@@ -39,6 +41,7 @@ internal sealed class ComparisonWindow : Window
     private long _revision;
     private readonly CancellationTokenSource _stop = new();
     private CancellationTokenSource? _active;
+    private bool _stopDisposed;
 
     private ComparisonWindow(CapturedImage before, CapturedImage after, ImageComparisonResult result)
     {
@@ -125,7 +128,14 @@ internal sealed class ComparisonWindow : Window
             _ignored.Text = string.IsNullOrWhiteSpace(_ignored.Text) ? line : _ignored.Text.TrimEnd() + Environment.NewLine + line;
         };
         _debounce.Tick += async (_, _) => { _debounce.Stop(); await RecomputeAsync(); };
-        Closed += (_, _) => { _closed = true; _debounce.Stop(); _stop.Cancel(); _active?.Cancel(); };
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            _debounce.Stop();
+            _stop.Cancel();
+            _active?.Cancel();
+            DisposeClosedResources();
+        };
         AppWindow.Closing += (_, args) =>
         {
             if (_exporting)
@@ -232,6 +242,7 @@ internal sealed class ComparisonWindow : Window
         {
             _busy = false;
             _active = null;
+            DisposeClosedResources();
             if (!_closed)
             {
                 _progress.Visibility = Visibility.Collapsed;
@@ -294,6 +305,7 @@ internal sealed class ComparisonWindow : Window
         {
             _exporting = false;
             _active = null;
+            DisposeClosedResources();
             _progress.Visibility = Visibility.Collapsed;
             _export.IsEnabled = !_pending;
             if (_pending) { _debounce.Stop(); _debounce.Start(); }
@@ -306,5 +318,12 @@ internal sealed class ComparisonWindow : Window
         _error.Title = "Comparison";
         _error.Message = ex.Message;
         _error.IsOpen = true;
+    }
+
+    private void DisposeClosedResources()
+    {
+        if (!_closed || _busy || _exporting || _stopDisposed) return;
+        _stopDisposed = true;
+        _stop.Dispose();
     }
 }

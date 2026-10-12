@@ -25,6 +25,16 @@ internal sealed unsafe class ImageScaler
             throw new ArgumentOutOfRangeException(nameof(srcWidth), "Image dimensions must be positive.");
         }
 
+        if ((long)srcWidth * srcHeight > int.MaxValue / 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(srcWidth), "Source image byte size must fit in a managed buffer.");
+        }
+
+        if ((long)dstWidth * dstHeight > int.MaxValue / 4)
+        {
+            throw new ArgumentOutOfRangeException(nameof(dstWidth), "Destination image byte size must fit in a managed buffer.");
+        }
+
         _srcWidth = srcWidth;
         _srcHeight = srcHeight;
         DstWidth = dstWidth;

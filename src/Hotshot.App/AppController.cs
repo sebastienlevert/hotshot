@@ -28,6 +28,7 @@ internal sealed partial class AppController : IDisposable
     private readonly CopilotRuntimeManager _copilotRuntime;
     private Action? _balloonAction;
     private bool _exiting;
+    private bool _disposed;
 
     public AppController(DispatcherQueue dispatcher)
     {
@@ -128,7 +129,7 @@ internal sealed partial class AppController : IDisposable
         }
 
         ReportHotkeyConflicts();
-        if (firstRun && _settingsWindow is { } firstSettings) _ = firstSettings.ShowQuickStartAsync();
+        if (firstRun && _settingsWindow is { } firstSettings) Launch(firstSettings.ShowQuickStartAsync, "Guided setup failed");
         _updates.Start();
         _agentServer.Start();
         Program.MarkReady();
@@ -137,8 +138,8 @@ internal sealed partial class AppController : IDisposable
             Notify("Recording recovery", "An interrupted recording needs review. Use Recording tools in the workspace to recover a playable file or dismiss its notice.", isError: true);
         foreach (var item in _app.History.Items.Where(item => item.DescriptionPending && !item.IsVideo))
         {
-            if (_app.Settings.General.DescribeScreenshots) _ = _descriptions.EnqueueAsync(item);
-            else _ = Task.Run(() => _app.History.SetDescriptionPending(item.Id, false));
+            if (_app.Settings.General.DescribeScreenshots) Launch(() => _descriptions.EnqueueAsync(item), "Screenshot description failed");
+            else Launch(() => Task.Run(() => _app.History.SetDescriptionPending(item.Id, false)), "Could not update pending description");
         }
     }
 
@@ -155,12 +156,12 @@ internal sealed partial class AppController : IDisposable
         Log.Info($"Command: {command}{(secondInstance ? " (forwarded)" : string.Empty)}");
         switch (command)
         {
-            case AppCommand.Region: _ = _capture.CaptureRegionAsync(); break;
-            case AppCommand.Monitor: _ = _capture.CaptureMonitorAsync(); break;
-            case AppCommand.AllMonitors: _ = _capture.CaptureAllMonitorsAsync(); break;
-            case AppCommand.Scrolling: _ = _capture.CaptureScrollingAsync(); break;
-            case AppCommand.Record: _ = ToggleRecordingAsync(asGif: false); break;
-            case AppCommand.RecordGif: _ = ToggleRecordingAsync(asGif: true); break;
+            case AppCommand.Region: Launch(_capture.CaptureRegionAsync, "Region capture failed"); break;
+            case AppCommand.Monitor: Launch(_capture.CaptureMonitorAsync, "Monitor capture failed"); break;
+            case AppCommand.AllMonitors: Launch(_capture.CaptureAllMonitorsAsync, "Desktop capture failed"); break;
+            case AppCommand.Scrolling: Launch(_capture.CaptureScrollingAsync, "Scrolling capture failed"); break;
+            case AppCommand.Record: Launch(() => ToggleRecordingAsync(asGif: false), "Recording failed"); break;
+            case AppCommand.RecordGif: Launch(() => ToggleRecordingAsync(asGif: true), "GIF recording failed"); break;
             case AppCommand.Settings: ShowSettings(); break;
             case AppCommand.History: ShowHistory(); break;
             case AppCommand.Exit: Exit(); break;
@@ -168,7 +169,7 @@ internal sealed partial class AppController : IDisposable
         }
     }
 
-    public void Exit() => _ = ExitAsync();
+    public void Exit() => Launch(ExitAsync, "Hotshot could not shut down");
 
     private async Task ExitAsync()
     {
@@ -185,7 +186,7 @@ internal sealed partial class AppController : IDisposable
         Log.Info("Exiting");
         try
         {
-            await _agentServer.StopAsync();
+            await _agentServer.DisposeAsync();
             await _capture.ShutdownAsync();
             await ShutdownRecordingAsync();
             await _descriptions.DisposeAsync();
@@ -205,12 +206,17 @@ internal sealed partial class AppController : IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        if (ReferenceEquals(Current, this)) Current = null;
         _copilotRuntime.Dispose();
         _updates.Dispose();
         _agentServer.Dispose();
         _hotkeys.Dispose();
         _tray.Dispose();
         _window.Dispose();
+        _capture.Dispose();
+        _app.Dispose();
     }
 
     public void Notify(string title, string text, bool isError = false, Action? onClick = null)
@@ -227,17 +233,17 @@ internal sealed partial class AppController : IDisposable
         Log.Info($"Hotkey: {action}");
         switch (action)
         {
-            case HotkeyAction.RegionScreenshot: _ = _capture.CaptureRegionAsync(); break;
-            case HotkeyAction.MonitorScreenshot: _ = _capture.CaptureMonitorAsync(); break;
-            case HotkeyAction.AllMonitorsScreenshot: _ = _capture.CaptureAllMonitorsAsync(); break;
-            case HotkeyAction.RepeatLastRegion: _ = _capture.RepeatLastRegionAsync(); break;
-            case HotkeyAction.ToggleRecording: _ = ToggleRecordingAsync(asGif: false); break;
-            case HotkeyAction.RecordGif: _ = ToggleRecordingAsync(asGif: true); break;
+            case HotkeyAction.RegionScreenshot: Launch(_capture.CaptureRegionAsync, "Region capture failed"); break;
+            case HotkeyAction.MonitorScreenshot: Launch(_capture.CaptureMonitorAsync, "Monitor capture failed"); break;
+            case HotkeyAction.AllMonitorsScreenshot: Launch(_capture.CaptureAllMonitorsAsync, "Desktop capture failed"); break;
+            case HotkeyAction.RepeatLastRegion: Launch(_capture.RepeatLastRegionAsync, "Repeat capture failed"); break;
+            case HotkeyAction.ToggleRecording: Launch(() => ToggleRecordingAsync(asGif: false), "Recording failed"); break;
+            case HotkeyAction.RecordGif: Launch(() => ToggleRecordingAsync(asGif: true), "GIF recording failed"); break;
             case HotkeyAction.OpenHistory: ShowHistory(); break;
             case HotkeyAction.OpenLastInEditor:
                 if (_app.History.Latest(i => !i.IsVideo) is { } latest)
                 {
-                    _ = _actions.EditAsync(latest);
+                    Launch(() => _actions.EditAsync(latest), "Could not open the editor");
                 }
 
                 break;
@@ -251,7 +257,7 @@ internal sealed partial class AppController : IDisposable
         var recent = _app.History.Items.Take(8)
             .Select(item => new TrayMenuItem(DescribeForMenu(item), () =>
             {
-                if (item.IsVideo) _actions.Open(item); else _ = _actions.EditAsync(item);
+                if (item.IsVideo) _actions.Open(item); else Launch(() => _actions.EditAsync(item), "Could not open the editor");
             }))
             .ToList();
 
@@ -265,7 +271,7 @@ internal sealed partial class AppController : IDisposable
             new($"Repeat last region\t{DisplayHotkey(HotkeyAction.RepeatLastRegion)}", () => Delayed(_capture.RepeatLastRegionAsync)),
             TrayMenuItem.Separator,
             recording
-                ? new("Stop recording", () => _ = StopRecordingAsync())
+                ? new("Stop recording", () => Launch(StopRecordingAsync, "Could not stop recording"))
                 : new($"Record screen\t{DisplayHotkey(HotkeyAction.ToggleRecording)}", () => Delayed(() => ToggleRecordingAsync(false)), RecordingAvailable),
             new($"Record GIF\t{DisplayHotkey(HotkeyAction.RecordGif)}", () => Delayed(() => ToggleRecordingAsync(true)), RecordingAvailable && !recording),
             TrayMenuItem.Separator,
@@ -282,7 +288,9 @@ internal sealed partial class AppController : IDisposable
     }
 
     /// <summary>Lets the tray menu fade out before grabbing the screen.</summary>
-    private void Delayed(Func<Task> action) => _ = DelayedAsync(action);
+    private void Launch(Func<Task> action, string description) => _ = _app.RunObservedAsync(action, description);
+
+    private void Delayed(Func<Task> action) => Launch(() => DelayedAsync(action), "Hotshot action failed");
 
     private static async Task DelayedAsync(Func<Task> action)
     {

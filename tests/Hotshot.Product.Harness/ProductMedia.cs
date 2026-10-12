@@ -29,6 +29,7 @@ namespace Hotshot.ProductHarness;
 
 internal static class ProductMedia
 {
+    private static readonly JsonSerializerOptions EvidenceJsonOptions = new() { WriteIndented = true };
     public static async Task RunAsync(string output, bool settingsHeaderOnly = false)
     {
         var profile = Path.Combine(Path.GetTempPath(), "Hotshot.Product." + Guid.NewGuid().ToString("N"));
@@ -49,6 +50,7 @@ internal static class ProductMedia
             app.Settings.General.StartWithWindows = false;
             app.Settings.General.Theme = AppTheme.Light;
             app.Settings.Agents.Enabled = app.Settings.Agents.AllowHistoryAccess = false;
+            await CheckObservedOperationsAsync(app);
             Directory.CreateDirectory(app.Settings.General.SaveFolder);
             using var messages = new MessageWindow("Hotshot.Product.Message." + Guid.NewGuid().ToString("N"));
             app.MessageWindowHandle = messages.Handle;
@@ -144,7 +146,7 @@ internal static class ProductMedia
                 notVerified = new[] { "physical ARM64 execution", "mixed-scale multi-monitor movement", "HDR display fidelity", "Narrator usability" },
                 privacy = "Generated library only; captures target this harness's windows. No desktop, clipboard, microphone, real profile, OneDrive, or provider access.",
             };
-            await File.WriteAllTextAsync(Path.Combine(output, "device-evidence.json"), JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
+            await File.WriteAllTextAsync(Path.Combine(output, "device-evidence.json"), JsonSerializer.Serialize(evidence, EvidenceJsonOptions));
             Console.WriteLine("PASS real-device evidence recorded without identity, account, device names, paths, or serials.");
         }
         finally
@@ -155,8 +157,27 @@ internal static class ProductMedia
             app?.StopSettingsSync();
             if (app is not null) await app.CheckpointHistoryAsync();
             if (app is not null) await app.SaveAsync();
+            app?.Dispose();
             Directory.Delete(profile, recursive: true);
         }
+    }
+
+    private static async Task CheckObservedOperationsAsync(AppServices app)
+    {
+        var reported = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Failed(string message) => reported.TrySetResult(message);
+        app.Failed += Failed;
+        try
+        {
+            await app.RunObservedAsync(() => Task.CompletedTask, "Successful fixture operation");
+            if (reported.Task.IsCompleted) throw new InvalidOperationException("A successful operation reported a failure.");
+            await app.RunObservedAsync(() => throw new IOException("Synthetic operation failure"), "Fixture operation");
+            var message = await reported.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (!message.Contains("Synthetic operation failure", StringComparison.Ordinal))
+                throw new InvalidOperationException("Background operation failure was not surfaced.");
+        }
+        finally { app.Failed -= Failed; }
+        Console.WriteLine("PASS successful/failed background operations are observed and surfaced without user data.");
     }
 
     private static async Task CheckSettingsHeaderAsync(SettingsWindow window)
@@ -182,7 +203,7 @@ internal static class ProductMedia
                 if (!input.Focus(FocusState.Keyboard)) throw new InvalidOperationException("Title bar search could not receive focus.");
                 window.AppWindow.Resize(new SizeInt32((int)(width * root.XamlRoot.RasterizationScale), 1500));
                 await Task.Delay(250);
-                if (search.Text != "microphone" || FocusManager.GetFocusedElement(root.XamlRoot) != input)
+                if (search.Text != "microphone" || !Equals(FocusManager.GetFocusedElement(root.XamlRoot), input))
                     throw new InvalidOperationException($"Resizing lost the search query or focus at {width} DIPs ({theme}).");
                 var headerBounds = Bounds(header);
                 var toggleBounds = Bounds(toggle);

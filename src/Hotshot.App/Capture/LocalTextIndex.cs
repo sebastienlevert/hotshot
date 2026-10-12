@@ -9,6 +9,7 @@ internal sealed class LocalTextIndex(AppServices app) : IAsyncDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly Lock _state = new();
     private readonly HashSet<Task> _tasks = [];
+    private Task? _disposal;
     public bool IsBusy { get { lock (_state) return _tasks.Count > 0; } }
     public event Action<string>? Failed;
 
@@ -16,7 +17,7 @@ internal sealed class LocalTextIndex(AppServices app) : IAsyncDisposable
     {
         lock (_state)
         {
-            if (_stop.IsCancellationRequested) return;
+            if (_disposal is not null || _stop.IsCancellationRequested) return;
             var revision = item.ImageRevision;
             var task = Task.Run(() => IndexAsync(item, png, revision));
             _tasks.Add(task);
@@ -57,11 +58,17 @@ internal sealed class LocalTextIndex(AppServices app) : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
+    {
+        lock (_state) return new ValueTask(_disposal ??= DisposeCoreAsync());
+    }
+
+    private async Task DisposeCoreAsync()
     {
         _stop.Cancel();
         Task[] tasks;
         lock (_state) tasks = [.. _tasks];
-        await Task.WhenAll(tasks);
+        try { await Task.WhenAll(tasks); }
+        finally { _gate.Dispose(); _stop.Dispose(); }
     }
 }

@@ -42,6 +42,8 @@ internal sealed unsafe class VideoFrameReader : IDisposable
 
     internal Area Crop { get; private set; }
 
+    internal FrameFormat Format => new(Crop, _bufferHeight, _defaultStride, FormatVersion);
+
     public static VideoFrameReader Open(string path)
     {
         // Advanced processing (video processor MFT) is preferred; the legacy color converter is the fallback.
@@ -125,58 +127,70 @@ internal sealed unsafe class VideoFrameReader : IDisposable
         while (true)
         {
             IMFSample? s = _reader.ReadSample(SourceReaderIndex.FirstVideoStream, SourceReaderControlFlag.None, out _, out SourceReaderFlag flags, out long ts);
-            if ((flags & SourceReaderFlag.Error) != 0)
-            {
-                s?.Dispose();
-                throw new InvalidDataException("Media Foundation reported an error while decoding the video stream.");
-            }
-
-            if ((flags & SourceReaderFlag.CurrentMediaTypeChanged) != 0)
-            {
-                UpdateFormat();
-            }
-
-            if (s is null)
-            {
-                if ((flags & SourceReaderFlag.EndOfStream) != 0)
-                {
-                    sample = null!;
-                    timestamp = 0;
-                    sampleDuration = 0;
-                    return false;
-                }
-
-                continue;
-            }
-
-            sample = s;
-            timestamp = ts;
             try
             {
-                sampleDuration = s.SampleDuration;
-            }
-            catch (SharpGen.Runtime.SharpGenException)
-            {
-                sampleDuration = 0;
-            }
+                if ((flags & SourceReaderFlag.Error) != 0)
+                {
+                    throw new InvalidDataException("Media Foundation reported an error while decoding the video stream.");
+                }
 
-            return true;
+                if ((flags & SourceReaderFlag.CurrentMediaTypeChanged) != 0)
+                {
+                    UpdateFormat();
+                }
+
+                if (s is null)
+                {
+                    if ((flags & SourceReaderFlag.EndOfStream) != 0)
+                    {
+                        sample = null!;
+                        timestamp = 0;
+                        sampleDuration = 0;
+                        return false;
+                    }
+
+                    continue;
+                }
+
+                timestamp = ts;
+                try
+                {
+                    sampleDuration = s.SampleDuration;
+                }
+                catch (SharpGen.Runtime.SharpGenException)
+                {
+                    sampleDuration = 0;
+                }
+
+                sample = s;
+                s = null;
+                return true;
+            }
+            finally
+            {
+                s?.Dispose();
+            }
         }
     }
 
     /// <summary>Locks the sample's pixels and passes the top-left visible pixel and the signed row pitch to <paramref name="action"/>.</summary>
-    public void WithPixels(IMFSample sample, Action<nint, int> action)
+    internal static void WithPixels(IMFSample sample, FrameFormat format, Action<nint, int> action)
     {
         IMFMediaBuffer buffer = sample.BufferCount == 1 ? sample.GetBufferByIndex(0) : sample.ConvertToContiguousBuffer();
         try
         {
-            Area crop = Crop;
+            Area crop = format.Crop;
             using IMF2DBuffer? buffer2D = buffer.QueryInterfaceOrNull<IMF2DBuffer>();
             if (buffer2D is not null)
             {
                 buffer2D.Lock2D(out nint scanline0, out int pitch);
                 try
                 {
+                    if (pitch == int.MinValue || Math.Abs(pitch) < ((long)crop.X + crop.Width) * 4)
+                    {
+                        throw new InvalidDataException("Decoded video buffer has an invalid row pitch.");
+                    }
+
                     action(scanline0 + ((nint)crop.Y * pitch) + (crop.X * 4), pitch);
                 }
                 finally
@@ -190,9 +204,9 @@ internal sealed unsafe class VideoFrameReader : IDisposable
             buffer.Lock(out nint data, out _, out int length);
             try
             {
-                int stride = _defaultStride;
+                int stride = format.DefaultStride;
                 int absStride = Math.Abs(stride);
-                int rows = Math.Min(_bufferHeight, length / absStride);
+                int rows = Math.Min(format.BufferHeight, length / absStride);
                 if (crop.Y + crop.Height > rows || crop.X + crop.Width > absStride / 4)
                 {
                     throw new InvalidDataException("Decoded video buffer is smaller than the reported frame size.");
@@ -218,11 +232,20 @@ internal sealed unsafe class VideoFrameReader : IDisposable
     {
         using IMFMediaType current = _reader.GetCurrentMediaType(SourceReaderIndex.FirstVideoStream);
         MediaFactory.MFGetAttributeSize(current, MediaTypeAttributeKeys.FrameSize, out uint w, out uint h).CheckError();
+        if (w == 0 || h == 0 || w > int.MaxValue / 4 || h > int.MaxValue)
+        {
+            throw new InvalidDataException("Decoded video has an invalid frame size.");
+        }
+
         _bufferWidth = (int)w;
         _bufferHeight = (int)h;
         _defaultStride = current.GetUInt32(MediaTypeAttributeKeys.DefaultStride, out uint stride).Success && stride != 0
             ? unchecked((int)stride)
             : _bufferWidth * 4;
+        if (_defaultStride == int.MinValue || Math.Abs(_defaultStride) < _bufferWidth * 4)
+        {
+            throw new InvalidDataException("Decoded video has an invalid row stride.");
+        }
 
         Area crop = TryGetArea(current, MediaTypeAttributeKeys.MinimumDisplayAperture)
             ?? TryGetArea(current, MediaTypeAttributeKeys.GeometricAperture)
@@ -240,12 +263,12 @@ internal sealed unsafe class VideoFrameReader : IDisposable
 
     private static Area? TryGetArea(IMFAttributes attributes, Guid key)
     {
-        if (!attributes.GetBlobSize(key, out uint size).Success || size < 16)
+        if (!attributes.GetBlobSize(key, out uint size).Success || size != 16)
         {
             return null;
         }
 
-        Span<byte> blob = stackalloc byte[(int)size];
+        Span<byte> blob = stackalloc byte[16];
         if (!attributes.GetBlob(key, blob).Success)
         {
             return null;
@@ -260,4 +283,6 @@ internal sealed unsafe class VideoFrameReader : IDisposable
     }
 
     internal readonly record struct Area(int X, int Y, int Width, int Height);
+
+    internal readonly record struct FrameFormat(Area Crop, int BufferHeight, int DefaultStride, int Version);
 }
