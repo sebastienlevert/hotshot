@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.14](https://github.com/sebastienlevert/hotshot/compare/v0.1.13...v0.1.14) (2026-10-12)
+
+
+### Features
+
+* add guided setup, slim editions and launch-ready workflows ([ee51148](https://github.com/sebastienlevert/hotshot/commit/ee51148d99878fb23b5c8dbb415c2fd4bdd54413))
+
 ## [0.1.13](https://github.com/sebastienlevert/hotshot/compare/v0.1.12...v0.1.13) (2026-10-12)
 
 
