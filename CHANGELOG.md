@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.15](https://github.com/sebastienlevert/hotshot/compare/v0.1.14...v0.1.15) (2026-10-12)
+
+
+### Bug Fixes
+
+* **settings:** move navigation toggle into the title bar ([6f83892](https://github.com/sebastienlevert/hotshot/commit/6f838927dd4bbf1debdb96ba0a016888e9ebee9e))
+
 ## [0.1.14](https://github.com/sebastienlevert/hotshot/compare/v0.1.13...v0.1.14) (2026-10-12)
 
 
