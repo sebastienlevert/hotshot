@@ -1,0 +1,27 @@
+name: Feature request
+description: Explain the workflow or problem Hotshot should improve.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the user workflow, not just a control or implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would a good result look like?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Existing workflows or alternatives
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Privacy, accessibility, or device constraints
+      description: Do not include private captures, credentials, or personal data.

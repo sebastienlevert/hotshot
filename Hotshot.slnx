@@ -9,11 +9,13 @@
     <Project Path="src/Hotshot.Recording/Hotshot.Recording.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Hotshot.Components.Harness/Hotshot.Components.Harness.csproj" />
     <Project Path="tests/Hotshot.Core.Tests/Hotshot.Core.Tests.csproj" />
     <Project Path="tests/Hotshot.Library.Harness/Hotshot.Library.Harness.csproj" />
     <Project Path="tests/Hotshot.Capture.Tests/Hotshot.Capture.Tests.csproj" />
     <Project Path="tests/Hotshot.Editor.Tests/Hotshot.Editor.Tests.csproj" />
     <Project Path="tests/Hotshot.Gif.Tests/Hotshot.Gif.Tests.csproj" />
+    <Project Path="tests/Hotshot.Product.Harness/Hotshot.Product.Harness.csproj" />
     <Project Path="tests/Hotshot.Recording.Harness/Hotshot.Recording.Harness.csproj" />
     <Project Path="tests/Hotshot.Updates.Harness/Hotshot.Updates.Harness.csproj" />
     <Project Path="tests/Hotshot.Mcp.Harness/Hotshot.Mcp.Harness.csproj" />

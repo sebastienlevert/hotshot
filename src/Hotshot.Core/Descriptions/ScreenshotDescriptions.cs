@@ -26,6 +26,7 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
     private int _pending;
     private int _disposed;
     private bool _reviewRequired;
+    private bool _providerMaintenance;
     private string[] _excludedApps = [];
 
     public ScreenshotDescriptions(HistoryStore history, Func<ICaptureDescriptionProvider> createProvider, bool enabled)
@@ -92,7 +93,7 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(item);
         lock (_state)
         {
-            if (!_enabled || item.IsVideo || _stop.IsCancellationRequested) return Task.FromResult(false);
+            if (!_enabled || _providerMaintenance || item.IsVideo || _stop.IsCancellationRequested) return Task.FromResult(false);
             if (_scheduled.TryGetValue(item.Id, out var existing))
             {
                 if (item.ImageRevision > existing.RequestedRevision)
@@ -141,6 +142,29 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
         await _files.WaitAsync();
         try { await action(); }
         finally { _files.Release(); }
+    }
+
+    public async Task RunProviderMaintenanceAsync(Func<Task> action)
+    {
+        ICaptureDescriptionProvider? provider;
+        lock (_state)
+        {
+            if (_pending != 0 || _providerMaintenance || _disposed != 0)
+                throw new InvalidOperationException("Wait for screenshot analysis to finish before changing its runtime.");
+            _providerMaintenance = true;
+            provider = _provider;
+            _provider = null;
+        }
+        try
+        {
+            if (provider is not null) await provider.DisposeAsync();
+            await action();
+        }
+        finally
+        {
+            lock (_state) _providerMaintenance = false;
+            Changed?.Invoke();
+        }
     }
 
     private bool MayProcess(Work work)

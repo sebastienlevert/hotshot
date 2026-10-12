@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-10-12T12:49:14.1057186+00:00",
+  "applicationVersion": "0.1.13.0",
+  "windowsBuild": "10.0.26300.0",
+  "processArchitecture": "X64",
+  "monitors": [
+    {
+      "width": 1080,
+      "height": 2268,
+      "scale": 2,
+      "primary": true
+    }
+  ],
+  "passed": [
+    "real WinUI isolated-profile rendering",
+    "WGC screenshots of own native windows",
+    "silent native workspace recording",
+    "filename selection",
+    "annotation sidecar loading",
+    "native comparison rendering"
+  ],
+  "notVerified": [
+    "physical ARM64 execution",
+    "mixed-scale multi-monitor movement",
+    "HDR display fidelity",
+    "Narrator usability"
+  ],
+  "privacy": "Generated library only; captures target this harness\u0027s windows. No desktop, clipboard, microphone, real profile, OneDrive, or provider access."
+}

@@ -145,7 +145,7 @@ Use an interactive Windows desktop for native capture/UI checks.
 |---|---|---|
 | Library persistence/search benchmark | `dotnet run --project tests\Hotshot.Library.Harness\Hotshot.Library.Harness.csproj -c Release` | Generated data, not the user's library. |
 | Native agent bridge and settings reload | `dotnet run --project tests\Hotshot.Agents.Harness\Hotshot.Agents.Harness.csproj -c Release -p:Platform=x64` | Isolated profile, generated images, and its own synthetic window/region. No provider upload. |
-| Recording pipeline | `dotnet run --project tests\Hotshot.Recording.Harness\Hotshot.Recording.Harness.csproj -- --window-only` | Records synthetic windows and changes the clipboard to a generated capture. |
+| Recording pipeline | `dotnet run --project tests\Hotshot.Recording.Harness\Hotshot.Recording.Harness.csproj -- --window-only` | Records synthetic windows with all audio off and changes the clipboard to a generated capture. |
 | Unobscured window capture | `dotnet run --project tests\Hotshot.Recording.Harness\Hotshot.Recording.Harness.csproj -- --window-screenshot` | Synthetic targets, occlusion, protection, and target-state checks. |
 | Two-minute recording soak | `dotnet run --project tests\Hotshot.Recording.Harness\Hotshot.Recording.Harness.csproj -- --soak-seconds 120` | Synthetic window; audio disabled; checks timeline, resizing, and memory growth. |
 | PNG description metadata | `dotnet run --project tests\Hotshot.Descriptions.Harness\Hotshot.Descriptions.Harness.csproj` | Generated image; no model request by default. |
@@ -182,6 +182,8 @@ If you changed the build configuration, architecture, or artifacts path, use the
 With no selector, the smoke captures the real desktop locally and changes the clipboard; use a safe desktop. `-VerifyStartup` additionally tests/restores the startup registry entry and requires a Release build. `-VideoFixture` supplies an MP4 for video preview/frame-extraction coverage.
 
 A synthetic test or cross-build is not a substitute for physical mixed-scale monitors, HDR display fidelity, Narrator usability, or real ARM64 execution. State what you actually tested and any remaining hardware gaps.
+
+For an anonymous available-device report, use `tests\Hotshot.Device.Validation.ps1` with the actual Recording/Product harness executables. The native product harness creates a GUID-isolated profile and generated library, renders actual WinUI windows, and records only its own workspace without audio. It temporarily permits its own publication windows to exceed a portrait monitor's maximum track size and uses a neutral background instead of a private wallpaper backdrop. Production capture exclusions and real user data are unchanged. See [compatibility and device validation](docs/compatibility.md).
 
 ## Website and documentation
 
@@ -234,17 +236,18 @@ For local packaging, restore the pinned tool and use the version already in `ver
 dotnet tool restore
 pwsh build\package.ps1 -Runtime win-x64
 pwsh build\package.ps1 -Runtime win-arm64
+pwsh build\package.ps1 -Runtime win-x64 -Edition Core
 ```
 
-The script publishes the app, MCP companion, agent assets, and bundled Copilot runtime, then creates installer, managed-portable, and update-feed assets. Defaults are `artifacts\publish\<version>\<runtime>` and `artifacts\releases\<runtime>`. `-OutputRoot` and `-BuildArtifactsPath` can move large outputs to another drive.
+The script publishes the app, MCP companion, and agent assets, then creates installer, managed-portable, and update-feed assets. Full includes the Copilot runtime and emits the separately verified component ZIP/manifest; Core omits it. Default channels are `win-x64`/`win-arm64` for Full and `core-win-x64`/`core-win-arm64` for Core. Publish/release paths use those channels under `artifacts\publish\<version>\<channel>` and `artifacts\releases\<channel>`. `-OutputRoot` and `-BuildArtifactsPath` can move large outputs to another drive.
 
-`-IncludeCopilotRuntime:$false` is an opt-out for custom developer packages; public releases keep the runtime bundled. Such a package needs a separately configured SDK-compatible runtime for AI descriptions. Regenerate the logo/tray assets only when needed with `pwsh build\make-icons.ps1`.
+Use `-Edition Core` for public slim packages; omit the older runtime flag when selecting an edition. Full remains available and existing installations stay on their edition's feed. Core's native component installer validates official HTTPS downloads, archive/file hashes, bounded paths/counts, and SDK stdio startup before publishing a local selecting receipt. Credentials, models, sessions, image uploads, and permission changes are not part of that installation. Regenerate the logo/tray assets only when needed with `pwsh build\make-icons.ps1`.
 
 ### Maintainer release flow
 
 [Release Please](https://github.com/googleapis/release-please) owns `version.txt`, `Directory.Build.props`, `CHANGELOG.md`, `.release-please-manifest.json`, and both agent plugin versions. **Do not manually bump these files or create release tags in an ordinary feature/fix PR.**
 
-After changes land on `main`, review and merge the release PR. The combined [release workflow](.github/workflows/release.yml) creates a tag/draft, tests and packages both architectures, uploads the installers/portable bundles/feed files, and only then publishes the release as latest. Never publish a partial draft; update clients must not discover incomplete assets.
+After changes land on `main`, review and merge the release PR. The combined [release workflow](.github/workflows/release.yml) creates a tag/draft, tests and packages both architectures/editions, uploads installers/portable bundles/feed files and optional-component manifests/archives, and only then publishes the release as latest. Hosted native ARM64 component/MCP execution is not physical-device UI acceptance. Never publish a partial draft; update clients must not discover incomplete assets.
 
 For repair/bootstrap, maintainers can dispatch **Release Please and publish** with an existing tagged version. Keep tag, manifest, MSBuild, and plugin versions consistent. GitHub must allow Actions to create pull requests; no personal token or signing credential belongs in source control. Release packages are currently unsigned.
 

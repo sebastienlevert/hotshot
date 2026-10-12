@@ -188,6 +188,7 @@ internal sealed partial class SettingsWindow : Window
         };
         Closed += (_, _) =>
         {
+            CloseAiComponent();
             _closed = true;
             _saveTimer.Stop();
             if (_titleBarRoot is not null) _titleBarRoot.Changed -= TitleBarRootChanged;
@@ -208,7 +209,8 @@ internal sealed partial class SettingsWindow : Window
     }
 
     public Task SavePendingAsync() => PersistAsync();
-    public bool HasPendingChanges => _editVersion != _savedVersion || _closing || _pickingFolder;
+    public bool HasPendingChanges => _editVersion != _savedVersion || _closing || _pickingFolder ||
+        IsQuickStartActive || IsQuickStartBusy || IsAiComponentBusy;
 
     private void TitleBarRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateTitleBarInsets();
 
@@ -394,6 +396,7 @@ internal sealed partial class SettingsWindow : Window
                 _aiStatus = UiStyles.Description(string.Empty);
                 RefreshAiStatus();
                 panel.Children.Add(_aiStatus);
+                RenderAiComponent(panel, _app.CopilotRuntime);
                 var runtime = new Button { Content = "Choose optional Copilot runtime" };
                 runtime.Click += async (_, _) =>
                 {
@@ -404,10 +407,10 @@ internal sealed partial class SettingsWindow : Window
                     Changed();
                 };
                 panel.Children.Add(runtime);
-                var bundled = new Button { Content = "Use bundled Copilot runtime" };
+                var bundled = new Button { Content = "Use app-managed Copilot runtime" };
                 bundled.Click += (_, _) => { _draft.General.CopilotRuntimePath = null; Changed(); };
                 panel.Children.Add(bundled);
-                Note(panel, "Bundled runtime is the default. An external SDK-compatible runtime is optional for component-free builds; restart Hotshot after changing it. No runtime is downloaded automatically.");
+                Note(panel, "Full includes the runtime. Core uses an explicitly installed optional component or your selected SDK-compatible external runtime. Installation never enables cloud analysis or signs into an account.");
                 Section(panel, "Selection");
                 Toggle(panel, "Snap to windows", "Click a window instead of dragging a region.", _draft.Capture.SnapToWindows, v => _draft.Capture.SnapToWindows = v);
                 Toggle(panel, "Show magnifier", "Inspect individual pixels while selecting a region.", _draft.Capture.ShowMagnifier, v => _draft.Capture.ShowMagnifier = v);

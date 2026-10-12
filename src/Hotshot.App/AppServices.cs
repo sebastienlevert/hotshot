@@ -7,6 +7,7 @@ using Hotshot.Core.Descriptions;
 using Hotshot.CaptureFlow;
 using Hotshot.Agents;
 using Hotshot.Settings;
+using Hotshot.Descriptions;
 
 namespace Hotshot;
 
@@ -56,6 +57,7 @@ internal sealed class AppServices
     public HistoryStore History { get; }
     public AutomaticUpdates? Updates { get; set; }
     public ScreenshotDescriptions? Descriptions { get; set; }
+    public CopilotRuntimeManager? CopilotRuntime { get; set; }
     public LocalTextIndex? TextIndex { get; set; }
     public OutputPipeline? Output { get; set; }
     public AgentCaptureServer? AgentServer { get; set; }

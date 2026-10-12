@@ -1,6 +1,7 @@
 using Hotshot.Core;
 using Hotshot.Core.History;
 using Hotshot.Views;
+using Hotshot.Core.Setup;
 
 namespace Hotshot;
 
@@ -47,6 +48,11 @@ internal sealed partial class AppController
         if (_settingsWindow is null)
         {
             _settingsWindow = new SettingsWindow(_app, _hotkeys);
+            _settingsWindow.QuickStartStateChanged += () =>
+            {
+                if (_settingsWindow?.QuickStartOutcome == SetupOutcome.Completed)
+                    _ = MarkFirstRunCompletedAsync();
+            };
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
 

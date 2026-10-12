@@ -187,6 +187,34 @@ public sealed class ScreenshotDescriptionTests : IDisposable
         Assert.Equal(1, item.ImageRevision);
     }
 
+    [Fact]
+    public async Task RuntimeMaintenanceReleasesIdleProviderAndBlocksAnalysisWithoutChangingOptIn()
+    {
+        var (history, item) = Fixture();
+        var created = 0;
+        var disposed = 0;
+        await using var service = new ScreenshotDescriptions(history, () =>
+        {
+            created++;
+            return new Provider((_, _) => Task.FromResult(new CaptureDescription("Synthetic", "Synthetic screenshot")),
+                () => disposed++);
+        }, true);
+        var idle = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        service.Changed += () => { if (!service.IsBusy) idle.TrySetResult(); };
+        Assert.True(await service.EnqueueAsync(item));
+        await idle.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await service.RunProviderMaintenanceAsync(async () =>
+        {
+            Assert.False(service.IsBusy);
+            Assert.Equal(0, service.PendingCount);
+            Assert.Equal(1, disposed);
+            Assert.False(await service.EnqueueAsync(item));
+            Assert.Equal(1, created);
+        });
+        Assert.True(await service.EnqueueAsync(item));
+        Assert.Equal(2, created);
+    }
+
     private (HistoryStore History, HistoryItem Item) Fixture()
     {
         var path = Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".png");
@@ -225,9 +253,9 @@ public sealed class ScreenshotDescriptionTests : IDisposable
         }
     }
 
-    private sealed class Provider(Func<byte[], CancellationToken, Task<CaptureDescription>> describe) : ICaptureDescriptionProvider
+    private sealed class Provider(Func<byte[], CancellationToken, Task<CaptureDescription>> describe, Action? disposed = null) : ICaptureDescriptionProvider
     {
         public Task<CaptureDescription> DescribeAsync(byte[] png, CancellationToken token) => describe(png, token);
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public ValueTask DisposeAsync() { disposed?.Invoke(); return ValueTask.CompletedTask; }
     }
 }

@@ -139,6 +139,8 @@ ${header({ ...assets, docs })}${content}${footer(assets)}${searchDialog()}
   files.set('robots.txt', `User-agent: *\nAllow: ${base}\nSitemap: ${origin}${base}sitemap.xml\n`);
   files.set('.nojekyll', '');
   files.set('assets/logo.png', logoBytes);
+  for (const name of ['editor.png', 'settings.png', 'comparison.png', 'workflow.mp4', 'workflow.vtt', 'device-evidence.json'])
+    files.set(`media/${name}`, await fs.readFile(path.join(root, 'website', 'media', name)));
   files.set('assets/display-font-license.txt', await fs.readFile(path.join(fontDirectory, 'LICENSE'), 'utf8'));
   await fs.mkdir(output, { recursive: true });
   const manifestPath = path.join(output, '.generated-files.json');

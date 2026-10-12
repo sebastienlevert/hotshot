@@ -30,7 +30,9 @@ internal sealed partial class AppController
             ActiveWindow: Active(_historyWindow) || Active(_settingsWindow) || _app.AuxiliaryWindowCount > 0,
             UnsavedSettings: _app.IsSaving || (_settingsWindow?.HasPendingChanges ?? false),
             Exiting: _exiting,
-            Describing: _descriptions.IsBusy || _textIndex.IsBusy || _agentServer.IsBusy);
+            Describing: _descriptions.IsBusy || _textIndex.IsBusy || _agentServer.IsBusy,
+            ComponentOperation: _copilotRuntime.IsBusy || (_settingsWindow?.IsAiComponentBusy ?? false) ||
+                (_settingsWindow?.IsQuickStartActive ?? false));
     }
 
     private async Task<bool> ApplyUpdateAsync(VelopackAsset release)

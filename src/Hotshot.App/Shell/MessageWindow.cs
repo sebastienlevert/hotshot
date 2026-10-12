@@ -15,10 +15,10 @@ internal sealed unsafe class MessageWindow : NativeWindow
 
     private readonly uint _taskbarCreatedMessage = Win32.RegisterWindowMessage("TaskbarCreated");
 
-    public MessageWindow()
+    public MessageWindow(string className = ClassName)
     {
         // A real (never shown) popup, not HWND_MESSAGE, so it receives the TaskbarCreated broadcast.
-        CreateHandle(ClassName, Win32.WS_EX_TOOLWINDOW, Win32.WS_POPUP, 0, 0, 0, 0, "Hotshot");
+        CreateHandle(className, Win32.WS_EX_TOOLWINDOW, Win32.WS_POPUP, 0, 0, 0, 0, "Hotshot");
     }
 
     public event Action<int>? HotkeyPressed;

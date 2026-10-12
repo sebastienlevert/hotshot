@@ -26,7 +26,8 @@ internal sealed class AutomaticUpdates : IDisposable
         _dispatcher = dispatcher;
         _canRestart = canRestart;
         _apply = apply;
-        Channel = UpdateChannel.ForArchitecture(RuntimeInformation.ProcessArchitecture);
+        var distribution = DistributionMetadata.Read(AppContext.BaseDirectory, RuntimeInformation.ProcessArchitecture);
+        Channel = DistributionMetadata.Channel(RuntimeInformation.ProcessArchitecture, distribution);
         _manager = new UpdateManager(new GithubReleaseSource(),
             new UpdateOptions { ExplicitChannel = Channel, AllowVersionDowngrade = false });
         _checkTimer = dispatcher.CreateTimer();

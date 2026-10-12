@@ -15,7 +15,7 @@ public sealed class UpdateActivityTests
         [
             new(Capturing: true), new(Recording: true), new(Converting: true),
             new(UnsavedEdits: true), new(EditorBusy: true), new(ActiveWindow: true),
-            new(UnsavedSettings: true), new(Exiting: true),
+            new(UnsavedSettings: true), new(Exiting: true), new(Describing: true), new(ComponentOperation: true),
         ];
         Assert.All(activities, activity => Assert.False(activity.CanRestart));
     }

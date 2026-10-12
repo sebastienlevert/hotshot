@@ -39,11 +39,15 @@ jobs:
   package:
     needs: release
     if: needs.release.outputs.created == 'true'
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        runtime: [win-x64, win-arm64]
+        include:
+          - runtime: win-x64
+            runner: windows-latest
+          - runtime: win-arm64
+            runner: windows-11-arm
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ needs.release.outputs.version }}
@@ -68,14 +72,20 @@ jobs:
         run: dotnet tool restore
       - name: Download previous release for deltas
         shell: pwsh
-        env:
-          CHANNEL: ${{ matrix.runtime }}
         run: |
           $previous = gh release list --repo "$env:GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Could not inspect previous releases.' }
           if ($previous.Count -gt 0 -and $previous[0].tagName -ne $env:RELEASE_TAG) {
-            dotnet tool run vpk -- download github --repoUrl "https://github.com/$env:GITHUB_REPOSITORY" --token $env:GH_TOKEN --channel $env:CHANNEL --outputDir "artifacts\releases\$env:CHANNEL"
-            if ($LASTEXITCODE -ne 0) { throw 'Previous update feed could not be downloaded.' }
+            $assets = @(gh release view $previous[0].tagName --repo "$env:GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+            if ($LASTEXITCODE -ne 0) { throw 'Could not inspect previous release assets.' }
+            foreach ($channel in '${{ matrix.runtime }}', 'core-${{ matrix.runtime }}') {
+              if ($assets -contains "releases.$channel.json") {
+                dotnet tool run vpk -- download github --repoUrl "https://github.com/$env:GITHUB_REPOSITORY" --token $env:GH_TOKEN --channel $channel --outputDir "artifacts\releases\$channel"
+                if ($LASTEXITCODE -ne 0) { throw "Previous $channel update feed could not be downloaded." }
+              } else {
+                Write-Host "No previous $channel feed: creating its first public release."
+              }
+            }
           }
       - name: Tests
         if: matrix.runtime == 'win-x64'
@@ -85,22 +95,39 @@ jobs:
             dotnet test --project "tests\Hotshot.$project.Tests\Hotshot.$project.Tests.csproj" --output Detailed
             if ($LASTEXITCODE -ne 0) { throw "$project tests failed." }
           }
-      - name: Package installer, portable and update feed
+      - name: Package both public editions and the optional component
         shell: pwsh
-        run: .\build\package.ps1 -Version $env:RELEASE_VERSION -Runtime '${{ matrix.runtime }}'
-      - name: Validate packaged agent integration
-        if: matrix.runtime == 'win-x64'
+        run: |
+          foreach ($edition in 'Full', 'Core') {
+            .\build\package.ps1 -Version $env:RELEASE_VERSION -Runtime '${{ matrix.runtime }}' -Edition $edition
+          }
+      - name: Validate packaged Full/Core MCP and optional component startup
         shell: pwsh
         run: |
           .\tests\Hotshot.Agents.Manifests.ps1
-          dotnet run --project tests\Hotshot.Mcp.Harness\Hotshot.Mcp.Harness.csproj -c Release -- "artifacts\publish\$env:RELEASE_VERSION\win-x64\Mcp\Hotshot.Mcp.exe"
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged MCP protocol contract failed.' }
-          dotnet run --project tests\Hotshot.Descriptions.Harness\Hotshot.Descriptions.Harness.csproj -c Release -- --runtime-health "artifacts\publish\$env:RELEASE_VERSION\win-x64\runtimes\win-x64\native\copilot-runtime.exe"
-          if ($LASTEXITCODE -ne 0) { throw 'Packaged stdio runtime startup failed.' }
+          foreach ($channel in '${{ matrix.runtime }}', 'core-${{ matrix.runtime }}') {
+            $publish = "artifacts\publish\$env:RELEASE_VERSION\$channel"
+            dotnet run --project tests\Hotshot.Mcp.Harness\Hotshot.Mcp.Harness.csproj -c Release -r '${{ matrix.runtime }}' -- "$publish\Mcp\Hotshot.Mcp.exe"
+            if ($LASTEXITCODE -ne 0) { throw "Packaged $channel MCP protocol contract failed." }
+            dotnet run --project tests\Hotshot.Components.Harness\Hotshot.Components.Harness.csproj -c Release -r '${{ matrix.runtime }}' -- "$publish" "artifacts\releases\${{ matrix.runtime }}\Hotshot-Copilot-${env:RELEASE_VERSION}-${{ matrix.runtime }}.json"
+            if ($LASTEXITCODE -ne 0) { throw "Packaged $channel distribution/component startup failed." }
+          }
+      - name: Stage a flat, collision-free public asset set
+        shell: pwsh
+        run: |
+          $stage = "artifacts\release-assets\${{ matrix.runtime }}"
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          foreach ($channel in '${{ matrix.runtime }}', 'core-${{ matrix.runtime }}') {
+            foreach ($file in Get-ChildItem -LiteralPath "artifacts\releases\$channel" -File) {
+              $target = Join-Path $stage $file.Name
+              if (Test-Path -LiteralPath $target) { throw "Release asset collision: $($file.Name)" }
+              Copy-Item -LiteralPath $file.FullName -Destination $target
+            }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.runtime }}
-          path: artifacts/releases/${{ matrix.runtime }}/*
+          path: artifacts/release-assets/${{ matrix.runtime }}/*
           if-no-files-found: error
 
   publish:
@@ -122,6 +149,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          for runtime in win-x64 win-arm64; do
+            for edition in "" "Core-"; do
+              for suffix in Setup.exe Portable.zip; do
+                test -s "release-assets/Hotshot-${edition}${runtime}-${suffix}"
+              done
+            done
+            for channel in "$runtime" "core-$runtime"; do
+              test -s "release-assets/releases.${channel}.json"
+              test -s "release-assets/assets.${channel}.json"
+              test -s "release-assets/Hotshot-${RELEASE_VERSION}-${channel}-full.nupkg"
+            done
+            test -s "release-assets/Hotshot-Copilot-${RELEASE_VERSION}-${runtime}.zip"
+            test -s "release-assets/Hotshot-Copilot-${RELEASE_VERSION}-${runtime}.json"
+          done
           if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes --title "Hotshot $RELEASE_VERSION"
           fi

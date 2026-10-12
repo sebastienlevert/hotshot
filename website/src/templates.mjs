@@ -83,6 +83,7 @@ export function home({ base, version, logo }) {
         <p class="hero-description">The screenshot is just the start. Capture, annotate, record, and explain — without breaking your flow.</p>
         <div class="hero-actions"><a class="button primary" href="#download">${icon('download')}Get Hotshot for Windows</a>
           <a class="text-action" href="${base}docs/getting-started/">First capture in a minute ${icon('arrow')}</a></div>
+        <a class="text-action" href="#in-action">See the real native app ${icon('arrow')}</a>
         <p class="hero-facts">Free & open source. No account for core features.<br>Windows 10/11 · x64 + ARM64</p>
       </div>
       <div class="preview-wrap">${workflowDemo(logo)}
@@ -92,6 +93,18 @@ export function home({ base, version, logo }) {
       <span>Capture</span>${icon('arrow')}<span>Explain</span>${icon('arrow')}<span>Get on with it.</span>
       <a href="${base}docs/">See how it works ${icon('arrow')}</a>
     </div></div>
+    <section class="section product-section" id="in-action"><div class="container">
+      <div class="product-heading"><h2>Not a mockup.<br>Your next workflow.</h2>
+        <p>Actual WinUI windows, captured with Hotshot's native pipeline. The library contains generated demo content only — no personal screenshots, clipboard, microphone, or account data.</p></div>
+      <figure class="product-video"><video controls preload="metadata" playsinline poster="${base}media/editor.png" aria-label="Real Hotshot editor walkthrough using generated content, thirteen seconds, no audio">
+        <source src="${base}media/workflow.mp4" type="video/mp4"><track kind="captions" src="${base}media/workflow.vtt" srclang="en" label="English descriptions">
+        Your browser cannot play this video. <a href="${base}media/workflow.mp4">Download the walkthrough</a>.
+      </video><figcaption>Real filename navigation and editable annotations. 13 seconds, no audio; optional captions describe the action.</figcaption></figure>
+      <div class="product-gallery">
+        <figure><a href="${base}media/settings.png"><img src="${base}media/settings.png" alt="Real Hotshot Settings showing file-naming patterns, token dropdowns and examples" loading="lazy" width="2178" height="1489"></a><figcaption>Native Settings, not a browser wrapper.</figcaption></figure>
+        <figure><a href="${base}media/comparison.png"><img src="${base}media/comparison.png" alt="Real Hotshot comparison window showing the pixel difference between two generated checkout captures" loading="lazy" width="2178" height="1489"></a><figcaption>Full-resolution visual comparison.</figcaption></figure>
+      </div><p class="small">High-DPI capture of fixture-owned windows. <a href="${base}docs/compatibility/">What was tested, and what was not</a>.</p>
+    </div></section>
     <section class="section capability-section" id="features"><div class="container capability-layout">
       <div class="section-heading"><h2>One good shot.<br>A lot less back-and-forth.</h2>
         <p>Built for the moment you need to show, not tell. A native WinUI workspace when you want it. Out of your way when you do not.</p>

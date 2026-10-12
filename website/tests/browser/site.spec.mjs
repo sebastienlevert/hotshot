@@ -130,3 +130,17 @@ test('the rebrand respects reduced motion and keeps its real content at 200% tex
   await expect(page.getByRole('link', { name: 'Get Hotshot for Windows', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });
+
+test('real product media loads with captions and user-controlled playback', async ({ page }) => {
+  await page.goto('');
+  const video = page.locator('#in-action video');
+  await expect(video).toHaveAttribute('controls', '');
+  await expect(video).not.toHaveAttribute('autoplay', /.*/);
+  await expect(video.locator('track')).toHaveAttribute('src', /workflow\.vtt$/);
+  await expect.poll(() => video.evaluate(element => element.duration)).toBeGreaterThan(10);
+  await expect(page.locator('.product-gallery img')).toHaveCount(2);
+  for (const image of await page.locator('.product-gallery img').all()) {
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth > 0)).toBeTruthy();
+  }
+});

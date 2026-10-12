@@ -227,12 +227,12 @@ await Run("6. CPU encoder path (PreferHardwareEncoder = false) + system audio", 
 {
     using var window = new TestWindow("Hotshot harness CPU path", 661, 501);
     await Task.Delay(300);
-    var options = Options("cpu-path", new WindowTarget(window.Handle), fps: 30, systemAudio: true, preferHardware: false);
+    var options = Options("cpu-path", new WindowTarget(window.Handle), fps: 30, systemAudio: !windowOnly, preferHardware: false);
     var (result, recorder) = await RecordAsync(options, TimeSpan.FromSeconds(2));
     await recorder.DisposeAsync();
     Check(recorder.EncoderPath == VideoEncoderPath.Cpu, $"expected CPU encoder, got {recorder.EncoderPath}");
     Check(result.Width % 2 == 0 && result.Height % 2 == 0, "output size must be even");
-    var info = Validate(result, result.Width, result.Height, 2, expectAudio: true);
+    var info = Validate(result, result.Width, result.Height, 2, expectAudio: !windowOnly);
     CheckWindowFrame(DecodeAt(result.Path, 1.0), "t=1.0s");
     return $"{Describe(result, recorder)} | {info} | pixels: colour/orientation OK";
 });
@@ -275,6 +275,7 @@ await Run("8. five back-to-back recordings (stability / leaks)", async () =>
 await Run("9. screenshot PNG and clipboard", async () =>
 {
     using var window = new TestWindow("Hotshot screenshot test", 640, 480);
+    window.KeepVisibleForPixelCheck();
     await Task.Delay(300);
     var bounds = Native.GetExtendedFrameBounds(window.Handle);
     var rect = PixelRect.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);

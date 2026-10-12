@@ -9,7 +9,8 @@ const port = Number(process.env.PORT ?? 4173);
 if (!/^\/(?:[\w-]+\/)*$/.test(base)) throw new Error('Unsupported site base path.');
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be between 1 and 65535.');
 const mime = { '.html': 'text/html; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.xml': 'application/xml; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png' };
+  '.xml': 'application/xml; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
+  '.mp4': 'video/mp4', '.vtt': 'text/vtt; charset=utf-8' };
 
 http.createServer(async (request, response) => {
   const fail = async status => {

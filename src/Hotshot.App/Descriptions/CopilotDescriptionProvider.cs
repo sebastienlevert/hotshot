@@ -1,6 +1,8 @@
 using GitHub.Copilot;
 using GitHub.Copilot.Rpc;
 using Hotshot.Core.Descriptions;
+using Hotshot.Core.Updates;
+using System.Runtime.InteropServices;
 
 namespace Hotshot.Descriptions;
 
@@ -17,12 +19,13 @@ internal sealed class CopilotDescriptionProvider(string directory, Func<string?>
         if (_client is null)
         {
             Directory.CreateDirectory(directory);
-            var runtime = externalRuntime?.Invoke();
-            if (!string.IsNullOrWhiteSpace(runtime) && !File.Exists(runtime)) throw new FileNotFoundException("The configured optional Copilot runtime is missing.", runtime);
+            var bundled = Path.Combine(AppContext.BaseDirectory, "runtimes",
+                UpdateChannel.ForArchitecture(RuntimeInformation.ProcessArchitecture), "native", "copilot-runtime.exe");
+            var runtime = CopilotRuntimeResolver.Resolve(externalRuntime?.Invoke(), bundled, () => null);
             _client = new CopilotClient(new CopilotClientOptions
             {
                 Mode = CopilotClientMode.Empty,
-                Connection = RuntimeConnection.ForStdio(string.IsNullOrWhiteSpace(runtime) ? null : runtime),
+                Connection = RuntimeConnection.ForStdio(runtime),
                 WorkingDirectory = directory,
                 BaseDirectory = Path.Combine(directory, "copilot"),
                 UseLoggedInUser = true,

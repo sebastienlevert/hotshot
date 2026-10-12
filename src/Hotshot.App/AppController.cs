@@ -4,6 +4,7 @@ using Hotshot.Core.History;
 using Hotshot.Core.Hotkeys;
 using Hotshot.Core.Descriptions;
 using Hotshot.Descriptions;
+using Hotshot.Core.Setup;
 using Hotshot.Agents;
 using Hotshot.Shell;
 using Microsoft.UI.Dispatching;
@@ -24,6 +25,7 @@ internal sealed partial class AppController : IDisposable
     private readonly ScreenshotDescriptions _descriptions;
     private readonly LocalTextIndex _textIndex;
     private readonly AgentCaptureServer _agentServer;
+    private readonly CopilotRuntimeManager _copilotRuntime;
     private Action? _balloonAction;
     private bool _exiting;
 
@@ -36,8 +38,12 @@ internal sealed partial class AppController : IDisposable
         var assets = Path.Combine(AppContext.BaseDirectory, "Assets");
         _tray = new TrayIcon(_window, Path.Combine(assets, "Hotshot.ico"), Path.Combine(assets, "HotshotRecording.ico"));
         _hotkeys = new HotkeyManager(_window);
+        _copilotRuntime = new CopilotRuntimeManager(_app.Paths.DataDirectory,
+            () => _app.Settings.General.CopilotRuntimePath,
+            () => !_exiting && _app.Descriptions?.IsBusy != true);
+        _app.CopilotRuntime = _copilotRuntime;
         _descriptions = new ScreenshotDescriptions(_app.History,
-            () => new CopilotDescriptionProvider(Path.Combine(_app.Paths.DataDirectory, "copilot-work"), () => _app.Settings.General.CopilotRuntimePath),
+            () => new CopilotDescriptionProvider(Path.Combine(_app.Paths.DataDirectory, "copilot-work"), _copilotRuntime.ResolveRuntime),
             _app.Settings.General.DescribeScreenshots);
         _app.Descriptions = _descriptions;
         _descriptions.ApplyPolicy(_app.Settings.General);
@@ -106,12 +112,6 @@ internal sealed partial class AppController : IDisposable
         SyncStartupRegistration();
 
         var firstRun = !_app.Settings.General.FirstRunCompleted;
-        if (firstRun)
-        {
-            _app.Settings.General.FirstRunCompleted = true;
-            _ = _app.SaveAsync();
-        }
-
         Log.Info($"Started (first run: {firstRun}, args: {commandLine})");
 
         if (commandLine.Command is not AppCommand.None)
@@ -140,6 +140,13 @@ internal sealed partial class AppController : IDisposable
             if (_app.Settings.General.DescribeScreenshots) _ = _descriptions.EnqueueAsync(item);
             else _ = Task.Run(() => _app.History.SetDescriptionPending(item.Id, false));
         }
+    }
+
+    private async Task MarkFirstRunCompletedAsync()
+    {
+        if (_app.Settings.General.FirstRunCompleted || _exiting) return;
+        _app.Settings.General.FirstRunCompleted = true;
+        if (!await _app.SaveAsync()) _app.Settings.General.FirstRunCompleted = false;
     }
 
     public void Execute(AppCommand command, bool secondInstance)
@@ -173,6 +180,7 @@ internal sealed partial class AppController : IDisposable
         if (_historyWindow is not null && !await _historyWindow.PrepareToCloseAsync()) return;
         if (_settingsWindow is not null) await _settingsWindow.SavePendingAsync();
         _exiting = true;
+        _settingsWindow?.CloseAiComponent();
         _app.StopSettingsSync();
         Log.Info("Exiting");
         try
@@ -197,6 +205,7 @@ internal sealed partial class AppController : IDisposable
 
     public void Dispose()
     {
+        _copilotRuntime.Dispose();
         _updates.Dispose();
         _agentServer.Dispose();
         _hotkeys.Dispose();

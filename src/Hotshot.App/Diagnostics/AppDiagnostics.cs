@@ -13,6 +13,8 @@ internal static class AppDiagnostics
         var package = Directory.EnumerateFiles(AppContext.BaseDirectory, "*", SearchOption.AllDirectories)
             .Sum(path => new FileInfo(path).Length);
         return $"Version: {typeof(AppDiagnostics).Assembly.GetName().Version}\nArchitecture: {RuntimeInformation.ProcessArchitecture}\n" +
+            $"Edition: {app.CopilotRuntime?.Edition.ToString() ?? "Unmanaged/test"}\nUpdate channel: {app.Updates?.Channel ?? "None"}\n" +
+            $"Copilot component: {app.CopilotRuntime?.Status ?? "Not initialized"}\n" +
             $"Windows: {Environment.OSVersion.Version}\nUptime: {DateTime.Now - process.StartTime:g}\n" +
             $"Resident startup: {Program.StartupMilliseconds} ms (includes requested initial window)\n" +
             $"Working set: {process.WorkingSet64 / 1048576d:F1} MB\nPrivate memory: {process.PrivateMemorySize64 / 1048576d:F1} MB\n" +

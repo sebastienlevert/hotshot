@@ -35,6 +35,9 @@ internal sealed unsafe class TestWindow : IDisposable
 
     public void Close() => Native.PostMessage(Handle, Native.WM_CLOSE, 0, 0);
 
+    public void KeepVisibleForPixelCheck() =>
+        Native.SetWindowPos(Handle, -1, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+
     private void Run(string title, int width, int height)
     {
         nint instance = Native.GetModuleHandle(null);

@@ -37,6 +37,14 @@ Not sure which one you need? Check **Windows Settings > System > About > System 
 
 Run the installer and launch Hotshot. Installation is for your Windows user and does not require administrator privileges. The first launch opens Settings; closing that window keeps Hotshot running in the tray.
 
+### Core or Full?
+
+Releases from **0.1.14** offer two editions. **Core** is the smaller download: capture, editing, recording, OCR, comparisons, OneDrive settings, and MCP tools are included; the cloud-AI runtime is optional. Core assets have `Hotshot-Core-` in their name. **Full** includes the Copilot runtime and keeps the existing `Hotshot-win-` asset names.
+
+Choose one edition, not both. Both use the same native app and local data; each updates on its own architecture/edition channel. Existing Full installations remain Full and are not silently switched to Core.
+
+In Core, open **Screenshots > Optional Copilot component** to explicitly install the verified component, or choose an SDK-compatible external runtime. Installing software is separate from enabling image uploads, signing in, or authorizing a coding agent.
+
 For the portable version, extract the **entire ZIP** to a permanent, writable folder and run `Hotshot.exe`. Keep its files together. Moving it later may require updating the **Start with Windows** setting.
 
 > [!NOTE]
@@ -50,6 +58,8 @@ For the portable version, extract the **entire ZIP** to a permanent, writable fo
 4. Click the tray icon when you want to review or edit it. Choose its filename to load it into the editor.
 
 **No window appears after a screenshot. That is intentional.** Capturing, copying, and saving happen without opening the editor or changing its selection.
+
+The first-run guide walks through folder readiness, registered shortcuts, output choices, OneDrive status, privacy, and an optional generated-image agent test. Choices apply on **Finish**; Cancel or a settings handoff discards staged choices. Skipping a check does not invent a successful result or enable a permission. Reopen the guide from **About Hotshot > Quick-start guide**.
 
 If Print Screen opens Snipping Tool instead, see [Troubleshooting](#troubleshooting).
 
@@ -216,7 +226,7 @@ Offline edits stay in the local cache and are retried. Incoming changes apply wh
 
 ### Search screenshots by description
 
-Enable **Screenshots > Describe screenshots with Copilot** to generate searchable summaries and descriptions. This is **off by default**, requires an existing GitHub Copilot sign-in and an image-capable model, and uses your account's quota. The required runtime is bundled with normal releases.
+Enable **Screenshots > Describe screenshots with Copilot** to generate searchable summaries and descriptions. This is **off by default**, requires an existing GitHub Copilot sign-in and an image-capable model, and uses your account's quota. Full bundles the runtime; Core uses an explicitly installed optional component or your selected compatible runtime. Component download is verified and cancellable, and never enables uploads or account access itself.
 
 Descriptions are added after saving, without delaying the clipboard. PNG files also receive Unicode **Title** and **Description** metadata. Windows Explorer may not display those PNG fields even though metadata-aware tools can read them. Recordings and GIFs are not sent for descriptions.
 
@@ -276,6 +286,9 @@ Updates keep your profile outside the installer directory. Use the workspace's b
 | An update is ready but not applied | Finish current work and leave the editor/Settings inactive or closed. Hotshot will not interrupt active work to restart. |
 
 For a bug report, include your Hotshot version, Windows build, architecture, steps to reproduce, and expected/actual behavior. **About Hotshot > Show diagnostics** provides local diagnostic information; review and redact paths or private details before attaching it. Never attach private originals, a whole app-data folder, or credentials.
+
+Use the [worked workflows](docs/recipes.md) for complete redacted bug-report, comparison, and coding-agent recipes. The [support guide](SUPPORT.md) explains safe diagnostics and reporting; suspected vulnerabilities belong in [private security reporting](SECURITY.md), not a public issue.
+The [compatibility matrix](docs/compatibility.md) separates supported targets from actual device evidence. Physical ARM64, mixed-scale displays, HDR fidelity, and Narrator acceptance are not implied by a cross-build or synthetic check.
 
 ## Current boundaries
 

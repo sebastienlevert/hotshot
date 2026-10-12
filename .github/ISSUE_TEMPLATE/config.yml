@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation and troubleshooting
+    url: https://sebastienlevert.github.io/hotshot/docs/troubleshooting/
+    about: Find setup steps and known limits before opening an issue.
+  - name: Private vulnerability reporting
+    url: https://github.com/sebastienlevert/hotshot/security/advisories/new
+    about: Report suspected security issues privately, without posting exploit details in public.

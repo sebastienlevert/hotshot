@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Hotshot.Editor.Host" />
+    <InternalsVisibleTo Include="Hotshot.Product.Harness" />
   </ItemGroup>
 
   <ItemGroup>

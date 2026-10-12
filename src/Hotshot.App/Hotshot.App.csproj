@@ -27,6 +27,7 @@
   <ItemGroup>
     <Content Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="Hotshot.Agents.Harness" />
+    <InternalsVisibleTo Include="Hotshot.Product.Harness" />
   </ItemGroup>
 
   <ItemGroup>

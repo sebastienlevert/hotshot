@@ -11,10 +11,11 @@ public readonly record struct UpdateActivity(
     bool ActiveWindow = false,
     bool UnsavedSettings = false,
     bool Exiting = false,
-    bool Describing = false)
+    bool Describing = false,
+    bool ComponentOperation = false)
 {
     public bool CanRestart => !(Capturing || Recording || Converting || UnsavedEdits ||
-        EditorBusy || ActiveWindow || UnsavedSettings || Exiting || Describing);
+        EditorBusy || ActiveWindow || UnsavedSettings || Exiting || Describing || ComponentOperation);
 }
 
 public static class UpdateChannel
@@ -25,6 +26,10 @@ public static class UpdateChannel
         Architecture.Arm64 => "win-arm64",
         _ => throw new PlatformNotSupportedException($"Hotshot updates do not support {architecture}."),
     };
+
+    public static string ForArchitecture(Architecture architecture, DistributionEdition edition) =>
+        (edition == DistributionEdition.Core ? "core-" : edition == DistributionEdition.Full ? "" :
+            throw new ArgumentOutOfRangeException(nameof(edition))) + ForArchitecture(architecture);
 }
 
 public static class ReleaseDownloads
