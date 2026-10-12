@@ -17,7 +17,7 @@ if (health >= 0)
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
         await using var client = new CopilotClient(new CopilotClientOptions
         {
-            Mode = CopilotClientMode.Empty, Connection = RuntimeConnection.ForStdio(args[health + 1]),
+            Mode = CopilotClientMode.Empty, Connection = RuntimeConnection.ForStdio(Path.GetFullPath(args[health + 1])),
             WorkingDirectory = data, BaseDirectory = Path.Combine(data, "copilot"), UseLoggedInUser = false,
         });
         await client.StartAsync(timeout.Token);
