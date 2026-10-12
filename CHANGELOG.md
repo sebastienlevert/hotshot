@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.17](https://github.com/sebastienlevert/hotshot/compare/v0.1.16...v0.1.17) (2026-10-12)
+
+
+### Bug Fixes
+
+* harden native accessibility and display acceptance ([9ec85d9](https://github.com/sebastienlevert/hotshot/commit/9ec85d9690f6d093f829fb00be9ae374bfbcb995))
+
 ## [0.1.16](https://github.com/sebastienlevert/hotshot/compare/v0.1.15...v0.1.16) (2026-10-12)
 
 
