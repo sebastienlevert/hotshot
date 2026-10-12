@@ -4,9 +4,23 @@ using Hotshot.Recording.Harness;
 using Hotshot.Capture;
 using Hotshot.Gif;
 using Vortice.MediaFoundation;
+using Native = Hotshot.Recording.Harness.Native;
 
 const double DurationTolerance = 0.6;
 bool windowOnly = args.Contains("--window-only", StringComparer.OrdinalIgnoreCase);
+
+if (args.Contains("--display-environment", StringComparer.OrdinalIgnoreCase))
+{
+    Native.SetProcessDpiAwarenessContext(Native.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    var displays = DisplayEnvironment.Read();
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(displays));
+    return 0;
+}
+if (args.Contains("--hdr-reference", StringComparer.OrdinalIgnoreCase))
+{
+    ManagedChecks.RunColorReferenceChecks();
+    return 0;
+}
 
 if (args.Contains("--managed-checks", StringComparer.OrdinalIgnoreCase))
 {

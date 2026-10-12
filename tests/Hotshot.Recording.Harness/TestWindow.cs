@@ -78,6 +78,13 @@ internal sealed unsafe class TestWindow : IDisposable
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam)
     {
+        if (msg == 0x02E0) // WM_DPICHANGED
+        {
+            var bounds = *(Native.RECT*)lParam;
+            Native.SetWindowPos(hwnd, 0, bounds.Left, bounds.Top, bounds.Right - bounds.Left,
+                bounds.Bottom - bounds.Top, Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+            return 0;
+        }
         if (msg == Native.WM_DESTROY)
         {
             Native.PostQuitMessage(0);

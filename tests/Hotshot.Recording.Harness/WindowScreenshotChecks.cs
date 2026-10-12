@@ -58,6 +58,8 @@ public static class WindowScreenshotChecks
         Console.WriteLine($"Hardware probe: {monitors.Count} monitor(s), scale(s) {string.Join(", ", monitors.Select(monitor => monitor.Scale))}; process architecture {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}.");
         if (monitors.Count < 2 || monitors.Select(monitor => monitor.Scale).Distinct().Count() < 2)
             Console.WriteLine("SKIP physical mixed-DPI monitor movement: this desktop does not provide two different-scale displays.");
+        else
+            await CheckMixedDpiMovementAsync(target, monitors, cancellationToken);
         if (System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.Arm64)
             Console.WriteLine("SKIP native ARM64 execution: this machine is not ARM64.");
 
@@ -121,6 +123,42 @@ public static class WindowScreenshotChecks
 
         await ExpectAsync<ArgumentException>(() => WindowScreenshot.CaptureAsync(closedHandle, cancellationToken));
         Console.WriteLine("PASS target-close race and stale HWND cleanup");
+    }
+
+    /// <summary>Moves only the generated fixture across real displays; never substitutes simulated scale for hardware.</summary>
+    private static async Task CheckMixedDpiMovementAsync(TestWindow target, IReadOnlyList<MonitorInfo> monitors, CancellationToken token)
+    {
+        var original = PhysicalBounds(target.Handle);
+        var restored = false;
+        try
+        {
+            foreach (var monitor in monitors)
+            {
+                var work = monitor.WorkArea;
+                var width = Math.Min(work.Width, (int)Math.Round(360 * monitor.Scale));
+                var height = Math.Min(work.Height, (int)Math.Round(260 * monitor.Scale));
+                if (!Native.SetWindowPos(target.Handle, 0, work.X + (work.Width - width) / 2,
+                    work.Y + (work.Height - height) / 2, width, height, Native.SWP_NOZORDER | Native.SWP_NOACTIVATE))
+                    throw new InvalidOperationException("The fixture could not move between physical displays.");
+                await Task.Delay(350, token);
+                var bounds = PhysicalBounds(target.Handle);
+                var captured = await WindowScreenshot.CaptureAsync(target.Handle, token);
+                Check(Math.Abs(captured.Image.Width - (bounds.Right - bounds.Left)) <= 2 &&
+                    Math.Abs(captured.Image.Height - (bounds.Bottom - bounds.Top)) <= 2,
+                    "Moving between displays changed capture pixels into logical coordinates.");
+                Check(Math.Abs(Monitors.FromWindow(target.Handle).Scale - monitor.Scale) < 0.02,
+                    "The moved fixture did not acquire the destination display's DPI.");
+                CheckBlue(Sample(captured.Image, 0.5, 0.5), "moved mixed-DPI fixture", IsToneMapped(captured));
+            }
+        }
+        finally
+        {
+            restored = Native.SetWindowPos(target.Handle, 0, original.Left, original.Top,
+                original.Right - original.Left, original.Bottom - original.Top, Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+            if (!restored) System.Diagnostics.Trace.TraceError("The mixed-DPI fixture's original bounds could not be restored.");
+        }
+        if (!restored) throw new InvalidOperationException("The mixed-DPI fixture's original bounds could not be restored.");
+        Console.WriteLine("PASS physical mixed-DPI fixture movement: native DPI, physical capture dimensions and pixels preserved.");
     }
 
     /// <summary>Runs without WGC, a GPU, or any windows; useful as a standalone conversion check.</summary>

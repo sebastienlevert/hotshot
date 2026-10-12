@@ -32,7 +32,7 @@ internal static class ProductMedia
     private static readonly JsonSerializerOptions EvidenceJsonOptions = new() { WriteIndented = true };
     public static async Task RunAsync(string output, bool settingsHeaderOnly = false)
     {
-        var profile = Path.Combine(Path.GetTempPath(), "Hotshot.Product." + Guid.NewGuid().ToString("N"));
+        var profile = Path.Combine(output, "fixture-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(profile);
         AppServices? app = null;
         WorkspaceWindow? workspace = null;
@@ -180,7 +180,7 @@ internal static class ProductMedia
         Console.WriteLine("PASS successful/failed background operations are observed and surfaced without user data.");
     }
 
-    private static async Task CheckSettingsHeaderAsync(SettingsWindow window)
+    internal static async Task CheckSettingsHeaderAsync(SettingsWindow window)
     {
         var root = (Grid)window.Content;
         var header = Find<TitleBar>(root, "SettingsTitleBar") ?? throw new InvalidOperationException("Settings title bar is missing.");
@@ -209,6 +209,8 @@ internal static class ProductMedia
                 var toggleBounds = Bounds(toggle);
                 var searchBounds = Bounds(search);
                 Console.WriteLine($"Header at {width} DIPs ({theme}): root={root.ActualWidth:F1}, header={headerBounds}, menu={toggleBounds}, search={searchBounds}, caption inset={window.AppWindow.TitleBar.RightInset / root.XamlRoot.RasterizationScale:F1}.");
+                if (root.ActualWidth < width - 24)
+                    throw new InvalidDataException($"The native fixture was constrained to {root.ActualWidth:F1} DIPs rather than testing the requested {width}-DIP width.");
                 if (toggle.Visibility != Visibility.Visible || toggleBounds.Width <= 0 || toggleBounds.Height <= 0 ||
                     toggleBounds.Left < headerBounds.Left || toggleBounds.Right > headerBounds.Right ||
                     toggleBounds.Top < headerBounds.Top || toggleBounds.Bottom > headerBounds.Bottom)
@@ -237,7 +239,7 @@ internal static class ProductMedia
             element.TransformToVisual(root).TransformBounds(new Windows.Foundation.Rect(0, 0, element.ActualWidth, element.ActualHeight));
     }
 
-    private static async Task CheckSetupAsync(SettingsWindow window, AppServices app)
+    internal static async Task CheckSetupAsync(SettingsWindow window, AppServices app)
     {
         var before = app.Settings.Clone();
         var setup = window.ShowQuickStartAsync();

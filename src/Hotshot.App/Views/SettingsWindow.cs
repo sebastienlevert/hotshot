@@ -100,6 +100,8 @@ internal sealed partial class SettingsWindow : Window
         AutomationProperties.SetName(_search, "Search settings");
         AutomationProperties.SetAutomationId(_search, "SettingsSearch");
         AutomationProperties.SetAutomationId(_scroll, "SettingsContentScroll");
+        UiStyles.LiveStatus(_status, "SettingsSaveStatus");
+        AutomationProperties.SetAutomationId(_error, "SettingsError");
         _search.TextChanged += (_, args) =>
         {
             if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
@@ -313,9 +315,9 @@ internal sealed partial class SettingsWindow : Window
         _app.Post(() =>
         {
             if (_closed || !_settingCards.TryGetValue(result.Title, out var card)) return;
-            card.BorderThickness = new Thickness(2);
-            card.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 106, 61));
             card.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = true, VerticalAlignmentRatio = 0.2 });
+            if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(card) is Control target)
+                target.Focus(FocusState.Keyboard);
         });
     }
 
@@ -835,7 +837,8 @@ internal sealed partial class SettingsWindow : Window
         AutomationProperties.SetName(input, title);
         AutomationProperties.SetAutomationId(input, $"Naming{kind}Pattern");
         var preview = UiStyles.Description(string.Empty);
-        AutomationProperties.SetAutomationId(preview, $"Naming{kind}Preview");
+        UiStyles.LiveStatus(preview, $"Naming{kind}Preview");
+        AutomationProperties.GetDescribedBy(input).Add(preview);
         void Update(string value)
         {
             changed(value);
@@ -882,7 +885,7 @@ internal sealed partial class SettingsWindow : Window
 
     private void Number(StackPanel panel, string title, string description, int current, int min, int max, Action<int> changed)
     {
-        var input = new NumberBox { Value = current, Minimum = min, Maximum = max, Width = 112, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
+        var input = new NumberBox { Value = current, Minimum = min, Maximum = max, MinWidth = 112, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
         AutomationProperties.SetName(input, title);
         input.ValueChanged += (_, args) => { if (double.IsFinite(args.NewValue)) { changed((int)args.NewValue); Changed(); } };
         Card(panel, title, UiStyles.Description(description), input);
@@ -904,6 +907,8 @@ internal sealed partial class SettingsWindow : Window
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = control is null ? HorizontalAlignment.Stretch : HorizontalAlignment.Right,
         };
+        if (control is not null && description is TextBlock)
+            AutomationProperties.GetDescribedBy(control).Add(description);
         _settingCards[title] = card;
         panel.Children.Add(card);
     }

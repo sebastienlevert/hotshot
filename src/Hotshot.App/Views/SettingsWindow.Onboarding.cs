@@ -121,7 +121,8 @@ internal sealed partial class SettingsWindow
         var busy = false;
         SettingsPage? destination = null;
         var heading = new TextBlock { FontSize = 22, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap };
-        AutomationProperties.SetAutomationId(heading, "QuickStartStep");
+        UiStyles.LiveStatus(heading, "QuickStartStep");
+        AutomationProperties.SetHeadingLevel(heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
         var progress = new ProgressBar { Minimum = 0, Maximum = GuidedSetupSession.StepCount, Height = 4 };
         AutomationProperties.SetAutomationId(progress, "QuickStartProgress");
         var description = QuickStartText("", "QuickStartDescription");
@@ -256,7 +257,7 @@ internal sealed partial class SettingsWindow
                     stepBody.Children.Add(UiStyles.Description("Capture silently. Edit when you want."));
                     stepBody.Children.Add(UiStyles.Description("Screenshots copy and save without opening a preview or editor. Click Hotshot in the Windows tray to browse filenames, annotate or redact, and export a local flattened copy. The workspace does not automatically select the newest capture."));
                     stepBody.Children.Add(UiStyles.Description("Use your region shortcut to drag a region or click a window. Space captures the monitor; R + arrows + Enter selects a region with the keyboard. Escape cancels."));
-                    stepBody.Children.Add(UiStyles.Description("In the editor, wheel zooms, Space-drag pans, Ctrl+1 shows 100%, and Ctrl+0 fits. Library actions offer reviewed cleanup, local backups, projects and relinking moved files."));
+                    stepBody.Children.Add(UiStyles.Description("In the editor, choose a tool and press Insert on the canvas to add an annotation or crop. Page Up/Down selects annotations; arrows move, Ctrl+arrows resize, and Shift uses 10 pixels. Alt+arrows pans, +/- zooms, Ctrl+1 shows 100%, Ctrl+0 fits, and Escape cancels or clears selection. Mouse wheel and Space-drag also work. Library actions offer reviewed cleanup, local backups, projects and relinking moved files."));
                     stepBody.Children.Add(UiStyles.Description("Nothing changes until Finish. Skip keeps a step's existing choices. Cancel or opening another settings page discards all pending setup choices. Reopen this flow from About Hotshot → Quick start guide."));
                     break;
                 case SetupStep.Folder:
@@ -546,7 +547,8 @@ internal sealed partial class SettingsWindow
     private static TextBlock QuickStartText(string text, string id)
     {
         var result = UiStyles.Description(text);
-        AutomationProperties.SetAutomationId(result, id);
+        if (id.EndsWith("Status", StringComparison.Ordinal)) UiStyles.LiveStatus(result, id);
+        else AutomationProperties.SetAutomationId(result, id);
         return result;
     }
 

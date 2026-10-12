@@ -14,6 +14,8 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Hotshot.Views;
@@ -80,6 +82,11 @@ internal sealed partial class WorkspaceWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var commands = _commands;
         AutomationProperties.SetAutomationId(commands, "WorkspaceCommands");
+        AutomationProperties.SetName(commands, "Capture and library commands");
+        AutomationProperties.SetAutomationId(_editor, "WorkspaceEditor");
+        AutomationProperties.SetAutomationId(_save, "WorkspaceSave");
+        AutomationProperties.SetAutomationId(_copy, "WorkspaceCopy");
+        AutomationProperties.SetAutomationId(_error, "WorkspaceError");
         var brand = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
         brand.Children.Add(new Image { Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Logo.png"))), Width = 28, Height = 28 });
         brand.Children.Add(_title);
@@ -662,6 +669,9 @@ internal sealed partial class WorkspaceWindow : Window
     private async Task RunAsync(Func<Task> action, bool keepHistoryEnabled = false)
     {
         if (_operation is not null) return;
+        var root = (FrameworkElement)Content;
+        var focusBefore = root.XamlRoot is null ? null : FocusManager.GetFocusedElement(root.XamlRoot) as Control;
+        var restoreKeyboardFocus = focusBefore?.FocusState is FocusState.Keyboard or FocusState.Programmatic;
         _commands.IsEnabled = false;
         _editor.SetHostBusy(true);
         _progress.Visibility = Visibility.Visible;
@@ -685,6 +695,9 @@ internal sealed partial class WorkspaceWindow : Window
         }
         finally
         {
+            var focused = root.XamlRoot is null ? null : FocusManager.GetFocusedElement(root.XamlRoot);
+            var recoverFocus = restoreKeyboardFocus && (focused is null ||
+                focused is DependencyObject element && IsWithin(element, _cancelOperation));
             _operation = null;
             _commands.IsEnabled = true;
             _editor.SetHostBusy(false);
@@ -696,6 +709,8 @@ internal sealed partial class WorkspaceWindow : Window
             {
                 _history.IsEnabled = true;
                 UpdateActions();
+                if (recoverFocus && focusBefore?.Focus(FocusState.Keyboard) != true)
+                    _history.Focus(FocusState.Keyboard);
                 if (_pendingHistorySelection is not null)
                     _ = RunAsync(LoadHistorySelectionAsync, keepHistoryEnabled: true);
             }
@@ -728,6 +743,18 @@ internal sealed partial class WorkspaceWindow : Window
 
     private void RenderHistory(bool restoreCurrent = false)
     {
+        var root = (FrameworkElement)Content;
+        var focused = root.XamlRoot is null ? null : FocusManager.GetFocusedElement(root.XamlRoot) as DependencyObject;
+        var recoverFocus = focused is not null && IsWithin(focused, _history);
+        string? focusedId = null;
+        for (var element = focused; recoverFocus && element is not null; element = VisualTreeHelper.GetParent(element))
+        {
+            if (element is ListViewItem { Tag: HistoryItem focusedItem })
+            {
+                focusedId = focusedItem.Id;
+                break;
+            }
+        }
         var selectedIds = restoreCurrent ? new HashSet<string>(_current is { } current ? [current.Id] : [])
             : SelectedCaptures().Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
         var selectedId = restoreCurrent ? _current?.Id
@@ -756,6 +783,8 @@ internal sealed partial class WorkspaceWindow : Window
                 : item.DescriptionPending ? "AI description is pending."
                 : item.Summary is { } summary ? $"{summary}\n{item.Description}" : null;
             ToolTipService.SetToolTip(row, details is null ? item.Path : $"{item.Path}\n{details}");
+            AutomationProperties.SetHelpText(row, $"{item.Kind.DisplayName()}, {item.Width} x {item.Height} pixels. " +
+                (item.IsFavorite ? "Favorite. " : string.Empty) + details);
             _history.Items.Add(row);
             if (selectedIds.Contains(item.Id)) _history.SelectedItems.Add(row);
         }
@@ -767,6 +796,20 @@ internal sealed partial class WorkspaceWindow : Window
             _history.Items.Add(new ListViewItem { Content = more, IsTabStop = false });
         }
         _rendering = false;
+        if (recoverFocus)
+        {
+            var target = _history.Items.OfType<ListViewItem>()
+                .FirstOrDefault(row => row.Tag is HistoryItem item && item.Id == focusedId)
+                ?? _history.Items.OfType<ListViewItem>().FirstOrDefault();
+            if (target?.Focus(FocusState.Keyboard) != true) _search.Focus(FocusState.Keyboard);
+        }
+    }
+
+    private static bool IsWithin(DependencyObject element, DependencyObject ancestor)
+    {
+        for (DependencyObject? current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+            if (ReferenceEquals(current, ancestor)) return true;
+        return false;
     }
 
     private HistoryItem[] SelectedCaptures() => _history.SelectedItems.OfType<ListViewItem>().Select(row => row.Tag).OfType<HistoryItem>().ToArray();

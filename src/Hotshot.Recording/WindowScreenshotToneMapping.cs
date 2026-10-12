@@ -43,6 +43,35 @@ internal static class WindowScreenshotToneMapping
         return (toneMap ? s_hdr : s_sdr)[bits];
     }
 
+    internal static (bool ExtendedRange, bool NegativeGamut) AnalyzeRow(ReadOnlySpan<Half> rgba)
+    {
+        if (rgba.Length % 4 != 0) throw new ArgumentException("A scRGB row must contain complete RGBA pixels.", nameof(rgba));
+        var extended = false;
+        var negative = false;
+        for (var pixel = 0; pixel < rgba.Length; pixel += 4)
+        for (var channel = 0; channel < 3; channel++)
+        {
+            var value = (float)rgba[pixel + channel];
+            if (!float.IsFinite(value)) throw new InvalidDataException("WGC returned a non-finite scRGB color component.");
+            extended |= value > 1;
+            negative |= value < 0;
+        }
+        return (extended, negative);
+    }
+
+    internal static void ConvertRow(ReadOnlySpan<Half> rgba, Span<byte> bgra, bool toneMap)
+    {
+        if (rgba.Length % 4 != 0 || bgra.Length < rgba.Length)
+            throw new ArgumentException("The scRGB row or BGRA destination dimensions are invalid.");
+        for (var pixel = 0; pixel < rgba.Length; pixel += 4)
+        {
+            bgra[pixel] = EncodeHalf(rgba[pixel + 2], toneMap);
+            bgra[pixel + 1] = EncodeHalf(rgba[pixel + 1], toneMap);
+            bgra[pixel + 2] = EncodeHalf(rgba[pixel], toneMap);
+            bgra[pixel + 3] = 255;
+        }
+    }
+
     private static byte[] CreateTable(bool toneMap)
     {
         var table = new byte[ushort.MaxValue + 1];

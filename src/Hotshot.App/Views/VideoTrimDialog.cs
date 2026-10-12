@@ -20,8 +20,8 @@ internal static class VideoTrimDialog
         var end = new Slider { Header = "Trim end", Minimum = 0, Maximum = duration, Value = duration, StepFrequency = 0.1 };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(start, "VideoTrimStart");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(end, "VideoTrimEnd");
-        var summary = new TextBlock();
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(summary, "VideoTrimSummary");
+        var summary = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        UiStyles.LiveStatus(summary, "VideoTrimSummary");
         void Update(bool seeking)
         {
             summary.Text = $"Start {TimeSpan.FromSeconds(start.Value):g} / End {TimeSpan.FromSeconds(end.Value):g} / Kept {Math.Max(0, end.Value - start.Value):F1}s";

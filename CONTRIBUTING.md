@@ -52,7 +52,7 @@ To build every .NET project, including the integration harnesses:
 dotnet build Hotshot.slnx -c Release -p:Platform=x64 -m:1
 ```
 
-The solution explicitly maps native platforms. Its ARM64 configuration excludes the four interactive harnesses that are intentionally x64-only; cross-build the native app and MCP companion separately when checking ARM64 delivery. Serial solution builds avoid competing WinUI/XAML intermediate-file writers.
+The solution explicitly maps native platforms. The Product UI acceptance harness supports x64/ARM64; the remaining architecture-fixed interactive harnesses stay excluded from ARM64 solution builds. Cross-build the native app and MCP companion separately when checking ARM64 delivery. Serial solution builds avoid competing WinUI/XAML intermediate-file writers.
 
 ### Enforced .NET quality bar
 
@@ -205,7 +205,7 @@ With no selector, the smoke captures the real desktop locally and changes the cl
 
 A synthetic test or cross-build is not a substitute for physical mixed-scale monitors, HDR display fidelity, Narrator usability, or real ARM64 execution. State what you actually tested and any remaining hardware gaps.
 
-For an anonymous available-device report, use `tests\Hotshot.Device.Validation.ps1` with the actual Recording/Product harness executables. The native product harness creates a GUID-isolated profile and generated library, renders actual WinUI windows, and records only its own workspace without audio. It temporarily permits its own publication windows to exceed a portrait monitor's maximum track size and uses a neutral background instead of a private wallpaper backdrop. Production capture exclusions and real user data are unchanged. See [compatibility and device validation](docs/compatibility.md).
+For an anonymous available-device report, use `tests\Hotshot.Device.Validation.ps1` with the actual Recording/Product harness executables. `-UiOnly` checks the real native UI/accessibility, shared HDR/scRGB references and read-only display readiness without recording or clipboard changes; `-RequireMixedDpi` requires actual different-scale displays rather than implying acceptance from simulated tests. The Product harness creates a GUID-isolated profile and generated library; its separate media mode records only its own workspace without audio. Publication-only windows may exceed a portrait monitor's maximum track size and use a neutral background instead of private wallpaper. Production capture exclusions and real user data are unchanged. Native ARM64 CI and automated focus/peer tests are distinct from human Narrator and physical display acceptance. See [compatibility and device validation](docs/compatibility.md).
 
 ## Website and documentation
 

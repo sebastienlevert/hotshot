@@ -55,6 +55,7 @@ internal sealed class ComparisonWindow : Window
         _viewport = new ComparisonViewport(before.Width, before.Height, after.Width, after.Height);
         Title = "Hotshot visual comparison";
         var mode = new ComboBox { ItemsSource = new[] { "Before", "After", "Difference", "Swipe" }, SelectedIndex = 2, MinWidth = 135 };
+        AutomationProperties.SetName(mode, "Comparison display mode");
         AutomationProperties.SetAutomationId(mode, "ComparisonMode");
         mode.SelectionChanged += (_, _) => _viewport.SetMode((ComparisonDisplayMode)Math.Max(0, mode.SelectedIndex));
         var fit = new Button { Content = "Fit" };
@@ -73,7 +74,8 @@ internal sealed class ComparisonWindow : Window
         toolbar.Children.Add(_zoom); toolbar.Children.Add(_export); toolbar.Children.Add(cancel);
         _export.Click += async (_, _) => await ExportAsync();
         AutomationProperties.SetAutomationId(_export, "ComparisonExport");
-        AutomationProperties.SetAutomationId(_summary, "ComparisonSummary");
+        UiStyles.LiveStatus(_summary, "ComparisonSummary");
+        UiStyles.LiveStatus(_exportStatus, "ComparisonExportStatus");
         AutomationProperties.SetAutomationId(_error, "ComparisonError");
         var swipe = new Slider { Minimum = 0, Maximum = 100, Value = 50, Width = 230, Header = "Swipe: after on left, before on right" };
         AutomationProperties.SetAutomationId(swipe, "ComparisonSwipe");

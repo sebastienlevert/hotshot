@@ -8,6 +8,7 @@ internal static class ManagedChecks
 {
     public static async Task RunAsync()
     {
+        RunColorReferenceChecks();
         using (var cancelled = new CancellationTokenSource())
         {
             cancelled.Cancel();
@@ -70,6 +71,38 @@ internal static class ManagedChecks
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    internal static void RunColorReferenceChecks()
+    {
+        WindowScreenshotChecks.RunToneMappingChecks();
+        Half[] sdr = [(Half)0.18f, (Half)0.5f, (Half)1, (Half)0, (Half)0, (Half)0.5f, (Half)0, (Half)1];
+        byte[] output = new byte[sdr.Length + 4];
+        output.AsSpan().Fill(17);
+        WindowScreenshotToneMapping.ConvertRow(sdr, output, toneMap: false);
+        Check(output[0] == 255 && output[1] == 188 && output[2] == 118 && output[3] == 255,
+            "The SDR reference row does not preserve transfer/channel order/opacity.");
+        Check(output[4] == 0 && output[5] == 188 && output[6] == 0 && output[7] == 255 && output[8] == 17,
+            "The row converter wrote outside its destination or changed the reference green patch.");
+        Half[] hdr = [(Half)4, (Half)1, (Half)(-0.1f), (Half)1];
+        var range = WindowScreenshotToneMapping.AnalyzeRow(hdr);
+        Check(range.ExtendedRange && range.NegativeGamut, "The frame color diagnostic missed extended/negative components.");
+        WindowScreenshotToneMapping.ConvertRow(hdr, output, range.ExtendedRange);
+        Check(output[0] == 0 && output[1] == 188 && output[2] == 231 && output[3] == 255,
+            "The extended scRGB reference row was not converted to the expected SDR rendition.");
+        try
+        {
+            WindowScreenshotToneMapping.AnalyzeRow([(Half)0, Half.NaN, (Half)0, (Half)1]);
+            throw new InvalidOperationException("Non-finite scRGB reference input was accepted.");
+        }
+        catch (InvalidDataException) { }
+        try
+        {
+            WindowScreenshotToneMapping.ConvertRow(hdr, new byte[3], false);
+            throw new InvalidOperationException("An undersized color destination was accepted.");
+        }
+        catch (ArgumentException) { }
+        Console.WriteLine("PASS shared scRGB readback row: SDR/HDR reference patches, BGRA order, opacity, gamut and destination bounds.");
     }
 
     private static async Task<bool> TryBeginAsync(string journal, PendingRecording recording)

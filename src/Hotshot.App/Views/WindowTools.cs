@@ -22,17 +22,17 @@ internal static class WindowTools
         {
             if (app.Settings.Layout.Windows.TryGetValue(layoutKey, out var saved) && saved.Width >= 200 && saved.Height >= 150 && saved.Scale > 0)
             {
-                var bounds = new PixelRect(saved.X, saved.Y, saved.Width, saved.Height);
-                var target = Monitors.GetAll().OrderByDescending(candidate => (long)bounds.Intersect(candidate.WorkArea).Width * bounds.Intersect(candidate.WorkArea).Height).First();
-                var rw = Math.Clamp((int)(saved.Width * target.Scale / saved.Scale), Math.Min(200, target.WorkArea.Width), target.WorkArea.Width);
-                var rh = Math.Clamp((int)(saved.Height * target.Scale / saved.Scale), Math.Min(150, target.WorkArea.Height), target.WorkArea.Height);
-                window.AppWindow.MoveAndResize(new RectInt32(Math.Clamp(saved.X, target.WorkArea.X, target.WorkArea.Right - rw),
-                    Math.Clamp(saved.Y, target.WorkArea.Y, target.WorkArea.Bottom - rh), rw, rh));
+                try
+                {
+                    var restored = MonitorGeometry.Restore(saved, Monitors.GetAll());
+                    window.AppWindow.MoveAndResize(new RectInt32(restored.X, restored.Y, restored.Width, restored.Height));
+                }
+                catch (ArgumentException ex) { Log.Warn("Saved window placement was not applied: " + ex.Message); }
             }
             window.AppWindow.Closing += (_, _) =>
             {
                 var position = window.AppWindow.Position; var size = window.AppWindow.Size;
-                var scale = Monitors.FromRect(new PixelRect(position.X, position.Y, size.Width, size.Height)).Scale;
+                var scale = Monitors.FromWindow(WinRT.Interop.WindowNative.GetWindowHandle(window)).Scale;
                 app.Settings.Layout.Windows[layoutKey] = new WindowLayout(position.X, position.Y, size.Width, size.Height, scale);
                 app.SaveSettings();
             };

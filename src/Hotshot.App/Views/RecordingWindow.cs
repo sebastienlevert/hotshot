@@ -1,6 +1,8 @@
 using Hotshot.Recording;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Hotshot.Views;
@@ -34,6 +36,7 @@ internal sealed class RecordingWindow : Window
             if (recorder.IsPaused) recorder.Resume(); else recorder.Pause();
             _pause.Content = recorder.IsPaused ? "Resume" : "Pause";
             Update();
+            UiStyles.AnnounceStatus(_status);
         };
         _stop.Click += async (_, _) =>
         {
@@ -49,6 +52,8 @@ internal sealed class RecordingWindow : Window
         panel.Children.Add(_systemMeter);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_microphoneMeter, "Microphone audio level");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_systemMeter, "System audio level");
+        AutomationProperties.SetAutomationId(_status, "RecordingStatus");
+        AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         _microphoneMute.Toggled += (_, _) => { if (_recorder is { } recorder) recorder.MicrophoneMuted = _microphoneMute.IsOn; };
         _systemMute.Toggled += (_, _) => { if (_recorder is { } recorder) recorder.SystemAudioMuted = _systemMute.IsOn; };
         Content = panel;
@@ -65,7 +70,11 @@ internal sealed class RecordingWindow : Window
         WindowTools.PlaceNearTray(this);
     }
 
-    public void SetStatus(string status) => _status.Text = status;
+    public void SetStatus(string status)
+    {
+        _status.Text = status;
+        UiStyles.AnnounceStatus(_status);
+    }
 
     public void SetRecorder(ScreenRecorder recorder)
     {
@@ -76,6 +85,7 @@ internal sealed class RecordingWindow : Window
         _stop.Content = "Stop and save";
         _timer.Start();
         Update();
+        UiStyles.AnnounceStatus(_status);
     }
 
     private void Update()

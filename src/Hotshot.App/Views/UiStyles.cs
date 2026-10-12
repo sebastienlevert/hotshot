@@ -1,16 +1,21 @@
 using Hotshot.Core.Settings;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Windowing;
 using Windows.UI;
 using Windows.Foundation;
 using Hotshot.Interop;
+using System.Runtime.InteropServices;
 
 namespace Hotshot.Views;
 
 internal static class UiStyles
 {
+    internal static bool HighContrastNotificationsAvailable { get; private set; } = true;
+
     public static void ApplyTheme(Window? window, AppTheme theme)
     {
         if (window?.Content is FrameworkElement root)
@@ -28,6 +33,7 @@ internal static class UiStyles
     {
         if (window.Content is not FrameworkElement root || !AppWindowTitleBar.IsCustomizationSupported()) return;
         var colors = new Windows.UI.ViewManagement.UISettings();
+        var accessibility = new Windows.UI.ViewManagement.AccessibilitySettings();
         var closed = false;
         void Update()
         {
@@ -35,7 +41,7 @@ internal static class UiStyles
             var dark = root.ActualTheme == ElementTheme.Dark;
             var background = dark ? Color.FromArgb(255, 32, 32, 32) : Color.FromArgb(255, 243, 243, 243);
             var foreground = dark ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(255, 24, 24, 24);
-            if (new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+            if (accessibility.HighContrast)
             {
                 background = colors.GetColorValue(Windows.UI.ViewManagement.UIColorType.Background);
                 foreground = colors.GetColorValue(Windows.UI.ViewManagement.UIColorType.Foreground);
@@ -53,7 +59,7 @@ internal static class UiStyles
             titleBar.ButtonHoverBackgroundColor = dark ? Color.FromArgb(255, 55, 55, 55) : Color.FromArgb(255, 224, 224, 224);
             titleBar.ButtonPressedBackgroundColor = dark ? Color.FromArgb(255, 70, 70, 70) : Color.FromArgb(255, 205, 205, 205);
             titleBar.ButtonHoverForegroundColor = titleBar.ButtonPressedForegroundColor = foreground;
-            if (new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+            if (accessibility.HighContrast)
             {
                 titleBar.InactiveForegroundColor = titleBar.ButtonInactiveForegroundColor = foreground;
                 titleBar.ButtonHoverBackgroundColor = titleBar.ButtonPressedBackgroundColor = foreground;
@@ -66,8 +72,17 @@ internal static class UiStyles
         root.Loaded += loaded;
         root.ActualThemeChanged += changed;
         TypedEventHandler<Windows.UI.ViewManagement.UISettings, object> colorsChanged = (_, _) => root.DispatcherQueue.TryEnqueue(Update);
+        TypedEventHandler<Windows.UI.ViewManagement.AccessibilitySettings, object> contrastChanged = (_, _) => root.DispatcherQueue.TryEnqueue(Update);
         colors.ColorValuesChanged += colorsChanged;
-        window.Closed += (_, _) => { closed = true; root.Loaded -= loaded; root.ActualThemeChanged -= changed; colors.ColorValuesChanged -= colorsChanged; };
+        var contrastSubscribed = TrySubscribeContrast(accessibility, contrastChanged);
+        window.Closed += (_, _) =>
+        {
+            closed = true;
+            root.Loaded -= loaded;
+            root.ActualThemeChanged -= changed;
+            colors.ColorValuesChanged -= colorsChanged;
+            if (contrastSubscribed) accessibility.HighContrastChanged -= contrastChanged;
+        };
         Update();
     }
 
@@ -81,9 +96,10 @@ internal static class UiStyles
             Padding = new Thickness(16),
         };
         var colors = new Windows.UI.ViewManagement.UISettings();
+        var accessibility = new Windows.UI.ViewManagement.AccessibilitySettings();
         void Update()
         {
-            if (new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+            if (accessibility.HighContrast)
             {
                 card.Background = new SolidColorBrush(colors.GetColorValue(Windows.UI.ViewManagement.UIColorType.Background));
                 card.BorderBrush = new SolidColorBrush(colors.GetColorValue(Windows.UI.ViewManagement.UIColorType.Foreground));
@@ -94,21 +110,80 @@ internal static class UiStyles
             card.BorderBrush = new SolidColorBrush(dark ? Color.FromArgb(255, 59, 59, 59) : Color.FromArgb(255, 229, 229, 229));
         }
 
-        card.Loaded += (_, _) => Update();
-        card.ActualThemeChanged += (_, _) => Update();
-        Windows.Foundation.TypedEventHandler<Windows.UI.ViewManagement.UISettings, object> changed = (_, _) =>
-            card.DispatcherQueue.TryEnqueue(Update);
-        card.Loaded += (_, _) => colors.ColorValuesChanged += changed;
-        card.Unloaded += (_, _) => colors.ColorValuesChanged -= changed;
+        BindSystemAppearance(card, colors, accessibility, Update);
         Update();
         return card;
     }
 
-    public static TextBlock Description(string text) => new()
+    public static TextBlock Description(string text)
     {
-        Text = text,
-        TextWrapping = TextWrapping.Wrap,
-        Opacity = new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast ? 1 : 0.72,
-        FontSize = 13,
-    };
+        var description = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 13 };
+        var colors = new Windows.UI.ViewManagement.UISettings();
+        var accessibility = new Windows.UI.ViewManagement.AccessibilitySettings();
+        void Update() => description.Opacity = accessibility.HighContrast ? 1 : 0.72;
+        BindSystemAppearance(description, colors, accessibility, Update);
+        Update();
+        return description;
+    }
+
+    public static void LiveStatus(TextBlock status, string automationId)
+    {
+        AutomationProperties.SetAutomationId(status, automationId);
+        AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
+        status.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) =>
+        {
+            AnnounceStatus(status);
+        });
+    }
+
+    public static void AnnounceStatus(TextBlock status)
+    {
+        if (status.IsLoaded)
+            FrameworkElementAutomationPeer.CreatePeerForElement(status)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
+    }
+
+    private static void BindSystemAppearance(FrameworkElement element,
+        Windows.UI.ViewManagement.UISettings colors,
+        Windows.UI.ViewManagement.AccessibilitySettings accessibility, Action update)
+    {
+        var subscribed = false;
+        var contrastSubscribed = false;
+        void QueueUpdate() => element.DispatcherQueue.TryEnqueue(() => { if (element.IsLoaded) update(); });
+        TypedEventHandler<Windows.UI.ViewManagement.UISettings, object> colorsChanged = (_, _) => QueueUpdate();
+        TypedEventHandler<Windows.UI.ViewManagement.AccessibilitySettings, object> contrastChanged = (_, _) => QueueUpdate();
+        element.ActualThemeChanged += (_, _) => update();
+        element.Loaded += (_, _) =>
+        {
+            if (!subscribed)
+            {
+                colors.ColorValuesChanged += colorsChanged;
+                contrastSubscribed = TrySubscribeContrast(accessibility, contrastChanged);
+                subscribed = true;
+            }
+            update();
+        };
+        element.Unloaded += (_, _) =>
+        {
+            colors.ColorValuesChanged -= colorsChanged;
+            if (contrastSubscribed) accessibility.HighContrastChanged -= contrastChanged;
+            subscribed = false;
+            contrastSubscribed = false;
+        };
+    }
+
+    private static bool TrySubscribeContrast(Windows.UI.ViewManagement.AccessibilitySettings accessibility,
+        TypedEventHandler<Windows.UI.ViewManagement.AccessibilitySettings, object> changed)
+    {
+        try
+        {
+            accessibility.HighContrastChanged += changed;
+            return true;
+        }
+        catch (COMException)
+        {
+            // Some unpackaged desktops expose the palette but not this event; keep color/theme updates active.
+            HighContrastNotificationsAvailable = false;
+            return false;
+        }
+    }
 }

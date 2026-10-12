@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Hotshot" />
+    <InternalsVisibleTo Include="Hotshot.Capture.Tests" />
     <ProjectReference Include="..\Hotshot.Core\Hotshot.Core.csproj" />
   </ItemGroup>
 

@@ -3,8 +3,12 @@
     <TargetFramework>$(WindowsTargetFramework)</TargetFramework>
     <OutputType>Exe</OutputType>
     <AssemblyName>Hotshot.Product.Harness</AssemblyName>
-    <Platform>x64</Platform>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <Platforms>x64;ARM64</Platforms>
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">$(HostArch)</Platform>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'x64'">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$(HostArch)</RuntimeIdentifier>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
@@ -20,5 +24,14 @@
   <ItemGroup>
     <ApplicationDefinition Include="ProductApp.xaml" />
     <ProjectReference Include="..\..\src\Hotshot.App\Hotshot.App.csproj" />
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App.WPF" />
   </ItemGroup>
+  <Target Name="ValidateNativeHarnessArchitecture" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(Platform)' != 'x64' and '$(Platform)' != 'ARM64'"
+           Text="The native Product harness Platform must be x64 or ARM64." />
+    <Error Condition="'$(RuntimeIdentifier)' != 'win-x64' and '$(RuntimeIdentifier)' != 'win-arm64'"
+           Text="The native Product harness supports win-x64 and win-arm64 only." />
+    <Error Condition="('$(Platform)' == 'ARM64' and '$(RuntimeIdentifier)' != 'win-arm64') or ('$(Platform)' == 'x64' and '$(RuntimeIdentifier)' != 'win-x64')"
+           Text="The Product harness RuntimeIdentifier must match Platform." />
+  </Target>
 </Project>

@@ -184,6 +184,12 @@ internal static unsafe partial class Native
     public static partial uint GetWindowThreadProcessId(nint hwnd, out uint processId);
 
     [LibraryImport("user32.dll")]
+    public static partial uint GetDpiForWindow(nint hwnd);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial nint SetThreadDpiAwarenessContext(nint context);
+
+    [LibraryImport("user32.dll")]
     public static partial nint GetForegroundWindow();
 
     [LibraryImport("user32.dll")]

@@ -1,0 +1,124 @@
+name: Native WinUI acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/Hotshot.Product.Harness/**'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'Hotshot.slnx'
+      - '.github/workflows/native-ui.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/Hotshot.Product.Harness/**'
+      - 'Directory.Build.props'
+      - 'Directory.Packages.props'
+      - 'global.json'
+      - 'Hotshot.slnx'
+      - '.github/workflows/native-ui.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-ui:
+    name: Native ${{ matrix.platform }} UI
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: x64
+            architecture: x64
+            runtime: win-x64
+            runner: windows-latest
+          - platform: ARM64
+            architecture: arm64
+            runtime: win-arm64
+            runner: windows-11-arm
+    env:
+      NATIVE_UI_ROOT: C:\HotshotNativeUi\${{ github.run_id }}-${{ github.run_attempt }}\${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        id: sdk
+        with:
+          global-json-file: global.json
+      - name: Record native runner and SDK prerequisites
+        id: environment
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:NATIVE_UI_ROOT | Out-Null
+          $process = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+          $os = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+          $sdk = dotnet --version
+          @{
+            processArchitecture = $process
+            osArchitecture = $os
+            sdkVersion = $sdk
+            sdkBaseline = (Get-Content global.json -Raw | ConvertFrom-Json).sdk.version
+            hostedRunner = '${{ matrix.runner }}'
+            physicalHardwareClaim = $false
+          } | ConvertTo-Json | Set-Content "$env:NATIVE_UI_ROOT\runner-environment.json"
+          if ($LASTEXITCODE -ne 0) { throw 'The global.json SDK baseline is unavailable.' }
+          if ($process -ne '${{ matrix.architecture }}' -or $os -ne '${{ matrix.architecture }}') {
+            throw "Native runner architecture mismatch: process=$process, OS=$os."
+          }
+      - name: Build native harness with strict warnings and analyzers
+        id: build
+        shell: pwsh
+        run: |
+          dotnet build tests\Hotshot.Product.Harness\Hotshot.Product.Harness.csproj `
+            -c Release -p:Platform=${{ matrix.platform }} -r ${{ matrix.runtime }} `
+            --artifacts-path "$env:NATIVE_UI_ROOT\build" --nologo -m:1 -warnaserror `
+            -p:TreatWarningsAsErrors=true -p:EnableNETAnalyzers=true `
+            -p:AnalysisLevel=10.0-recommended -p:EnforceCodeStyleInBuild=true `
+            2>&1 | Tee-Object "$env:NATIVE_UI_ROOT\build.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Strict native Product harness build failed.' }
+      - name: Execute bounded real WinUI acceptance natively
+        id: acceptance
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          .\tests\Hotshot.Product.Harness\Invoke-Acceptance.ps1 `
+            -Executable "$env:NATIVE_UI_ROOT\build\bin\Hotshot.Product.Harness\release_${{ matrix.runtime }}\Hotshot.Product.Harness.exe" `
+            -OutputDirectory "$env:NATIVE_UI_ROOT\evidence" `
+            -ExpectedArchitecture '${{ matrix.architecture }}' -TimeoutSeconds 180 -SoftwareRenderer
+      - name: Record workflow outcomes even when prerequisites fail
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:NATIVE_UI_ROOT | Out-Null
+          @{
+            schemaVersion = 1
+            jobStatus = '${{ job.status }}'
+            sdkSetupOutcome = '${{ steps.sdk.outcome }}'
+            environmentOutcome = '${{ steps.environment.outcome }}'
+            buildOutcome = '${{ steps.build.outcome }}'
+            nativeAcceptanceOutcome = '${{ steps.acceptance.outcome }}'
+            expectedArchitecture = '${{ matrix.architecture }}'
+            runnerProcessArchitecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+            runnerOsArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+            physicalHardwareClaim = $false
+            limitation = 'Skipped/not-executed/failed native acceptance is not a pass. Hosted execution is not physical hardware acceptance.'
+          } | ConvertTo-Json | Set-Content "$env:NATIVE_UI_ROOT\workflow-outcomes.json"
+      - name: Upload generated-only native evidence and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-${{ matrix.architecture }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ env.NATIVE_UI_ROOT }}\runner-environment.json
+            ${{ env.NATIVE_UI_ROOT }}\workflow-outcomes.json
+            ${{ env.NATIVE_UI_ROOT }}\build.log
+            ${{ env.NATIVE_UI_ROOT }}\evidence\*.json
+            ${{ env.NATIVE_UI_ROOT }}\evidence\*.log
+            ${{ env.NATIVE_UI_ROOT }}\evidence\*.png

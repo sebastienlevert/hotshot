@@ -354,20 +354,9 @@ public static class WindowScreenshot
                 cancellationToken.ThrowIfCancellationRequested();
                 if ((y & 31) == 0) checkTarget();
                 var row = new ReadOnlySpan<Half>((byte*)mapped.DataPointer + (long)y * mapped.RowPitch, checked(size.Width * 4));
-                for (int x = 0; x < row.Length; x += 4)
-                {
-                    for (int channel = 0; channel < 3; channel++)
-                    {
-                        float value = (float)row[x + channel];
-                        if (!float.IsFinite(value))
-                        {
-                            throw new InvalidDataException("WGC returned a non-finite scRGB color component.");
-                        }
-
-                        extendedRange |= value > 1;
-                        negativeGamut |= value < 0;
-                    }
-                }
+                var range = WindowScreenshotToneMapping.AnalyzeRow(row);
+                extendedRange |= range.ExtendedRange;
+                negativeGamut |= range.NegativeGamut;
             }
 
             var pixels = new byte[checked(size.Width * size.Height * 4)];
@@ -377,13 +366,7 @@ public static class WindowScreenshot
                 if ((y & 31) == 0) checkTarget();
                 var row = new ReadOnlySpan<Half>((byte*)mapped.DataPointer + (long)y * mapped.RowPitch, checked(size.Width * 4));
                 int destination = checked(y * size.Width * 4);
-                for (int x = 0; x < row.Length; x += 4)
-                {
-                    pixels[destination++] = WindowScreenshotToneMapping.EncodeHalf(row[x + 2], extendedRange);
-                    pixels[destination++] = WindowScreenshotToneMapping.EncodeHalf(row[x + 1], extendedRange);
-                    pixels[destination++] = WindowScreenshotToneMapping.EncodeHalf(row[x], extendedRange);
-                    pixels[destination++] = 255;
-                }
+                WindowScreenshotToneMapping.ConvertRow(row, pixels.AsSpan(destination, checked(size.Width * 4)), extendedRange);
             }
 
             List<string> warnings = [];

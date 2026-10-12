@@ -9,6 +9,36 @@ internal static unsafe partial class NativeProductWindow
     private struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)]
     private struct MinMaxInfo { public Point Reserved, MaxSize, MaxPosition, MinTrackSize, MaxTrackSize; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UserObjectFlags { public int Inherit, Reserved; public uint Flags; }
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetProcessWindowStation();
+    [LibraryImport("user32.dll", EntryPoint = "GetUserObjectInformationW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetUserObjectInformation(nint handle, int index, out UserObjectFlags flags, uint length, out uint needed);
+    [LibraryImport("kernel32.dll")]
+    private static partial uint GetCurrentThreadId();
+    [LibraryImport("user32.dll")]
+    private static partial nint GetThreadDesktop(uint thread);
+    [LibraryImport("user32.dll", EntryPoint = "GetUserObjectInformationW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetDesktopInputInformation(nint handle, int index, out int receivesInput, uint length, out uint needed);
+
+    public static bool IsInteractiveWindowStation()
+    {
+        if (!GetUserObjectInformation(GetProcessWindowStation(), 1, out var flags, (uint)sizeof(UserObjectFlags), out _))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError(), "Cannot query this process's window station.");
+        return (flags.Flags & 1) != 0;
+    }
+
+    public static bool OwnDesktopReceivesInput()
+    {
+        // Query only our existing desktop's metadata; never open or capture the user's desktop.
+        if (!GetDesktopInputInformation(GetThreadDesktop(GetCurrentThreadId()), 6, out var input, sizeof(int), out _))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError(), "Cannot query whether this process's desktop receives input.");
+        return input != 0;
+    }
 
     [LibraryImport("comctl32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
