@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.16](https://github.com/sebastienlevert/hotshot/compare/v0.1.15...v0.1.16) (2026-10-12)
+
+
+### Bug Fixes
+
+* enforce the .NET engineering quality bar ([9755a53](https://github.com/sebastienlevert/hotshot/commit/9755a53390a2f5f6349f270e6b7f15dc46c7643e))
+
 ## [0.1.15](https://github.com/sebastienlevert/hotshot/compare/v0.1.14...v0.1.15) (2026-10-12)
 
 
