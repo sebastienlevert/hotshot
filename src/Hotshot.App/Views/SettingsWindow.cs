@@ -30,6 +30,7 @@ internal sealed partial class SettingsWindow : Window
     private readonly NavigationView _navigation = new()
     {
         IsSettingsVisible = false, IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
+        IsPaneToggleButtonVisible = false,
         PaneDisplayMode = NavigationViewPaneDisplayMode.Auto, OpenPaneLength = 230,
         AlwaysShowHeader = false,
     };
@@ -46,11 +47,11 @@ internal sealed partial class SettingsWindow : Window
     private readonly AutoSuggestBox _search = new()
     {
         PlaceholderText = "Search settings", QueryIcon = new SymbolIcon(Symbol.Find),
-        MaxWidth = 480, MinWidth = 0, HorizontalAlignment = HorizontalAlignment.Stretch,
+        MaxWidth = 480, MinWidth = 120, HorizontalAlignment = HorizontalAlignment.Stretch,
     };
     private readonly TitleBar _titleBar = new()
     {
-        Title = "Hotshot", Subtitle = "Settings", MinHeight = 48,
+        Title = "Hotshot", Subtitle = "Settings", MinHeight = 48, IsPaneToggleButtonVisible = true,
     };
     private bool? _compactTitle;
     private XamlRoot? _titleBarRoot;
@@ -140,6 +141,7 @@ internal sealed partial class SettingsWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         _titleBar.IconSource = new ImageIconSource { ImageSource = Logo() };
+        _titleBar.PaneToggleRequested += (_, _) => _navigation.IsPaneOpen = !_navigation.IsPaneOpen;
         _titleBar.Content = _search;
         _titleBar.Resources["TitleBarContentHorizontalAlignment"] = HorizontalAlignment.Stretch;
         AutomationProperties.SetAutomationId(_titleBar, "SettingsTitleBar");

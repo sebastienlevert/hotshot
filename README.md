@@ -96,7 +96,7 @@ Right-click the tray icon and open **Settings**. Changes save automatically when
 | Set GIF size, frame rate, dithering, and looping | **GIF conversion** |
 | Customize shortcuts or filenames | **Keyboard shortcuts / File naming** |
 
-The search box stays inside the Settings title bar, including on narrow windows. Press **Ctrl+F**, search for a setting, and choose a result to jump to it.
+The hamburger navigation button and search box both sit inside the Settings title bar, including on narrow windows. Use the hamburger to open/close the sidebar. Press **Ctrl+F**, search for a setting, and choose a result to jump to it.
 
 ## Capture screenshots
 

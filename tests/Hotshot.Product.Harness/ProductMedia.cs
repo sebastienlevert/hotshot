@@ -19,6 +19,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Hotshot.Core.Setup;
 using Windows.Graphics;
@@ -28,7 +29,7 @@ namespace Hotshot.ProductHarness;
 
 internal static class ProductMedia
 {
-    public static async Task RunAsync(string output)
+    public static async Task RunAsync(string output, bool settingsHeaderOnly = false)
     {
         var profile = Path.Combine(Path.GetTempPath(), "Hotshot.Product." + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(profile);
@@ -56,6 +57,16 @@ internal static class ProductMedia
                 app.Settings.Hotkeys.Set(action, "");
             app.Settings.Hotkeys.RegionScreenshot = "Ctrl+Alt+F9";
             hotkeys.Apply(app.Settings.Hotkeys);
+
+            if (settingsHeaderOnly)
+            {
+                settings = new SettingsWindow(app, hotkeys);
+                settings.SelectPage(SettingsPage.General);
+                PrepareWindow(settings);
+                await Task.Delay(500);
+                await CheckSettingsHeaderAsync(settings);
+                return;
+            }
 
             var before = await GenerateAsync(Path.Combine(app.Settings.General.SaveFolder, "checkout-before.png"), false);
             var after = await GenerateAsync(Path.Combine(app.Settings.General.SaveFolder, "checkout-after.png"), true);
@@ -105,6 +116,9 @@ internal static class ProductMedia
             settings.SelectPage(SettingsPage.Naming);
             PrepareWindow(settings);
             await Task.Delay(1200);
+            await CheckSettingsHeaderAsync(settings);
+            PrepareWindow(settings);
+            await Task.Delay(300);
             await ScreenshotAsync(settings, Path.Combine(output, "settings.png"));
             await CheckSetupAsync(settings, app);
             settings.Close();
@@ -126,7 +140,7 @@ internal static class ProductMedia
                 windowsBuild = Environment.OSVersion.Version.ToString(),
                 processArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
                 monitors = Monitors.GetAll().Select(monitor => new { width = monitor.Bounds.Width, height = monitor.Bounds.Height, scale = monitor.Scale, primary = monitor.IsPrimary }),
-                passed = new[] { "real WinUI isolated-profile rendering", "WGC screenshots of own native windows", "silent native workspace recording", "filename selection", "annotation sidecar loading", "native comparison rendering" },
+                passed = new[] { "real WinUI isolated-profile rendering", "native title-bar navigation and responsive search", "WGC screenshots of own native windows", "silent native workspace recording", "filename selection", "annotation sidecar loading", "native comparison rendering" },
                 notVerified = new[] { "physical ARM64 execution", "mixed-scale multi-monitor movement", "HDR display fidelity", "Narrator usability" },
                 privacy = "Generated library only; captures target this harness's windows. No desktop, clipboard, microphone, real profile, OneDrive, or provider access.",
             };
@@ -143,6 +157,63 @@ internal static class ProductMedia
             if (app is not null) await app.SaveAsync();
             Directory.Delete(profile, recursive: true);
         }
+    }
+
+    private static async Task CheckSettingsHeaderAsync(SettingsWindow window)
+    {
+        var root = (Grid)window.Content;
+        var header = Find<TitleBar>(root, "SettingsTitleBar") ?? throw new InvalidOperationException("Settings title bar is missing.");
+        var search = Find<AutoSuggestBox>(header, "SettingsSearch") ?? throw new InvalidOperationException("Title bar search is missing.");
+        var navigation = root.Children.OfType<NavigationView>().Single();
+        var input = Find<TextBox>(search, "TextBox") ?? throw new InvalidOperationException("Title bar search input is missing.");
+        var toggle = Find<Button>(header, "PaneToggleButton") ?? Find<Button>(header, "PART_PaneToggleButton")
+            ?? throw new InvalidOperationException("Native title bar navigation button is missing.");
+        if (navigation.IsPaneToggleButtonVisible)
+            throw new InvalidOperationException("The old navigation button is still enabled beneath the title bar.");
+        var peer = FrameworkElementAutomationPeer.CreatePeerForElement(toggle) ?? new ButtonAutomationPeer(toggle);
+        if (peer.GetPattern(PatternInterface.Invoke) is not IInvokeProvider invoke)
+            throw new InvalidOperationException("Title bar navigation button cannot be invoked.");
+        foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+        {
+            root.RequestedTheme = theme;
+            foreach (var width in new[] { 400, 520, 750, 780, 900 })
+            {
+                search.Text = "microphone";
+                if (!input.Focus(FocusState.Keyboard)) throw new InvalidOperationException("Title bar search could not receive focus.");
+                window.AppWindow.Resize(new SizeInt32((int)(width * root.XamlRoot.RasterizationScale), 1500));
+                await Task.Delay(250);
+                if (search.Text != "microphone" || FocusManager.GetFocusedElement(root.XamlRoot) != input)
+                    throw new InvalidOperationException($"Resizing lost the search query or focus at {width} DIPs ({theme}).");
+                var headerBounds = Bounds(header);
+                var toggleBounds = Bounds(toggle);
+                var searchBounds = Bounds(search);
+                Console.WriteLine($"Header at {width} DIPs ({theme}): root={root.ActualWidth:F1}, header={headerBounds}, menu={toggleBounds}, search={searchBounds}, caption inset={window.AppWindow.TitleBar.RightInset / root.XamlRoot.RasterizationScale:F1}.");
+                if (toggle.Visibility != Visibility.Visible || toggleBounds.Width <= 0 || toggleBounds.Height <= 0 ||
+                    toggleBounds.Left < headerBounds.Left || toggleBounds.Right > headerBounds.Right ||
+                    toggleBounds.Top < headerBounds.Top || toggleBounds.Bottom > headerBounds.Bottom)
+                    throw new InvalidDataException($"Navigation button is not inside the title bar at {width} DIPs ({theme}).");
+                if (searchBounds.Width < 120 || searchBounds.Top < headerBounds.Top || searchBounds.Bottom > headerBounds.Bottom ||
+                    searchBounds.Right > root.ActualWidth - window.AppWindow.TitleBar.RightInset / root.XamlRoot.RasterizationScale ||
+                    (toggleBounds.Left < searchBounds.Right && toggleBounds.Right > searchBounds.Left &&
+                        toggleBounds.Top < searchBounds.Bottom && toggleBounds.Bottom > searchBounds.Top))
+                    throw new InvalidDataException($"Title bar search overlaps controls or is too narrow at {width} DIPs ({theme}).");
+                var wasOpen = navigation.IsPaneOpen;
+                invoke.Invoke();
+                await Task.Delay(250);
+                if (navigation.IsPaneOpen == wasOpen)
+                    throw new InvalidOperationException($"Title bar navigation button did not toggle the pane at {width} DIPs ({theme}).");
+                invoke.Invoke();
+                await Task.Delay(250);
+                if (navigation.IsPaneOpen != wasOpen)
+                    throw new InvalidOperationException($"Title bar navigation button did not restore the pane at {width} DIPs ({theme}).");
+            }
+        }
+        search.Text = string.Empty;
+        root.RequestedTheme = ElementTheme.Light;
+        Console.WriteLine("PASS native title-bar menu placement/open/close and unobstructed search with preserved query/focus at 400/520/750/780/900 DIPs in light/dark themes.");
+
+        Windows.Foundation.Rect Bounds(FrameworkElement element) =>
+            element.TransformToVisual(root).TransformBounds(new Windows.Foundation.Rect(0, 0, element.ActualWidth, element.ActualHeight));
     }
 
     private static async Task CheckSetupAsync(SettingsWindow window, AppServices app)
@@ -186,7 +257,7 @@ internal static class ProductMedia
 
     private static T? Find<T>(DependencyObject root, string id) where T : DependencyObject
     {
-        if (root is T match && AutomationProperties.GetAutomationId(root) == id) return match;
+        if (root is T match && (AutomationProperties.GetAutomationId(root) == id || root is FrameworkElement { Name: var name } && name == id)) return match;
         for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
             if (Find<T>(VisualTreeHelper.GetChild(root, index), id) is { } child) return child;
         return null;

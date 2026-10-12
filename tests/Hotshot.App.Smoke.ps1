@@ -231,15 +231,30 @@ function Element-ById([IntPtr]$Hwnd, [string]$Id) {
     $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
 }
 
+function Settings-PaneToggle([IntPtr]$Hwnd) {
+    $header = Element-ById $Hwnd 'SettingsTitleBar'
+    if (-not $header) { return $null }
+    foreach ($id in 'PaneToggleButton', 'PART_PaneToggleButton', 'TogglePaneButton') {
+        $button = $header.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $id))
+        if ($button -and -not $button.Current.IsOffscreen) { return $button }
+    }
+    return $null
+}
+
 function Select-SettingsPage([IntPtr]$Hwnd, [string]$Page) {
     $item = Element-ById $Hwnd "Settings$Page"
-    if (-not $item) {
-        Click (Element-ById $Hwnd 'TogglePaneButton')
+    if (-not $item -or $item.Current.IsOffscreen) {
+        Click (Settings-PaneToggle $Hwnd)
         $item = Wait-For { Element-ById $Hwnd "Settings$Page" } "settings navigation $Page"
     }
     $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
-    $pane = Element-ById $Hwnd 'TogglePaneButton'
-    if ($pane -and $pane.Current.Name -eq 'Close Navigation') { Click $pane }
+    $item = Element-ById $Hwnd "Settings$Page"
+    # The title-bar toggle has no open/closed name; expanded items are wider than the compact icon rail.
+    if ($item -and -not $item.Current.IsOffscreen -and
+        $item.Current.BoundingRectangle.Width -gt 80 * ([HotshotSmokeNative]::GetDpiForWindow($Hwnd) / 96.0)) {
+        Click (Settings-PaneToggle $Hwnd)
+    }
 }
 
 function Settings-Window {
@@ -260,14 +275,33 @@ function Assert-EmbeddedSettingsSearch([IntPtr]$Hwnd) {
     $dpi = [HotshotSmokeNative]::GetDpiForWindow($Hwnd) / 96.0
     $headerBounds = $header.Current.BoundingRectangle
     $searchBounds = $search.Current.BoundingRectangle
+    $pane = Settings-PaneToggle $Hwnd
+    if (-not $pane) { throw 'Navigation toggle is missing from the title bar.' }
+    $paneBounds = $pane.Current.BoundingRectangle
+    if ($paneBounds.Left -lt $headerBounds.Left - 1 -or $paneBounds.Right -gt $headerBounds.Right + 1 -or
+        $paneBounds.Top -lt $headerBounds.Top - 1 -or $paneBounds.Bottom -gt $headerBounds.Bottom + 1) {
+        throw 'Navigation toggle is underneath the title bar instead of embedded inside it.'
+    }
+    if ($paneBounds.IntersectsWith($searchBounds)) { throw 'Navigation toggle overlaps title bar search.' }
+    $window = [System.Windows.Automation.AutomationElement]::FromHandle($Hwnd)
+    foreach ($id in 'TogglePaneButton', 'PaneToggleButton', 'PART_PaneToggleButton') {
+        $buttons = $window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::AutomationIdProperty, $id))
+        foreach ($button in $buttons) {
+            if (-not $button.Current.IsOffscreen -and $button.Current.BoundingRectangle.Top -ge $headerBounds.Bottom) {
+                throw 'A duplicate navigation toggle is still visible beneath the title bar.'
+            }
+        }
+    }
     if ($headerBounds.Height -lt 48 * $dpi - 1) { throw 'Title bar is shorter than its tall caption buttons.' }
     if ($searchBounds.Top -lt $headerBounds.Top - 1 -or $searchBounds.Bottom -gt $headerBounds.Bottom + 1) {
         throw 'Search is outside the title bar instead of embedded inside it.'
     }
     foreach ($name in 'Minimize', 'Maximize', 'Restore', 'Close') {
         $button = Element $Hwnd $name ([System.Windows.Automation.ControlType]::Button)
-        if ($button -and -not $button.Current.IsOffscreen -and $searchBounds.IntersectsWith($button.Current.BoundingRectangle)) {
-            throw "Search overlaps the $name caption button."
+        if ($button -and -not $button.Current.IsOffscreen -and
+            ($searchBounds.IntersectsWith($button.Current.BoundingRectangle) -or $paneBounds.IntersectsWith($button.Current.BoundingRectangle))) {
+            throw "Search or navigation overlaps the $name caption button."
         }
     }
     if ($searchBounds.Width -lt 120 * $dpi) { throw 'Embedded search is too narrow to use.' }

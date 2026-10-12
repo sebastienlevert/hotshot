@@ -7,13 +7,16 @@ internal static class Program
 {
     internal static string OutputDirectory = "";
     internal static int ExitCode = 1;
+    internal static bool SettingsHeaderOnly;
 
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args.Length != 2 || args[0] != "--output" || !Path.IsPathFullyQualified(args[1]))
-            throw new ArgumentException("Use --output <absolute task-owned media directory>.");
+        if (args.Length is not (2 or 3) || args[0] != "--output" || !Path.IsPathFullyQualified(args[1]) ||
+            args.Length == 3 && args[2] != "--settings-header-only")
+            throw new ArgumentException("Use --output <absolute task-owned media directory> [--settings-header-only].");
         OutputDirectory = Path.GetFullPath(args[1]);
+        SettingsHeaderOnly = args.Length == 3;
         Directory.CreateDirectory(OutputDirectory);
         Environment.SetEnvironmentVariable("HOTSHOT_SETTINGS_SYNC_MODE", "local");
         Console.WriteLine("Starting isolated WinUI product harness.");
@@ -37,7 +40,7 @@ public sealed partial class DemoApplication : Application
         InitializeComponent();
         DispatcherQueue.GetForCurrentThread().TryEnqueue(async () =>
         {
-            try { await ProductMedia.RunAsync(Program.OutputDirectory); Program.ExitCode = 0; }
+            try { await ProductMedia.RunAsync(Program.OutputDirectory, Program.SettingsHeaderOnly); Program.ExitCode = 0; }
             catch (Exception exception) { Console.Error.WriteLine(exception); }
             finally { Exit(); }
         });
