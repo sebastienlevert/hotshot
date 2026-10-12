@@ -17,6 +17,11 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
     private Task? _listener;
     private int _requests;
     private readonly Queue<AgentActivity> _activity = new();
+    private readonly Dictionary<int, AgentClient> _clients = [];
+    private DateTimeOffset? _sessionExpires;
+    public DateTimeOffset? SessionExpires => _sessionExpires;
+    public IReadOnlyList<AgentClient> Clients => _clients.Values.OrderByDescending(client => client.LastSeen).Take(10).ToArray();
+    public Func<AgentRequest, AgentClient, CancellationToken, Task<bool>>? ApprovalHandler { get; set; }
     public IReadOnlyList<AgentActivity> Activity => _activity.ToArray();
     public bool IsBusy => Volatile.Read(ref _requests) > 0;
     public string Status { get; private set; } = "Agent access is off.";
@@ -32,21 +37,40 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
 
     public void RefreshStatus()
     {
-        Status = app.Settings.Agents.Enabled
-            ? "Ready for local coding agents. Capture tools use your current Hotshot settings."
+        if (!app.Settings.Agents.Enabled) _sessionExpires = null;
+        Status = HasAccess
+            ? (app.Settings.Agents.SessionAccessOnly ? $"Native agent access expires at {_sessionExpires:t}." :
+                "Ready for local coding agents. Capture tools use your current Hotshot settings.")
+            : app.Settings.Agents.Enabled && app.Settings.Agents.SessionAccessOnly
+                ? "Session access is not granted or expired. Grant a timed session to allow requests."
             : "Agent access is off. Connected agents can only read the enabled/disabled status.";
         StatusChanged?.Invoke();
     }
+
+    public void GrantSession()
+    {
+        if (!app.Settings.Agents.Enabled) throw new InvalidOperationException("Enable agent access before granting a session.");
+        _sessionExpires = DateTimeOffset.Now.AddMinutes(app.Settings.Agents.SessionMinutes);
+        Status = $"Access granted until {_sessionExpires:t} for this Hotshot run.";
+        StatusChanged?.Invoke();
+    }
+    public void RevokeSession() { _sessionExpires = null; RefreshStatus(); }
+    private bool HasAccess => app.Settings.Agents.Enabled && (!app.Settings.Agents.SessionAccessOnly ||
+        _sessionExpires is { } expires && DateTimeOffset.Now < expires);
 
     private async Task ListenAsync(string name)
     {
         while (!_stop.IsCancellationRequested)
         {
+            int? clientId = null;
+            var counted = false;
             try
             {
                 using var pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.WaitForConnectionAsync(_stop.Token);
+                Interlocked.Increment(ref _requests);
+                counted = true;
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
                 deadline.CancelAfter(TimeSpan.FromSeconds(90));
                 if (!NativeAgents.GetNamedPipeClientSessionId(pipe.SafePipeHandle, out var sessionId) ||
@@ -57,6 +81,10 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                     await AgentFrames.WriteAsync(pipe, AgentProtocol.Encode(rejection), AgentProtocol.MaxResponseBytes, deadline.Token);
                     continue;
                 }
+                if (!NativeAgents.GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid))
+                    throw new IOException("The native agent connection could not be identified.");
+                clientId = checked((int)pid);
+                var client = new AgentClient(clientId.Value, WindowEnumerator.GetProcessName(pid), DateTimeOffset.Now, true);
                 var bytes = await AgentFrames.ReadAsync(pipe, AgentProtocol.MaxRequestBytes, deadline.Token);
                 using var disconnect = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
                 var disconnected = CancelOnDisconnectAsync(pipe, deadline, disconnect.Token);
@@ -65,13 +93,23 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                 {
                     var request = AgentProtocol.DecodeRequest(bytes);
                     request.Validate();
-                    Interlocked.Increment(ref _requests);
-                    try
-                    {
-                        response = await OnUiAsync(async () =>
+                    response = await OnUiAsync(async () =>
                         {
+                            _clients[client.ProcessId] = client;
+                            while (_clients.Count > 20) _clients.Remove(_clients.Values.OrderBy(entry => entry.LastSeen).First().ProcessId);
+                            StatusChanged?.Invoke();
                             AgentResponse result;
-                            try { result = await HandleAsync(request, deadline.Token); }
+                            try
+                            {
+                                if (request.Operation is not ("status" or "activity" or "test_connection") &&
+                                    app.Settings.Agents.ApproveRequests && HasAccess)
+                                {
+                                    if (ApprovalHandler is null || !await ApprovalHandler(request, client, deadline.Token))
+                                        result = AgentResponse.Failure("approval_denied", "The native approval request was denied or canceled.");
+                                    else result = await HandleAsync(request, deadline.Token);
+                                }
+                                else result = await HandleAsync(request, deadline.Token);
+                            }
                             catch (OperationCanceledException) { throw; }
                             catch (Exception ex)
                             {
@@ -80,14 +118,12 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                             }
                             if (request.Operation is not ("status" or "activity"))
                             {
-                                _activity.Enqueue(new AgentActivity(DateTimeOffset.Now, request.Operation, result.Success, result.ErrorCode));
+                                _activity.Enqueue(new AgentActivity(DateTimeOffset.Now, request.Operation, result.Success, result.ErrorCode, client.ProcessId));
                                 while (_activity.Count > 100) _activity.Dequeue();
                                 StatusChanged?.Invoke();
                             }
                             return result;
                         }, deadline.Token);
-                    }
-                    finally { Interlocked.Decrement(ref _requests); }
                 }
                 catch (Exception ex) when (ex is ArgumentException or IOException or System.Text.Json.JsonException)
                 {
@@ -111,6 +147,15 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                 });
                 try { await Task.Delay(100, _stop.Token).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { return; }
+            }
+            finally
+            {
+                if (counted) Interlocked.Decrement(ref _requests);
+                if (clientId is { } id) app.Post(() =>
+                {
+                    if (_clients.TryGetValue(id, out var client)) _clients[id] = client with { Connected = false };
+                    StatusChanged?.Invoke();
+                });
             }
         }
     }
@@ -150,17 +195,25 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
     {
         var settings = app.Settings;
         var version = typeof(AgentCaptureServer).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+        if (request.Operation == "test_connection")
+        {
+            var pixels = new byte[256 * 128 * 4];
+            for (var i = 0; i < pixels.Length; i += 4) { pixels[i] = 40; pixels[i + 1] = 120; pixels[i + 2] = 240; pixels[i + 3] = 255; }
+            var png = await Task.Run(() => ImageCodec.EncodePngAsync(new CapturedImage(256, 128, pixels)), token);
+            return new AgentResponse { Success = true, Capture = new AgentCapture("synthetic-connection-test", "", "Synthetic", 256, 128,
+                DateTimeOffset.Now, "Generated connection test", "No desktop, files or model provider was accessed.", null, Convert.ToBase64String(png), 256, 128) };
+        }
         if (request.Operation == "status")
         {
-            var status = settings.Agents.Enabled
-                ? new AgentStatus(true, settings.Agents.AllowHistoryAccess, version, settings.General.SaveFolder,
+            var status = HasAccess
+                ? new AgentStatus(HasAccess, settings.Agents.AllowHistoryAccess && HasAccess, version, settings.General.SaveFolder,
                     settings.General.SaveToFile, settings.General.CopyToClipboard, settings.Capture.IncludeCursor,
                     settings.Capture.DelaySeconds, settings.General.RecognizeScreenshotText, settings.General.DescribeScreenshots,
                     settings.Agents.AllowedApps, AgentAccessPolicy.AllowsRegion(settings.Agents), AgentAccessPolicy.AllowsMonitor(settings.Agents))
                 : new AgentStatus(false, false, version);
-            return new AgentResponse { Success = true, Status = status };
+            return new AgentResponse { Success = true, Status = status, Clients = settings.Agents.Enabled ? Clients.ToArray() : null };
         }
-        if (!settings.Agents.Enabled)
+        if (!HasAccess)
             return AgentResponse.Failure("access_disabled", "Enable Hotshot Settings > Coding agents > Agent access before using capture tools.");
         if (request.Operation == "activity")
             return new AgentResponse { Success = true, Activity = _activity.Reverse().Skip(request.Offset).Take(request.Limit).ToArray() };
@@ -201,7 +254,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                         throw new ArgumentException("The before capture must be an allowed screenshot.");
                     beforeApp = beforeItem.AppName;
                     var before = await ReadImageAsync(beforeItem, token);
-                    var diff = await Task.Run(() => ImageComparison.Compare(before, after, request.Tolerance), token);
+                    var diff = await Task.Run(() => ImageComparison.CompareCancellable(before, after, new ComparisonOptions(), request.Tolerance, token), token);
                     var preview = diff.Difference.Downscale(request.MaxImageSize);
                     var png = await Task.Run(() => ImageCodec.EncodePngAsync(preview), token);
                     analysisResult = new AgentResponse { Success = true, Comparison = new AgentComparison(beforeItem.Id, item.Id,
@@ -210,7 +263,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                             null, null, null, Convert.ToBase64String(png), preview.Width, preview.Height) };
                 }
                 token.ThrowIfCancellationRequested();
-                if (!app.Settings.Agents.Enabled || !app.Settings.Agents.AllowHistoryAccess ||
+                if (!HasAccess || !app.Settings.Agents.AllowHistoryAccess ||
                     !AgentAccessPolicy.AllowsApp(app.Settings.Agents, item.AppName) ||
                     request.Operation == "compare_captures" && !AgentAccessPolicy.AllowsApp(app.Settings.Agents, beforeApp))
                     return AgentResponse.Failure("access_disabled", "Access changed during processing.");
@@ -218,7 +271,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
             }
             var result = await ResultAsync(item, request, token);
             token.ThrowIfCancellationRequested();
-            if (!app.Settings.Agents.Enabled || !app.Settings.Agents.AllowHistoryAccess || !AgentAccessPolicy.AllowsApp(app.Settings.Agents, item.AppName))
+            if (!HasAccess || !app.Settings.Agents.AllowHistoryAccess || !AgentAccessPolicy.AllowsApp(app.Settings.Agents, item.AppName))
                 return AgentResponse.Failure("access_disabled", "Agent or history access was disabled during the request.");
             return new AgentResponse { Success = true, Capture = result };
         }
@@ -226,6 +279,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
         PixelRect bounds;
         CaptureKind kind;
         CaptureSource source;
+        nint targetWindow = 0;
         if (request.Operation == "capture_window")
         {
             var window = Windows().FirstOrDefault(window => WindowId(window.Handle) == request.WindowId)
@@ -235,6 +289,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
             bounds = window.Bounds.Intersect(Monitors.VirtualScreen);
             kind = CaptureKind.Window;
             source = CaptureSource.Now(WindowEnumerator.GetProcessName(window.ProcessId), window.Title);
+            targetWindow = window.Handle;
         }
         else if (request.Operation == "capture_monitor")
         {
@@ -262,7 +317,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
         {
             var (item, image, warnings) = await capture.CaptureForAgentAsync(bounds, kind, source, () =>
             {
-                if (!app.Settings.Agents.Enabled || isUnavailable()) return false;
+                if (!HasAccess || isUnavailable()) return false;
                 EnsureDesktopAccessible();
                 if (request.Operation == "capture_window")
                     return Windows().Any(window => WindowId(window.Handle) == request.WindowId &&
@@ -271,7 +326,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                 if (request.Operation == "capture_monitor")
                     return AgentAccessPolicy.AllowsMonitor(app.Settings.Agents) && Monitors.GetAll().Any(monitor => monitor.Index == request.MonitorIndex && monitor.Bounds == bounds);
                 return AgentAccessPolicy.AllowsRegion(app.Settings.Agents) && bounds.Intersect(Monitors.VirtualScreen) == bounds;
-            }, token);
+            }, token, targetWindow);
             var preview = await Task.Run(async () =>
             {
                 var scaled = image.Downscale(request.MaxImageSize);
@@ -279,7 +334,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
                 return Metadata(item) with { ImageBase64 = Convert.ToBase64String(png), ImageWidth = scaled.Width, ImageHeight = scaled.Height };
             }, token);
             token.ThrowIfCancellationRequested();
-            if (!app.Settings.Agents.Enabled || request.Operation == "capture_window" && !AgentAccessPolicy.AllowsApp(app.Settings.Agents, source.AppName) ||
+            if (!HasAccess || request.Operation == "capture_window" && !AgentAccessPolicy.AllowsApp(app.Settings.Agents, source.AppName) ||
                 request.Operation == "capture_monitor" && !AgentAccessPolicy.AllowsMonitor(app.Settings.Agents) ||
                 request.Operation == "capture_region" && !AgentAccessPolicy.AllowsRegion(app.Settings.Agents))
                 return AgentResponse.Failure("access_disabled", "Agent access changed during capture.");

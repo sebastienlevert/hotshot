@@ -28,8 +28,10 @@ internal static class UiStyles
     {
         if (window.Content is not FrameworkElement root || !AppWindowTitleBar.IsCustomizationSupported()) return;
         var colors = new Windows.UI.ViewManagement.UISettings();
+        var closed = false;
         void Update()
         {
+            if (closed) return;
             var dark = root.ActualTheme == ElementTheme.Dark;
             var background = dark ? Color.FromArgb(255, 32, 32, 32) : Color.FromArgb(255, 243, 243, 243);
             var foreground = dark ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(255, 24, 24, 24);
@@ -65,7 +67,7 @@ internal static class UiStyles
         root.ActualThemeChanged += changed;
         TypedEventHandler<Windows.UI.ViewManagement.UISettings, object> colorsChanged = (_, _) => root.DispatcherQueue.TryEnqueue(Update);
         colors.ColorValuesChanged += colorsChanged;
-        window.Closed += (_, _) => { root.Loaded -= loaded; root.ActualThemeChanged -= changed; colors.ColorValuesChanged -= colorsChanged; };
+        window.Closed += (_, _) => { closed = true; root.Loaded -= loaded; root.ActualThemeChanged -= changed; colors.ColorValuesChanged -= colorsChanged; };
         Update();
     }
 

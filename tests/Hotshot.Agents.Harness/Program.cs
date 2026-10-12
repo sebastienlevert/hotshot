@@ -76,7 +76,22 @@ internal static class Harness
             var status = await Send(new AgentRequest { Operation = "status" });
             Check(status.Success && status.Status?.Enabled == false && status.Status.SaveFolder is null, "Disabled status disclosed private settings.");
             Check((await Send(new AgentRequest { Operation = "windows" })).ErrorCode == "access_disabled", "Disabled window access was allowed.");
+            var synthetic = await Send(new AgentRequest { Operation = "test_connection" });
+            Check(synthetic.Success && synthetic.Capture?.Id == "synthetic-connection-test", "Generated connection test failed while access was off.");
             app.Settings.Agents.Enabled = true;
+            app.Settings.Agents.SessionAccessOnly = true;
+            Check((await Send(new AgentRequest { Operation = "windows" })).ErrorCode == "access_disabled", "Timed session access implicitly started.");
+            server.GrantSession();
+            Check((await Send(new AgentRequest { Operation = "windows" })).Success, "Granted session did not allow target listing.");
+            server.RevokeSession();
+            Check((await Send(new AgentRequest { Operation = "windows" })).ErrorCode == "access_disabled", "Revoked session allowed requests.");
+            app.Settings.Agents.SessionAccessOnly = false;
+            app.Settings.Agents.ApproveRequests = true;
+            server.ApprovalHandler = (_, _, _) => Task.FromResult(false);
+            Check((await Send(new AgentRequest { Operation = "windows" })).ErrorCode == "approval_denied", "Denied request bypassed native approval.");
+            server.ApprovalHandler = (_, _, _) => Task.FromResult(true);
+            Check((await Send(new AgentRequest { Operation = "windows" })).Success, "Approved target listing failed.");
+            app.Settings.Agents.ApproveRequests = false;
             Check((await Send(new AgentRequest { Operation = "search_history" })).ErrorCode == "history_disabled", "History access was implicit.");
 
             var generated = new CapturedImage(600, 300, Enumerable.Range(0, 600 * 300).SelectMany(_ => new byte[] { 0, 69, 255, 255 }).ToArray());

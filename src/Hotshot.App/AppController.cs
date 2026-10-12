@@ -37,7 +37,7 @@ internal sealed partial class AppController : IDisposable
         _tray = new TrayIcon(_window, Path.Combine(assets, "Hotshot.ico"), Path.Combine(assets, "HotshotRecording.ico"));
         _hotkeys = new HotkeyManager(_window);
         _descriptions = new ScreenshotDescriptions(_app.History,
-            () => new CopilotDescriptionProvider(Path.Combine(_app.Paths.DataDirectory, "copilot-work")),
+            () => new CopilotDescriptionProvider(Path.Combine(_app.Paths.DataDirectory, "copilot-work"), () => _app.Settings.General.CopilotRuntimePath),
             _app.Settings.General.DescribeScreenshots);
         _app.Descriptions = _descriptions;
         _descriptions.ApplyPolicy(_app.Settings.General);
@@ -58,6 +58,12 @@ internal sealed partial class AppController : IDisposable
             () => _exiting || IsRecording || _startTask is not null || _stopTask is not null,
             () => _settingsWindow is { } settings ? WinRT.Interop.WindowNative.GetWindowHandle(settings) : 0);
         _app.AgentServer = _agentServer;
+        _agentServer.ApprovalHandler = async (request, client, token) =>
+        {
+            var window = new Hotshot.Views.AgentApprovalWindow(request, client, token);
+            window.Activate();
+            return await window.Decision;
+        };
 
         _hotkeys.Pressed += action => _app.Post(() => OnHotkey(action));
         _window.ArgumentsReceived += args => Execute(CommandLine.Parse(args).Command, secondInstance: true);
@@ -118,6 +124,7 @@ internal sealed partial class AppController : IDisposable
         }
 
         ReportHotkeyConflicts();
+        if (firstRun && _settingsWindow is { } firstSettings) _ = firstSettings.ShowQuickStartAsync();
         _updates.Start();
         _agentServer.Start();
         Program.MarkReady();
@@ -170,6 +177,7 @@ internal sealed partial class AppController : IDisposable
             await ShutdownRecordingAsync();
             await _descriptions.DisposeAsync();
             await _textIndex.DisposeAsync();
+            await _app.CheckpointHistoryAsync();
             CloseViews();
             await _app.SaveAsync();
         }

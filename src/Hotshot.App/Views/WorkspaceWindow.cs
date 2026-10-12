@@ -18,7 +18,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Hotshot.Views;
 
-internal sealed class WorkspaceWindow : Window
+internal sealed partial class WorkspaceWindow : Window
 {
     private readonly AppServices _app;
     private readonly CaptureActions _actions;
@@ -55,6 +55,9 @@ internal sealed class WorkspaceWindow : Window
     private HistoryItem? _pendingHistorySelection;
     private EditorSavedEventArgs? _lastSave;
     private Task? _operation;
+    private CancellationTokenSource? _operationCancellation;
+    private readonly Button _cancelOperation = new() { Content = "Cancel operation", Visibility = Visibility.Collapsed };
+    private ColumnDefinition? _historyColumn;
     private bool _rendering;
     private bool _closed;
     private bool _allowClose;
@@ -124,6 +127,13 @@ internal sealed class WorkspaceWindow : Window
         AddCommand("Delete selected", Symbol.Delete, DeleteSelectedAsync);
         AddCommand("Export selected files", Symbol.SaveLocal, ExportSelectedAsync);
         AddCommand("Save this search", Symbol.Find, SaveSearchAsync);
+        AddCommand("Storage and privacy", Symbol.Folder, StoragePrivacyAsync);
+        AddCommand("Back up library locally", Symbol.SaveLocal, BackupLibraryAsync);
+        AddCommand("Restore library backup", Symbol.OpenFile, RestoreLibraryAsync);
+        AddCommand("Relink missing capture", Symbol.Link, RelinkAsync);
+        AddCommand("Set project baseline", Symbol.Pin, SetBaselineAsync);
+        AddCommand("Compare with project baseline", Symbol.Switch, CompareBaselineAsync);
+        AddCommand("Create local evidence bundle", Symbol.Document, EvidenceBundleAsync);
         AddCommand("Delete saved search", Symbol.Clear, async () =>
         {
             if (_savedSearches.SelectedItem is not SavedCaptureSearch search) throw new InvalidOperationException("Choose a saved search in Filters first.");
@@ -187,12 +197,17 @@ internal sealed class WorkspaceWindow : Window
         var notices = new StackPanel { Spacing = 4 };
         notices.Children.Add(_error);
         notices.Children.Add(_progress);
+        notices.Children.Add(_cancelOperation);
+        _cancelOperation.Click += (_, _) => _operationCancellation?.Cancel();
+        AutomationProperties.SetAutomationId(_cancelOperation, "CancelWorkspaceOperation");
         AutomationProperties.SetName(_progress, "Hotshot is working");
         Grid.SetRow(notices, 1);
         root.Children.Add(notices);
 
         var main = new Grid { ColumnSpacing = 8 };
         main.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220), MinWidth = 170, MaxWidth = 420 });
+        _historyColumn = main.ColumnDefinitions[0];
+        _historyColumn.Width = new GridLength(_app.Settings.Layout.HistoryWidth);
         main.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         main.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 180 });
         var splitter = new GridSplitter { Width = 8, HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -251,7 +266,7 @@ internal sealed class WorkspaceWindow : Window
         {
             var compact = args.NewSize.Width < 700;
             main.ColumnDefinitions[0].MinWidth = compact ? 130 : 170;
-            main.ColumnDefinitions[0].Width = new GridLength(compact ? 160 : 220);
+            if (main.ColumnDefinitions[0].ActualWidth > 420) main.ColumnDefinitions[0].Width = new GridLength(420);
             _title.MaxWidth = compact ? 100 : 180;
         };
         UiStyles.ApplyTheme(this, app.Settings.General.Theme);
@@ -327,9 +342,11 @@ internal sealed class WorkspaceWindow : Window
             app.History.Changed -= HistoryChanged;
             _editor.Dispose();
             _player?.Dispose();
+            _app.Settings.Layout.HistoryWidth = Math.Clamp(_historyColumn?.ActualWidth ?? 220, 130, 420);
+            _app.SaveSettings();
         };
         RenderHistory();
-        WindowTools.Configure(this, 1120, 780);
+        WindowTools.Configure(this, 1120, 780, app: _app, layoutKey: "workspace");
     }
 
     public void Show()
@@ -500,6 +517,7 @@ internal sealed class WorkspaceWindow : Window
         var tags = new TextBox { Header = "Tags (comma-separated)", Text = string.Join(", ", item.Tags ?? []) };
         var favorite = new CheckBox { Content = "Keep as a favorite", IsChecked = item.IsFavorite };
         var project = new TextBox { Header = "Project collection", Text = item.Project };
+        AutomationProperties.SetAutomationId(project, "CaptureProjectName");
         var content = new StackPanel { Spacing = 12 };
         content.Children.Add(new TextBlock { Text = $"{item.Width} x {item.Height}  |  {item.Kind.DisplayName()}  |  {item.FileSize / 1024d:N1} KB", TextWrapping = TextWrapping.Wrap });
         content.Children.Add(favorite);
@@ -553,14 +571,41 @@ internal sealed class WorkspaceWindow : Window
     private async Task ExportAsync()
     {
         if (_current is not { IsVideo: false } item) return;
-        var format = new ComboBox { Header = "File format", ItemsSource = new[] { "PNG", "JPEG" }, SelectedIndex = 0 };
-        var width = new NumberBox { Header = "Image width (0 = original)", Minimum = 0, Maximum = 16384, Value = 0 };
-        var padding = new NumberBox { Header = "Padding (pixels)", Minimum = 0, Maximum = 400, Value = 24 };
-        var radius = new NumberBox { Header = "Rounded corners (pixels)", Minimum = 0, Maximum = 400, Value = 12 };
-        var background = new ComboBox { Header = "Background", ItemsSource = Enum.GetValues<ExportBackground>(), SelectedItem = ExportBackground.Charcoal };
-        var shadow = new CheckBox { Content = "Drop shadow", IsChecked = true };
+        var last = _app.Settings.Export.Last;
+        var format = new ComboBox { Header = "File format", ItemsSource = new[] { "PNG", "JPEG" }, SelectedIndex = last.Format };
+        var width = new NumberBox { Header = "Image width (0 = original)", Minimum = 0, Maximum = 16384, Value = last.Width };
+        var padding = new NumberBox { Header = "Padding (pixels)", Minimum = 0, Maximum = 400, Value = last.Padding };
+        var radius = new NumberBox { Header = "Rounded corners (pixels)", Minimum = 0, Maximum = 400, Value = last.CornerRadius };
+        var background = new ComboBox { Header = "Background", ItemsSource = Enum.GetValues<ExportBackground>(), SelectedIndex = last.Background };
+        var shadow = new CheckBox { Content = "Drop shadow", IsChecked = last.Shadow };
+        var presets = new ComboBox { Header = "Named export preset", ItemsSource = _app.Settings.Export.Presets, DisplayMemberPath = "Name" };
+        var presetName = new TextBox { Header = "Save or replace preset name (optional)", MaxLength = 80 };
+        AutomationProperties.SetAutomationId(presets, "ExportPresets");
+        AutomationProperties.SetAutomationId(presetName, "ExportPresetName");
+        AutomationProperties.SetAutomationId(width, "ExportWidth");
+        AutomationProperties.SetAutomationId(padding, "ExportPadding");
+        var removePreset = new Button { Content = "Delete selected preset" };
+        removePreset.Click += async (_, _) =>
+        {
+            if (presets.SelectedItem is not ExportPreset selected) return;
+            _app.Settings.Export.Presets.Remove(selected);
+            presets.ItemsSource = _app.Settings.Export.Presets.ToArray();
+            presetName.Text = "";
+            if (!await _app.SaveAsync()) ShowError("The preset deletion could not be saved.");
+        };
+        presets.SelectionChanged += (_, _) =>
+        {
+            if (presets.SelectedItem is not ExportPreset selected) return;
+            var style = selected.Style;
+            format.SelectedIndex = style.Format; width.Value = style.Width; padding.Value = style.Padding;
+            radius.Value = style.CornerRadius; background.SelectedIndex = style.Background; shadow.IsChecked = style.Shadow;
+            presetName.Text = selected.Name;
+        };
         var body = new StackPanel { Spacing = 10 };
         foreach (var control in new UIElement[] { format, width, padding, radius, background, shadow }) body.Children.Add(control);
+        body.Children.Insert(0, presets);
+        body.Children.Add(presetName);
+        body.Children.Add(removePreset);
         body.Children.Add(UiStyles.Description("Exports a separate flattened copy. Originals and editable annotations are unchanged; AI/OCR metadata is not included."));
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
         body.Children.Add(error);
@@ -584,6 +629,17 @@ internal sealed class WorkspaceWindow : Window
             catch (ArgumentException ex) { args.Cancel = true; error.Text = ex.Message; }
         };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || options is null) return;
+        var style = new ExportStyle((int)options.Format, options.Width, options.Padding, options.CornerRadius, options.Shadow, (int)options.Background);
+        var named = presetName.Text.Trim();
+        if (named.Length > 0)
+        {
+            if (_app.Settings.Export.Presets.Count >= 50 && !_app.Settings.Export.Presets.Any(preset => preset.Name.Equals(named, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Up to 50 export presets are supported.");
+            _app.Settings.Export.Presets.RemoveAll(preset => preset.Name.Equals(named, StringComparison.OrdinalIgnoreCase));
+            _app.Settings.Export.Presets.Add(new ExportPreset(named, style));
+        }
+        _app.Settings.Export.Last = style;
+        if (!await _app.SaveAsync()) throw new IOException("Export preferences could not be saved.");
         var picker = new FileSavePicker(AppWindow.Id)
         {
             Title = "Export screenshot", SuggestedFileName = Path.GetFileNameWithoutExtension(item.Path) + "-export",
@@ -605,12 +661,18 @@ internal sealed class WorkspaceWindow : Window
         _commands.IsEnabled = false;
         _editor.SetHostBusy(true);
         _progress.Visibility = Visibility.Visible;
+        _operationCancellation = new CancellationTokenSource();
+        _cancelOperation.Visibility = Visibility.Visible;
         _history.IsEnabled = keepHistoryEnabled;
         _save.IsEnabled = _copy.IsEnabled = _convert.IsEnabled = _favorite.IsEnabled = _details.IsEnabled = _text.IsEnabled = _export.IsEnabled = false;
         try
         {
             _operation = action();
             await _operation;
+        }
+        catch (OperationCanceledException) when (_operationCancellation.IsCancellationRequested)
+        {
+            ShowError("Operation canceled. Completed outputs, if any, were preserved.");
         }
         catch (Exception ex)
         {
@@ -623,6 +685,9 @@ internal sealed class WorkspaceWindow : Window
             _commands.IsEnabled = true;
             _editor.SetHostBusy(false);
             _progress.Visibility = Visibility.Collapsed;
+            _cancelOperation.Visibility = Visibility.Collapsed;
+            _operationCancellation.Dispose();
+            _operationCancellation = null;
             if (!_closed)
             {
                 _history.IsEnabled = true;
@@ -676,9 +741,8 @@ internal sealed class WorkspaceWindow : Window
         _history.Items.Clear();
         var filter = new CaptureLibraryFilter(_search.Text, _favoritesOnly.IsOn,
             (CaptureTypeFilter)Math.Max(0, _typeFilter.SelectedIndex), (CaptureDateRange)Math.Max(0, _dateFilter.SelectedIndex));
-        var matches = _app.History.Search(_search.Text, int.MaxValue).Where(i => filter.Matches(i, DateTimeOffset.Now) &&
-            (selectedProject is null or "All projects" || i.Project == selectedProject)).ToArray();
-        foreach (var item in matches.Take(_visibleLimit))
+        var matches = _app.History.ReadPage(filter, selectedProject is null or "All projects" ? null : selectedProject, _visibleLimit, 0, out var total);
+        foreach (var item in matches)
         {
             var body = new TextBlock { Text = item.FileName, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 4) };
             var row = new ListViewItem { Content = body, Tag = item, HorizontalContentAlignment = HorizontalAlignment.Stretch };
@@ -692,9 +756,9 @@ internal sealed class WorkspaceWindow : Window
             if (selectedIds.Contains(item.Id)) _history.SelectedItems.Add(row);
         }
         AutomationProperties.SetHelpText(_history, $"{_history.Items.Count} captures");
-        if (matches.Length > _visibleLimit)
+        if (total > _visibleLimit)
         {
-            var more = new Button { Content = $"Load more ({matches.Length} matching captures)" };
+            var more = new Button { Content = $"Load more ({total} matching captures)" };
             more.Click += (_, _) => { _visibleLimit += 200; RenderHistory(); };
             _history.Items.Add(new ListViewItem { Content = more, IsTabStop = false });
         }
@@ -781,9 +845,23 @@ internal sealed class WorkspaceWindow : Window
         {
             foreach (var item in items)
             {
+                OperationToken.ThrowIfCancellationRequested();
                 var destination = Path.Combine(folder.Path, item.IsVideo ? item.FileName : Path.ChangeExtension(item.FileName, ".png"));
                 if (File.Exists(destination)) throw new IOException("An export file already exists: " + item.FileName);
-                if (item.IsVideo) File.Copy(item.Path, destination);
+                if (item.IsVideo)
+                {
+                    try
+                    {
+                        await using var input = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
+                        await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
+                        await input.CopyToAsync(output, OperationToken);
+                    }
+                    catch
+                    {
+                        if (File.Exists(destination)) File.Delete(destination);
+                        throw;
+                    }
+                }
                 else await ImageCodec.SavePngAsync(await ImageCodec.LoadAsync(item.Path), destination);
             }
         });
@@ -846,6 +924,10 @@ internal sealed class WorkspaceWindow : Window
                 "Organize selected" or "Delete selected" or "Export selected files" => SelectedCaptures().Length > 0,
                 "Save this search" => !string.IsNullOrWhiteSpace(_search.Text),
                 "Delete saved search" => _savedSearches.SelectedItem is SavedCaptureSearch,
+                "Set project baseline" => _current is { IsVideo: false, Project.Length: > 0 } && _fileAvailable,
+                "Compare with project baseline" => _current is { IsVideo: false, Project.Length: > 0 } && _fileAvailable,
+                "Relink missing capture" => _current is not null && !_fileAvailable,
+                "Create local evidence bundle" => SelectedCaptures().Length is > 0 and <= 20 && SelectedCaptures().All(capture => !capture.IsVideo),
                 _ => true,
             };
         };
@@ -865,7 +947,7 @@ internal sealed class WorkspaceWindow : Window
         if (_editor.IsDirty) throw new InvalidOperationException("Save edits before comparing saved captures.");
         var before = await Task.Run(() => ImageCodec.LoadAsync(items[0].Path));
         var after = await Task.Run(() => ImageCodec.LoadAsync(items[1].Path));
-        var comparison = await Task.Run(() => ImageComparison.Compare(before, after));
+        var comparison = await Task.Run(() => ImageComparison.CompareCancellable(before, after, new ComparisonOptions(), 8, OperationToken), OperationToken);
         var window = await ComparisonWindow.CreateAsync(before, after, comparison);
         _app.AuxiliaryWindowCount++;
         window.Closed += (_, _) => _app.AuxiliaryWindowCount--;
@@ -886,20 +968,14 @@ internal sealed class WorkspaceWindow : Window
     private async Task TrimVideoAsync()
     {
         if (_current is not { Kind: CaptureKind.Recording } item) throw new InvalidOperationException("Select an MP4 recording first.");
-        var start = new NumberBox { Header = "Start (seconds)", Minimum = 0, Value = 0 };
-        var end = new NumberBox { Header = "End (seconds)", Minimum = 0, Value = item.DurationSeconds ?? 0 };
-        var body = new StackPanel { Spacing = 12 };
-        body.Children.Add(start); body.Children.Add(end);
-        body.Children.Add(UiStyles.Description("Writes a separate MP4. The original recording remains unchanged."));
-        if (await DialogAsync("Trim recording", body, "Choose destination") != ContentDialogResult.Primary) return;
-        if (!double.IsFinite(start.Value) || !double.IsFinite(end.Value) || end.Value <= start.Value)
-            throw new ArgumentException("Choose a valid start and a later end time.");
+        var range = await VideoTrimDialog.ShowAsync(item.Path, ((FrameworkElement)Content).XamlRoot);
+        if (range is null) return;
         var picker = new FileSavePicker(AppWindow.Id) { SuggestedFileName = Path.GetFileNameWithoutExtension(item.Path) + "-trimmed" };
         picker.FileTypeChoices.Add("MP4 recording", [".mp4"]);
         var file = await picker.PickSaveFileAsync();
         if (file is null) return;
-        await Hotshot.Recording.VideoEditing.TrimAsync(item.Path, file.Path, TimeSpan.FromSeconds(start.Value), TimeSpan.FromSeconds(end.Value));
+        await Hotshot.Recording.VideoEditing.TrimAsync(item.Path, file.Path, range.Value.Start, range.Value.End, OperationToken);
         await (_app.Output ?? throw new InvalidOperationException("Output is unavailable.")).AddVideoAsync(
-            file.Path, CaptureKind.Recording, item.Width, item.Height, TimeSpan.FromSeconds(end.Value - start.Value), false, copyToClipboard: false);
+            file.Path, CaptureKind.Recording, item.Width, item.Height, range.Value.End - range.Value.Start, false, copyToClipboard: false);
     }
 }

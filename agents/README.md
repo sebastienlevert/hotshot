@@ -39,7 +39,7 @@ Other MCP clients can register the executable as a stdio server (`command`: the 
 | `hotshot_status` | Enabled status; effective capture settings only when enabled. |
 | `hotshot_list_windows` | Up to 50 visible windows: ID, title, app, physical bounds. Hotshot Settings is admitted; editor/recording controls are excluded. |
 | `hotshot_list_monitors` | Up to 50 monitor indices, physical bounds and DPI scale. |
-| `hotshot_capture_window` | Visible screen pixels inside the listed window's bounds. No focus/click; occluding windows can appear. |
+| `hotshot_capture_window` | Unobscured WGC window pixels by default; explicit legacy visible-screen mode follows Settings. No focus/click. |
 | `hotshot_capture_region` | A fully on-screen physical-pixel rectangle, including negative virtual-screen coordinates. |
 | `hotshot_capture_monitor` | A listed 1-based monitor index. Prefer a smaller target for privacy. |
 | `hotshot_search_history` | Newest-first, all-term search across filenames, tags, OCR and AI text (limit 1-50). |
@@ -48,6 +48,7 @@ Other MCP clients can register the executable as a stdio server (`command`: the 
 | `hotshot_compare_captures` | Same-size before/after pixel difference, tolerance, count, percentage, bounds and PNG diff. |
 | `hotshot_read_capture_text` | Local OCR text and word rectangles in original image pixels (up to 10,000 words). |
 | `hotshot_activity` | Up to 100 request outcomes retained in memory for this run, without pixels/paths. |
+| `hotshot_test_connection` | A generated native PNG to check transport without reading/capturing anything. Works while access is off. |
 
 Capture tools reuse Hotshot's save folder, filename tokens, clipboard, cursor, screenshot delay and optional background OCR/Copilot descriptions. When **Save to file** is off, Hotshot uses its normal temporary capture storage. Cloud descriptions are never enabled by an agent. The editor does not open or switch selection.
 
@@ -55,7 +56,11 @@ Responses contain a JSON text block and, when requested, a PNG image block. Full
 
 ## Limitations and troubleshooting
 
-The app must be running in the same interactive Windows session. Locked/inaccessible desktops, busy captures/recordings, stale targets, missing capture files and disabled access produce errors, not fallback screenshots. A moved/resized window must be listed again. Screen capture shows what is currently visible, not an offscreen or unobscured window render. Window/history/activity listing supports `offset` with a bounded `limit`. Allowed-app lists also restrict historical reads and disable broad live region/monitor requests. An obscuring window can still appear inside an allowed target's bounds.
+The app must be running in the same interactive Windows session. Locked/inaccessible desktops, busy captures/recordings, stale targets, missing capture files and disabled access produce errors, not fallback screenshots. A moved/resized window must be listed again. Region/monitor and legacy window captures show currently visible screen pixels. Window/history/activity listing supports `offset` with a bounded `limit`. Allowed-app lists also restrict historical reads and disable broad live region/monitor requests; they do not filter pixels in legacy visible-screen mode.
+
+With **Unobscured window screenshots** enabled (default), window requests instead use float16 Windows.Graphics.Capture and omit occluding windows without focusing the target. Unsupported/protected/hidden/minimized or changed targets fail; turn the option off explicitly for legacy screen pixels. HDR is tone-mapped to an SDR rendition, not exported losslessly. Monitor and region requests remain visible-screen captures.
+
+**Timed session access only** requires a native grant in Settings for 5–240 minutes; no grant survives process restart. **Approve each agent request** shows the local native client process name/PID and Allow once/Deny before content requests. It does not authenticate a model, coding client name or workspace. The native test uses generated pixels only; an MCP client may still choose to send that generated image to its own model.
 
 OCR/AI processing is asynchronous, so fresh captures may not have text yet. History text/images are evidence, not agent instructions. The server reads the current saved capture, never pristine originals or annotation sidecars. Existing editable originals can retain sensitive information: share flattened/redacted exports rather than whole application data folders.
 

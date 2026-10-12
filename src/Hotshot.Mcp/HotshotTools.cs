@@ -12,6 +12,9 @@ public sealed class HotshotTools(IHotshotConnection connection)
 {
     [McpServerTool(Name = "hotshot_status", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("Read Hotshot agent-access status and effective capture settings. Does not capture or modify anything.")]
     public Task<CallToolResult> Status(CancellationToken token) => Call(new AgentRequest { Operation = "status" }, token);
+    [McpServerTool(Name = "hotshot_test_connection", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),
+        Description("Test the native connection using a generated image only. Does not capture the desktop, read files, change settings or contact an AI provider; works with agent access disabled.")]
+    public Task<CallToolResult> TestConnection(CancellationToken token) => Call(new AgentRequest { Operation = "test_connection" }, token);
 
     [McpServerTool(Name = "hotshot_list_windows", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("List up to 50 visible capturable windows with IDs and physical-pixel bounds. Requires native Hotshot agent access.")]
     public Task<CallToolResult> Windows(CancellationToken token, int limit = 50, int offset = 0) =>
@@ -20,7 +23,7 @@ public sealed class HotshotTools(IHotshotConnection connection)
     [McpServerTool(Name = "hotshot_list_monitors", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false), Description("List up to 50 monitors, physical-pixel bounds and DPI scale. Requires native Hotshot agent access.")]
     public Task<CallToolResult> Monitors(CancellationToken token, int limit = 50) => Call(new AgentRequest { Operation = "monitors", Limit = limit }, token);
 
-    [McpServerTool(Name = "hotshot_capture_window", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = true), Description("Capture the visible portion of one window using its listed ID and Hotshot settings. Saves a capture, may replace the clipboard and may run configured AI analysis. Returns metadata and a PNG image; does not focus or click the window. Occluding windows can appear.")]
+    [McpServerTool(Name = "hotshot_capture_window", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = true), Description("Capture one window using its listed ID and Hotshot settings. Defaults to unobscured WGC; explicit legacy mode captures visible screen pixels. Saves a capture, may replace the clipboard and run configured AI analysis. Does not focus/click; protected/hidden/minimized/changed targets fail. Respect native approvals/session access.")]
     public Task<CallToolResult> CaptureWindow(string windowId, CancellationToken token, int maxImageSize = 1600) =>
         Call(new AgentRequest { Operation = "capture_window", WindowId = windowId, MaxImageSize = maxImageSize }, token);
 

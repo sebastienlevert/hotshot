@@ -44,7 +44,7 @@ jobs:
         if: matrix.platform == 'x64'
         shell: pwsh
         run: |
-          dotnet run --project tests\Hotshot.Mcp.Harness\Hotshot.Mcp.Harness.csproj -c Release -- "src\Hotshot.Mcp\bin\Release\net10.0-windows10.0.26100.0\win-x64\Hotshot.Mcp.exe"
+          dotnet run --project tests\Hotshot.Mcp.Harness\Hotshot.Mcp.Harness.csproj -c Release -- "src\Hotshot.Mcp\bin\Release\net10.0\win-x64\Hotshot.Mcp.exe"
           if ($LASTEXITCODE -ne 0) { throw 'MCP protocol contract failed.' }
       - name: Unit tests
         if: matrix.platform == 'x64'
@@ -54,3 +54,9 @@ jobs:
             dotnet test --project "tests\Hotshot.$project.Tests\Hotshot.$project.Tests.csproj" --output Detailed
             if ($LASTEXITCODE -ne 0) { throw "$project tests failed." }
           }
+      - name: Large-library consolidation benchmark
+        if: matrix.platform == 'x64'
+        shell: pwsh
+        run: |
+          dotnet run --project tests\Hotshot.Library.Harness\Hotshot.Library.Harness.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Large-library benchmark failed.' }

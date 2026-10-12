@@ -48,6 +48,7 @@ internal sealed partial class AppController
             await _agentServer.StopAsync();
             await _descriptions.DisposeAsync();
             await _textIndex.DisposeAsync();
+            await _app.CheckpointHistoryAsync();
             CloseViews();
             Dispose();
             Application.Current.Exit();

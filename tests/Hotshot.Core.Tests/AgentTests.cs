@@ -8,6 +8,14 @@ namespace Hotshot.Core.Tests;
 public sealed class AgentTests
 {
     [Fact]
+    public void MinimalReadOnlyRequestsPreserveDefaultLimits()
+    {
+        var request = AgentProtocol.DecodeRequest(System.Text.Encoding.UTF8.GetBytes("""{"operation":"windows","limit":1}"""));
+        Assert.Equal(1600, request.MaxImageSize);
+        Assert.Equal("", request.Query);
+        request.Validate();
+    }
+    [Fact]
     public void Access_IsOptIn_AndRoundTrips()
     {
         var settings = SettingsStore.Deserialize("""{"agents":null}""");

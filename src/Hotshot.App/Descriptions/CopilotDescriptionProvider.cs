@@ -4,7 +4,7 @@ using Hotshot.Core.Descriptions;
 
 namespace Hotshot.Descriptions;
 
-internal sealed class CopilotDescriptionProvider(string directory) : ICaptureDescriptionProvider
+internal sealed class CopilotDescriptionProvider(string directory, Func<string?>? externalRuntime = null) : ICaptureDescriptionProvider
 {
     private CopilotClient? _client;
     private string? _model;
@@ -17,9 +17,12 @@ internal sealed class CopilotDescriptionProvider(string directory) : ICaptureDes
         if (_client is null)
         {
             Directory.CreateDirectory(directory);
+            var runtime = externalRuntime?.Invoke();
+            if (!string.IsNullOrWhiteSpace(runtime) && !File.Exists(runtime)) throw new FileNotFoundException("The configured optional Copilot runtime is missing.", runtime);
             _client = new CopilotClient(new CopilotClientOptions
             {
                 Mode = CopilotClientMode.Empty,
+                Connection = RuntimeConnection.ForStdio(string.IsNullOrWhiteSpace(runtime) ? null : runtime),
                 WorkingDirectory = directory,
                 BaseDirectory = Path.Combine(directory, "copilot"),
                 UseLoggedInUser = true,

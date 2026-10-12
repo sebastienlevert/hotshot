@@ -4,6 +4,28 @@ using Hotshot.Descriptions;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
 using Windows.Storage.Streams;
+using GitHub.Copilot;
+
+var health = Array.IndexOf(args, "--runtime-health");
+if (health >= 0)
+{
+    if (health + 1 >= args.Length) throw new ArgumentException("A copied runtime executable path is required.");
+    var data = Path.Combine(Path.GetTempPath(), "hotshot-runtime-health-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(data);
+    try
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await using var client = new CopilotClient(new CopilotClientOptions
+        {
+            Mode = CopilotClientMode.Empty, Connection = RuntimeConnection.ForStdio(args[health + 1]),
+            WorkingDirectory = data, BaseDirectory = Path.Combine(data, "copilot"), UseLoggedInUser = false,
+        });
+        await client.StartAsync(timeout.Token);
+        Console.WriteLine("PASS isolated stdio Copilot runtime startup without an in-process DLL, sessions, models or account access.");
+    }
+    finally { Directory.Delete(data, true); }
+    return;
+}
 
 var directory = Path.Combine(Path.GetTempPath(), "hotshot-description-harness-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(directory);

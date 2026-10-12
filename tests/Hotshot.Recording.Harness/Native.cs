@@ -4,6 +4,8 @@ namespace Hotshot.Recording.Harness;
 
 internal static unsafe partial class Native
 {
+    [LibraryImport("user32.dll")]
+    public static partial nint SetThreadDpiAwarenessContext(nint context);
     public const uint MONITOR_DEFAULTTOPRIMARY = 1;
     public const uint WM_CLOSE = 0x0010;
     public const uint WM_DESTROY = 0x0002;

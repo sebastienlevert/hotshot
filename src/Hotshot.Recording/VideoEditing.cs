@@ -17,10 +17,11 @@ public static class VideoEditing
         return await Hotshot.Capture.ImageCodec.DecodeAsync(thumbnail);
     }
 
-    public static async Task TrimAsync(string source, string destination, TimeSpan start, TimeSpan end)
+    public static async Task TrimAsync(string source, string destination, TimeSpan start, TimeSpan end, CancellationToken token = default)
     {
         if (string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Trim output must not replace the original.");
+        token.ThrowIfCancellationRequested();
         var clip = await MediaClip.CreateFromFileAsync(await StorageFile.GetFileFromPathAsync(source));
         if (start < TimeSpan.Zero || end <= start || end > clip.OriginalDuration) throw new ArgumentException("Trim times exceed the recording duration.");
         clip.TrimTimeFromStart = start;
@@ -39,8 +40,9 @@ public static class VideoEditing
             profile.Video.FrameRate.Numerator = input.FrameRate.Numerator;
             profile.Video.FrameRate.Denominator = input.FrameRate.Denominator;
             var result = await composition.RenderToFileAsync(file, MediaTrimmingPreference.Precise,
-                profile);
+                profile).AsTask(token);
             if (result != TranscodeFailureReason.None) throw new IOException("Video trimming failed: " + result);
+            token.ThrowIfCancellationRequested();
             File.Move(temp, destination, overwrite: true);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }

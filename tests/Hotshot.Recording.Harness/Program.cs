@@ -8,6 +8,67 @@ using Vortice.MediaFoundation;
 const double DurationTolerance = 0.6;
 bool windowOnly = args.Contains("--window-only", StringComparer.OrdinalIgnoreCase);
 
+if (args.Contains("--window-screenshot", StringComparer.OrdinalIgnoreCase))
+{
+    Native.SetProcessDpiAwarenessContext(Native.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    WinRT.ComWrappersSupport.InitializeComWrappers();
+    using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+    await WindowScreenshotChecks.RunAsync(timeout.Token);
+    return 0;
+}
+var soakOption = Array.IndexOf(args, "--soak-seconds");
+if (soakOption >= 0)
+{
+    if (soakOption + 1 >= args.Length || !int.TryParse(args[soakOption + 1], out var seconds) || seconds is < 30 or > 600)
+        throw new ArgumentException("Use --soak-seconds 30-600.");
+    Native.SetProcessDpiAwarenessContext(Native.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    WinRT.ComWrappersSupport.InitializeComWrappers();
+    MediaFactory.MFStartup(useLightVersion: false).CheckError();
+    var directory = Path.Combine(Path.GetTempPath(), "hotshot-recording-soak-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(directory);
+    try
+    {
+        using var window = new TestWindow("Hotshot synthetic recording soak", 800, 600);
+        await using var recorder = await ScreenRecorder.StartAsync(new RecordingOptions { Target = new WindowTarget(window.Handle),
+            OutputPath = Path.Combine(directory, "soak.mp4"), FramesPerSecond = 30, CaptureCursor = false,
+            CaptureSystemAudio = false, CaptureMicrophone = false });
+        Exception? failed = null;
+        recorder.Failed += (_, error) => failed = error;
+        var startMemory = Process.GetCurrentProcess().PrivateMemorySize64;
+        var soakWall = Stopwatch.StartNew();
+        var pausedSeconds = 0d;
+        for (var elapsed = 0; elapsed < seconds; elapsed++)
+        {
+            await Task.Delay(1000);
+            if (elapsed % 20 == 10)
+            {
+                recorder.Pause();
+                var frozen = recorder.Elapsed;
+                var pauseWall = Stopwatch.StartNew();
+                await Task.Delay(250);
+                pausedSeconds += pauseWall.Elapsed.TotalSeconds;
+                if (Math.Abs((recorder.Elapsed - frozen).TotalMilliseconds) > 1) throw new InvalidDataException("Recording clock advanced while paused.");
+                recorder.Resume();
+            }
+            if (elapsed % 30 == 10) window.Resize(650, 500);
+            if (elapsed % 30 == 20) window.Resize(800, 600);
+            if (failed is not null) throw failed;
+        }
+        var recordedSeconds = recorder.Elapsed.TotalSeconds;
+        if (Math.Abs(recordedSeconds - (soakWall.Elapsed.TotalSeconds - pausedSeconds)) > 1)
+            throw new InvalidDataException("The recording clock drifted from actual wall time excluding pauses.");
+        var result = await recorder.StopAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        var info = Validate(result, recorder.Width, recorder.Height, recordedSeconds, expectAudio: false);
+        CheckWindowFrame(DecodeAt(result.Path, 1), "soak first frame");
+        CheckWindowFrame(DecodeAt(result.Path, seconds - 1), "soak final frame");
+        var endMemory = Process.GetCurrentProcess().PrivateMemorySize64;
+        if (endMemory - startMemory > 200L * 1024 * 1024) throw new InvalidDataException("Recording memory grew by over 200 MB.");
+        Console.WriteLine($"PASS {seconds}s synthetic-window recording soak: {info}; dropped={recorder.FramesDropped}; private-memory delta={(endMemory - startMemory) / 1048576d:F1} MB.");
+    }
+    finally { Directory.Delete(directory, true); MediaFactory.MFShutdown().CheckError(); }
+    return 0;
+}
+
 Native.SetProcessDpiAwarenessContext(Native.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 MediaFactory.MFStartup(useLightVersion: false).CheckError();
 

@@ -95,6 +95,8 @@ jobs:
           .\tests\Hotshot.Agents.Manifests.ps1
           dotnet run --project tests\Hotshot.Mcp.Harness\Hotshot.Mcp.Harness.csproj -c Release -- "artifacts\publish\$env:RELEASE_VERSION\win-x64\Mcp\Hotshot.Mcp.exe"
           if ($LASTEXITCODE -ne 0) { throw 'Packaged MCP protocol contract failed.' }
+          dotnet run --project tests\Hotshot.Descriptions.Harness\Hotshot.Descriptions.Harness.csproj -c Release -- --runtime-health "artifacts\publish\$env:RELEASE_VERSION\win-x64\runtimes\win-x64\native\copilot-runtime.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged stdio runtime startup failed.' }
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.runtime }}

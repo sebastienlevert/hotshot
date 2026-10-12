@@ -33,7 +33,7 @@ async Task CheckAsync(string executable, List<string> arguments, bool synthetic)
         Command = executable, Arguments = arguments, Name = "Hotshot protocol test",
     }), cancellationToken: token);
     var tools = await client.ListToolsAsync(cancellationToken: token);
-    if (tools.Count != 12 || tools.Any(tool => !tool.Name.StartsWith("hotshot_", StringComparison.Ordinal)))
+    if (tools.Count != 13 || tools.Any(tool => !tool.Name.StartsWith("hotshot_", StringComparison.Ordinal)))
         throw new InvalidDataException("Unexpected MCP tool inventory.");
     if (tools.Any(tool => tool.JsonSchema.ToString().Contains("\"token\"", StringComparison.Ordinal)))
         throw new InvalidDataException("CancellationToken leaked into a tool's input schema.");

@@ -17,6 +17,8 @@ public sealed class AppSettings
     public GifSettings Gif { get; set; } = new();
     public AgentSettings Agents { get; set; } = new();
     public LibrarySettings Library { get; set; } = new();
+    public ExportSettings Export { get; set; } = new();
+    public LayoutSettings Layout { get; set; } = new();
 
     /// <summary>Clamps values to supported ranges and fills missing sections after deserialization.</summary>
     public AppSettings Normalize()
@@ -29,6 +31,18 @@ public sealed class AppSettings
         Gif ??= new();
         Agents ??= new();
         Library ??= new();
+        Export ??= new();
+        Export.Last ??= new();
+        Export.Presets ??= [];
+        Export.Presets.RemoveAll(preset => preset is null || preset.Style is null || !preset.Style.IsValid() || string.IsNullOrWhiteSpace(preset.Name));
+        if (!Export.Last.IsValid()) Export.Last = new();
+        Layout ??= new();
+        Layout.Windows ??= [];
+        foreach (var key in Layout.Windows.Where(entry => entry.Value is null || entry.Value.Width is < 200 or > 16384 ||
+            entry.Value.Height is < 150 or > 16384 || !double.IsFinite(entry.Value.Scale) || entry.Value.Scale is < 0.5 or > 8)
+            .Select(entry => entry.Key).ToArray()) Layout.Windows.Remove(key);
+        Library.Baselines ??= [];
+        Library.Baselines.RemoveAll(baseline => baseline is null || string.IsNullOrWhiteSpace(baseline.Project) || string.IsNullOrWhiteSpace(baseline.CaptureId));
         Library.SavedSearches ??= [];
         General.AiExcludedApps ??= [];
         Agents.AllowedApps ??= [];
@@ -48,6 +62,9 @@ public sealed class AppSettings
         Recording.FramesPerSecond = Recording.FramesPerSecond is 15 or 24 or 30 or 60 ? Recording.FramesPerSecond : 30;
         Recording.CountdownSeconds = Math.Clamp(Recording.CountdownSeconds, 0, 10);
         Capture.DelaySeconds = Math.Clamp(Capture.DelaySeconds, 0, 30);
+        Agents.SessionMinutes = Math.Clamp(Agents.SessionMinutes, 5, 240);
+        if (!double.IsFinite(Layout.HistoryWidth)) Layout.HistoryWidth = 220;
+        Layout.HistoryWidth = Math.Clamp(Layout.HistoryWidth, 130, 420);
         Gif.FramesPerSecond = Math.Clamp(Gif.FramesPerSecond, 5, 30);
         Gif.MaxWidth = Gif.MaxWidth == 0 ? 0 : Math.Clamp(Gif.MaxWidth, 160, 3840);
         Version = CurrentVersion;
@@ -59,6 +76,12 @@ public sealed class AppSettings
     public IReadOnlyList<string> Validate()
     {
         var errors = new List<string>();
+        if (!string.IsNullOrWhiteSpace(General.CopilotRuntimePath) && !Path.IsPathFullyQualified(General.CopilotRuntimePath))
+            errors.Add("Choose an absolute path for an optional SDK-compatible Copilot runtime.");
+        if (Export.Presets.Count > 50 || Export.Presets.Any(preset => string.IsNullOrWhiteSpace(preset.Name) || preset.Name.Length > 80))
+            errors.Add("Use up to 50 named export presets with names up to 80 characters.");
+        if (!Export.Last.IsValid() || Export.Presets.Any(preset => preset.Style is null || !preset.Style.IsValid()))
+            errors.Add("Export preset dimensions or style are outside supported limits.");
         if (General.AiExcludedApps.Length > 50 || General.AiExcludedApps.Any(name =>
             name is null || name.Length > 100 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
             errors.Add("AI exclusions must be up to 50 process names, without paths or invalid filename characters.");
@@ -68,6 +91,9 @@ public sealed class AppSettings
         if (Library.SavedSearches.Count > 100 || Library.SavedSearches.Any(search =>
             search is null || search.Name is null || search.Query is null || search.Name.Length > 80 || search.Query.Length > 500))
             errors.Add("Use up to 100 saved searches with names up to 80 and queries up to 500 characters.");
+        if (Library.Baselines.Count > 1000 || Library.Baselines.Any(baseline =>
+            baseline is null || string.IsNullOrWhiteSpace(baseline.Project) || baseline.Project.Length > 80 || string.IsNullOrWhiteSpace(baseline.CaptureId)))
+            errors.Add("Project baselines must have valid project names and capture IDs (up to 1000).");
         try
         {
             if (string.IsNullOrWhiteSpace(General.SaveFolder) || !Path.IsPathFullyQualified(General.SaveFolder))
@@ -144,15 +170,38 @@ public sealed class GeneralSettings
     public bool RecognizeScreenshotText { get; set; }
     public bool ReviewBeforeAiUpload { get; set; }
     public string[] AiExcludedApps { get; set; } = [];
+    public string? CopilotRuntimePath { get; set; }
 }
 
 public sealed class LibrarySettings
 {
     public bool KeepSavedCaptures { get; set; } = true;
     public List<SavedCaptureSearch> SavedSearches { get; set; } = [];
+    public List<ProjectBaseline> Baselines { get; set; } = [];
 }
 
 public sealed record SavedCaptureSearch(string Name, string Query);
+public sealed record ProjectBaseline(string Project, string CaptureId);
+
+public sealed class ExportSettings
+{
+    public ExportStyle Last { get; set; } = new();
+    public List<ExportPreset> Presets { get; set; } = [];
+}
+
+public sealed record ExportStyle(int Format = 0, int Width = 0, int Padding = 24, int CornerRadius = 12,
+    bool Shadow = true, int Background = 2)
+{
+    public bool IsValid() => Format is >= 0 and <= 1 && Background is >= 0 and <= 3 && Width is >= 0 and <= 16384 &&
+        Padding is >= 0 and <= 400 && CornerRadius is >= 0 and <= 400;
+}
+public sealed record ExportPreset(string Name, ExportStyle Style);
+public sealed record WindowLayout(int X, int Y, int Width, int Height, double Scale);
+public sealed class LayoutSettings
+{
+    public double HistoryWidth { get; set; } = 220;
+    public Dictionary<string, WindowLayout> Windows { get; set; } = new();
+}
 
 public sealed class AgentSettings
 {
@@ -161,6 +210,9 @@ public sealed class AgentSettings
     public string[] AllowedApps { get; set; } = [];
     public bool AllowMonitorCapture { get; set; } = true;
     public bool AllowRegionCapture { get; set; } = true;
+    public bool SessionAccessOnly { get; set; }
+    public bool ApproveRequests { get; set; }
+    public int SessionMinutes { get; set; } = 60;
 }
 
 public enum AppTheme
@@ -235,6 +287,7 @@ public sealed class CaptureSettings
     public bool ShowMagnifier { get; set; } = true;
     public bool SnapToWindows { get; set; } = true;
     public bool ShowCrosshair { get; set; } = true;
+    public bool UnobscuredWindows { get; set; } = true;
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<RecordingQuality>))]

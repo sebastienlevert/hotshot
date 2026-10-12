@@ -16,25 +16,25 @@ public sealed record AgentRect(int X, int Y, int Width, int Height)
     }
 }
 
-public sealed record AgentRequest
+public sealed class AgentRequest
 {
-    public string Operation { get; init; } = "";
-    public string? WindowId { get; init; }
-    public int? MonitorIndex { get; init; }
-    public AgentRect? Region { get; init; }
-    public string? CaptureId { get; init; }
-    public string? BeforeId { get; init; }
-    public int Offset { get; init; }
-    public int Tolerance { get; init; } = 8;
-    public string Query { get; init; } = "";
-    public int Limit { get; init; } = 10;
-    public int MaxImageSize { get; init; } = 1600;
-    public bool IncludeImage { get; init; } = true;
+    public string Operation { get; set; } = "";
+    public string? WindowId { get; set; }
+    public int? MonitorIndex { get; set; }
+    public AgentRect? Region { get; set; }
+    public string? CaptureId { get; set; }
+    public string? BeforeId { get; set; }
+    public int Offset { get; set; }
+    public int Tolerance { get; set; } = 8;
+    public string Query { get; set; } = "";
+    public int Limit { get; set; } = 10;
+    public int MaxImageSize { get; set; } = 1600;
+    public bool IncludeImage { get; set; } = true;
 
     public void Validate()
     {
         if (Operation is not ("status" or "windows" or "monitors" or "capture_window" or "capture_region" or
-            "capture_monitor" or "search_history" or "get_capture" or "get_capture_region" or "compare_captures" or "read_capture_text" or "activity")) throw new ArgumentException("Unknown agent operation.");
+            "capture_monitor" or "search_history" or "get_capture" or "get_capture_region" or "compare_captures" or "read_capture_text" or "activity" or "test_connection")) throw new ArgumentException("Unknown agent operation.");
         if (Limit is < 1 or > 50 || MaxImageSize is < 256 or > 2048 || Query is null || Query.Length > 500 ||
             WindowId?.Length > 32 || CaptureId?.Length > 64 || BeforeId?.Length > 64 || Offset is < 0 or > 100000 ||
             Tolerance is < 0 or > 255) throw new ArgumentException("Agent request exceeds supported limits.");
@@ -58,7 +58,8 @@ public sealed record AgentCapture(string Id, string Path, string Kind, int Width
 public sealed record AgentComparison(string BeforeId, string AfterId, long ChangedPixels, double ChangedPercent, AgentRect? ChangedBounds, int Tolerance);
 public sealed record AgentWord(string Text, AgentRect Bounds);
 public sealed record AgentText(int Width, int Height, string Text, AgentWord[] Words);
-public sealed record AgentActivity(DateTimeOffset Timestamp, string Operation, bool Success, string? ErrorCode);
+public sealed record AgentActivity(DateTimeOffset Timestamp, string Operation, bool Success, string? ErrorCode, int? ClientProcessId = null);
+public sealed record AgentClient(int ProcessId, string ProcessName, DateTimeOffset LastSeen, bool Connected);
 public sealed record AgentWindow(string Id, string Title, string App, AgentRect Bounds);
 public sealed record AgentMonitor(int Index, string Name, AgentRect Bounds, double Scale, bool Primary);
 public sealed record AgentStatus(bool Enabled, bool HistoryAccess, string Version, string? SaveFolder = null,
@@ -79,6 +80,7 @@ public sealed record AgentResponse
     public AgentComparison? Comparison { get; init; }
     public AgentText? Text { get; init; }
     public AgentActivity[]? Activity { get; init; }
+    public AgentClient[]? Clients { get; init; }
     public static AgentResponse Failure(string code, string message) => new() { ErrorCode = code, Error = message };
 }
 

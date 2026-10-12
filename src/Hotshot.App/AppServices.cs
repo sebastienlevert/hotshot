@@ -97,6 +97,9 @@ internal sealed class AppServices
             candidate.General.Counter = Settings.General.Counter;
             candidate.General.FirstRunCompleted = Settings.General.FirstRunCompleted;
             candidate.Library.SavedSearches = Settings.Library.SavedSearches.ToList();
+            candidate.Library.Baselines = Settings.Library.Baselines.ToList();
+            candidate.Export = Settings.Export;
+            candidate.Layout = Settings.Layout;
             await Task.Run(() => _settingsStore.Save(candidate));
             var counter = Math.Max(candidate.General.Counter, Settings.General.Counter);
             Settings = candidate;
@@ -121,6 +124,16 @@ internal sealed class AppServices
         finally
         {
             _saveGate.Release();
+        }
+    }
+
+    public async Task CheckpointHistoryAsync()
+    {
+        try { await Task.Run(History.Checkpoint); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Error("Library checkpoint failed", ex);
+            Failed?.Invoke("Library checkpoint failed; the journal was retained: " + ex.Message);
         }
     }
 

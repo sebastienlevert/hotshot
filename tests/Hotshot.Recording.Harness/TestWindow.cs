@@ -12,9 +12,14 @@ internal sealed unsafe class TestWindow : IDisposable
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _created = new();
 
-    public TestWindow(string title, int width, int height)
+    public TestWindow(string title, int width, int height, nint dpiContext = 0)
     {
-        _thread = new Thread(() => Run(title, width, height)) { IsBackground = true, Name = "Harness window" };
+        _thread = new Thread(() =>
+        {
+            var previous = dpiContext == 0 ? 0 : Native.SetThreadDpiAwarenessContext(dpiContext);
+            try { Run(title, width, height); }
+            finally { if (previous != 0) Native.SetThreadDpiAwarenessContext(previous); }
+        }) { IsBackground = true, Name = "Harness window" };
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();
         if (!_created.Wait(TimeSpan.FromSeconds(5)) || Handle == 0)

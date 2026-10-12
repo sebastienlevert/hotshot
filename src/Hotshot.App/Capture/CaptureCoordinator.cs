@@ -3,6 +3,7 @@ using Hotshot.Capture;
 using Hotshot.Core;
 using Hotshot.Core.History;
 using Hotshot.Views;
+using Hotshot.Recording;
 
 namespace Hotshot.CaptureFlow;
 
@@ -22,7 +23,7 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
     public event Action<string>? Failed;
 
     public async Task<(HistoryItem Item, CapturedImage Image, string[] Warnings)> CaptureForAgentAsync(PixelRect bounds, CaptureKind kind, CaptureSource source,
-        Func<bool> accessAllowed, CancellationToken token)
+        Func<bool> accessAllowed, CancellationToken token, nint window = 0)
     {
         if (_busy) throw new InvalidOperationException("Another capture is in progress.");
         SetBusy(true);
@@ -36,8 +37,18 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
             token.ThrowIfCancellationRequested();
             if (!accessAllowed()) throw new InvalidOperationException("Agent access was disabled or the app became busy.");
             CapturedImage image;
-            using (var snapshot = ScreenSnapshot.Take(bounds, app.Settings.Capture.IncludeCursor))
+            if (window != 0 && app.Settings.Capture.UnobscuredWindows)
+            {
+                var result = await WindowScreenshot.CaptureAsync(window, token, app.Settings.Capture.IncludeCursor);
+                image = result.Image;
+                warnings.AddRange(result.Warnings);
+                if (!accessAllowed()) throw new InvalidOperationException("Target or agent access changed during window capture.");
+            }
+            else
+            {
+                using var snapshot = ScreenSnapshot.Take(bounds, app.Settings.Capture.IncludeCursor);
                 image = snapshot.ToImage();
+            }
             var item = await pipeline.SaveScreenshotAsync(image, kind, source)
                 ?? throw new IOException("Hotshot could not save the agent screenshot. See the diagnostic log.");
             Captured?.Invoke(item);
@@ -71,7 +82,14 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
             snapshot.DrawCursor();
         }
 
-        var image = snapshot.Crop(selection.Rect);
+        CapturedImage image;
+        if (selection is WindowSelection selected && capture.UnobscuredWindows)
+        {
+            var result = await WindowScreenshot.CaptureAsync(selected.Window.Handle, _shutdown.Token, capture.IncludeCursor);
+            image = result.Image;
+            foreach (var warning in result.Warnings) Log.Warn(warning);
+        }
+        else image = snapshot.Crop(selection.Rect);
         var (kind, source) = selection switch
         {
             WindowSelection w => (CaptureKind.Window,

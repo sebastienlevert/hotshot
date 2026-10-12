@@ -20,7 +20,7 @@ using VirtualKey = Windows.System.VirtualKey;
 
 namespace Hotshot.Views;
 
-internal sealed class SettingsWindow : Window
+internal sealed partial class SettingsWindow : Window
 {
     private readonly AppServices _app;
     private readonly HotkeyManager _hotkeys;
@@ -191,7 +191,7 @@ internal sealed class SettingsWindow : Window
             if (_app.AgentServer is { } agents) agents.StatusChanged -= RefreshAgentStatus;
             if (_app.Descriptions is { } descriptions) descriptions.Changed -= RefreshAiStatus;
         };
-        WindowTools.Configure(this, 1050, 790, excludeFromCapture: false);
+        WindowTools.Configure(this, 1050, 790, excludeFromCapture: false, app: _app, layoutKey: "settings");
     }
 
     public void SelectPage(SettingsPage page)
@@ -288,6 +288,9 @@ internal sealed class SettingsWindow : Window
         yield return new(SettingsPage.Agents, "Allowed agent applications", "privacy restrictions allowlist");
         yield return new(SettingsPage.Agents, "Allow agent monitor capture", "permissions privacy monitor");
         yield return new(SettingsPage.Agents, "Allow agent region capture", "permissions privacy region");
+        yield return new(SettingsPage.Agents, "Timed session access only", "approval permissions session expire");
+        yield return new(SettingsPage.Agents, "Approve each agent request", "consent permissions approval");
+        yield return new(SettingsPage.Capture, "Unobscured window screenshots", "wgc windows graphics hdr dpi");
     }
 
     private void NavigateSearch(SearchResult result)
@@ -359,6 +362,7 @@ internal sealed class SettingsWindow : Window
                 Number(panel, "Recent captures", "Saved files are never deleted when history is trimmed.", _draft.General.HistorySize, 5, 500, v => _draft.General.HistorySize = v);
                 Toggle(panel, "Keep saved captures searchable", "Keep saved files in the library indefinitely. The recent-capture limit then applies only to temporary captures.",
                     _draft.Library.KeepSavedCaptures, value => _draft.Library.KeepSavedCaptures = value);
+                Note(panel, "Library actions in the workspace provide reviewed storage cleanup, local backups, restore and relinking moved files. Originals are never automatically deleted.");
                 Note(panel, "Click the tray icon to open the editor and history. Nothing opens automatically after a screenshot.");
                 break;
             case SettingsPage.Capture:
@@ -381,11 +385,27 @@ internal sealed class SettingsWindow : Window
                 _aiStatus = UiStyles.Description(string.Empty);
                 RefreshAiStatus();
                 panel.Children.Add(_aiStatus);
+                var runtime = new Button { Content = "Choose optional Copilot runtime" };
+                runtime.Click += async (_, _) =>
+                {
+                    var picker = new FileOpenPicker(AppWindow.Id) { Title = "Choose SDK-compatible copilot-runtime.exe", FileTypeFilter = { ".exe" } };
+                    var selected = await picker.PickSingleFileAsync();
+                    if (selected is null) return;
+                    _draft.General.CopilotRuntimePath = selected.Path;
+                    Changed();
+                };
+                panel.Children.Add(runtime);
+                var bundled = new Button { Content = "Use bundled Copilot runtime" };
+                bundled.Click += (_, _) => { _draft.General.CopilotRuntimePath = null; Changed(); };
+                panel.Children.Add(bundled);
+                Note(panel, "Bundled runtime is the default. An external SDK-compatible runtime is optional for component-free builds; restart Hotshot after changing it. No runtime is downloaded automatically.");
                 Section(panel, "Selection");
                 Toggle(panel, "Snap to windows", "Click a window instead of dragging a region.", _draft.Capture.SnapToWindows, v => _draft.Capture.SnapToWindows = v);
                 Toggle(panel, "Show magnifier", "Inspect individual pixels while selecting a region.", _draft.Capture.ShowMagnifier, v => _draft.Capture.ShowMagnifier = v);
                 Toggle(panel, "Show crosshair", "Align the selection precisely.", _draft.Capture.ShowCrosshair, v => _draft.Capture.ShowCrosshair = v);
                 Toggle(panel, "Include cursor", "Include the mouse pointer in the saved screenshot.", _draft.Capture.IncludeCursor, v => _draft.Capture.IncludeCursor = v);
+                Toggle(panel, "Unobscured window screenshots", "Capture a selected window through Windows Graphics Capture, even when another window covers it. Unsupported/protected targets report an error; no silent desktop fallback. Uses the cursor setting and may show a Windows capture border.",
+                    _draft.Capture.UnobscuredWindows, value => _draft.Capture.UnobscuredWindows = value);
                 Note(panel, "Drag a region, click a window, or press Space for the monitor under the cursor. Escape cancels.");
                 break;
             case SettingsPage.Hotkeys:
@@ -453,6 +473,23 @@ internal sealed class SettingsWindow : Window
                 Toggle(panel, "Allow history access",
                     "Separately allow agents to search previous captures, OCR and AI descriptions, and read capture images by ID.",
                     _draft.Agents.AllowHistoryAccess, value => _draft.Agents.AllowHistoryAccess = value);
+                Toggle(panel, "Timed session access only", "Require a grant for this Hotshot run. No grant survives restart; existing app restrictions still apply.",
+                    _draft.Agents.SessionAccessOnly, value => _draft.Agents.SessionAccessOnly = value);
+                Number(panel, "Agent session duration", "Minutes for a native access grant.", _draft.Agents.SessionMinutes, 5, 240,
+                    value => _draft.Agents.SessionMinutes = value);
+                Toggle(panel, "Approve each agent request", "Ask before capture or historical-content requests. Status, activity and generated connection tests do not need approval.",
+                    _draft.Agents.ApproveRequests, value => _draft.Agents.ApproveRequests = value);
+                var grant = new Button { Content = "Grant timed agent session" };
+                grant.Click += async (_, _) =>
+                {
+                    await PersistAsync();
+                    try { _app.AgentServer?.GrantSession(); }
+                    catch (InvalidOperationException ex) { _error.Title = "Agent access"; _error.Message = ex.Message; _error.IsOpen = true; }
+                };
+                panel.Children.Add(grant);
+                var revoke = new Button { Content = "Revoke timed session" };
+                revoke.Click += (_, _) => _app.AgentServer?.RevokeSession();
+                panel.Children.Add(revoke);
                 Toggle(panel, "Allow agent monitor capture", "Permit whole-monitor requests. An allowed-app list disables this automatically.",
                     _draft.Agents.AllowMonitorCapture, value => _draft.Agents.AllowMonitorCapture = value);
                 Toggle(panel, "Allow agent region capture", "Permit arbitrary screen regions. An allowed-app list disables this automatically.",
@@ -464,6 +501,9 @@ internal sealed class SettingsWindow : Window
                 _agentStatus = UiStyles.Description(string.Empty);
                 RefreshAgentStatus();
                 panel.Children.Add(_agentStatus);
+                var test = new Button { Content = "Test connection with generated image" };
+                test.Click += async (_, _) => await TestAgentConnectionAsync(test);
+                panel.Children.Add(test);
                 var activity = new Button { Content = "View agent activity" };
                 activity.Click += async (_, _) =>
                 {
@@ -491,6 +531,9 @@ internal sealed class SettingsWindow : Window
                 var releases = new Button { Content = "Open GitHub Releases" };
                 releases.Click += (_, _) => CaptureActions.OpenPath(Hotshot.Updates.AutomaticUpdates.RepositoryUrl + "/releases/latest");
                 panel.Children.Add(releases);
+                var guide = new Button { Content = "Quick start guide" };
+                guide.Click += async (_, _) => await ShowQuickStartAsync();
+                panel.Children.Add(guide);
                 var logs = new Button { Content = "Open diagnostic log" };
                 logs.Click += (_, _) => CaptureActions.OpenPath(Log.FilePath);
                 Card(panel, "Diagnostics", UiStyles.Description("Local logs help diagnose capture and shortcut issues."), logs);
@@ -612,7 +655,12 @@ internal sealed class SettingsWindow : Window
 
     private void RefreshAgentStatus()
     {
-        if (!_closed) _agentStatus.Text = _app.AgentServer?.Status ?? "Agent service is starting.";
+        if (!_closed)
+        {
+            var clients = _app.AgentServer?.Clients ?? [];
+            _agentStatus.Text = (_app.AgentServer?.Status ?? "Agent service is starting.") + "\n" +
+                string.Join("\n", clients.Select(client => $"{client.ProcessName} PID {client.ProcessId}: {(client.Connected ? "connected" : "last seen")} {client.LastSeen:t}"));
+        }
     }
 
     private void RefreshAiStatus() => _app.Post(() =>

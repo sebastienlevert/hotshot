@@ -117,6 +117,8 @@ $backupSettings = if (Test-Path $settingsFile) { [IO.File]::ReadAllBytes($settin
 $backupHistory = if (Test-Path $historyFile) { [IO.File]::ReadAllBytes($historyFile) } else { $null }
 $historyBackupFile = $historyFile + '.backup'
 $backupHistoryRecovery = if (Test-Path -LiteralPath $historyBackupFile) { [IO.File]::ReadAllBytes($historyBackupFile) } else { $null }
+$historyJournalFile = $historyFile + '.journal'
+$backupHistoryJournal = if (Test-Path -LiteralPath $historyJournalFile) { [IO.File]::ReadAllBytes($historyJournalFile) } else { $null }
 $recordingJournal = Join-Path $data 'pending-recording.json'
 $backupRecordingJournal = if (Test-Path -LiteralPath $recordingJournal) { [IO.File]::ReadAllBytes($recordingJournal) } else { $null }
 $output = Join-Path ([IO.Path]::GetTempPath()) ("hotshot-app-smoke-" + [Guid]::NewGuid().ToString('N'))
@@ -160,7 +162,22 @@ function Read-AppJson([string]$Path) {
 }
 
 function Read-CaptureHistory {
-    if (Test-Path $historyFile) { @(Read-AppJson $historyFile) }
+    $items = @{}
+    if (Test-Path $historyFile) { foreach ($item in @(Read-AppJson $historyFile)) { $items[$item.id] = $item } }
+    if (Test-Path -LiteralPath $historyJournalFile) {
+        $stream = [IO.File]::Open($historyJournalFile, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+        $reader = [IO.StreamReader]::new($stream)
+        try { $journal = $reader.ReadToEnd() }
+        finally { $reader.Dispose() }
+        $lines = $journal.Split("`n")
+        for ($i = 0; $i -lt $lines.Length - 1; $i++) {
+            if (-not $lines[$i]) { continue }
+            $transaction = $lines[$i] | ConvertFrom-Json
+            foreach ($id in $transaction.Removed) { $items.Remove($id) }
+            foreach ($item in $transaction.Upserts) { $items[$item.id] = $item }
+        }
+    }
+    @($items.Values | Sort-Object createdAt -Descending)
 }
 
 function Element([IntPtr]$Hwnd, [string]$Name, $ControlType = $null) {
@@ -196,7 +213,9 @@ function Workspace-Control([IntPtr]$Hwnd, [string]$Name) {
             { $_ -in 'Pin image', 'Compare selected screenshots' } { 'Image tools'; break }
             { $_ -in 'Analyze selected screenshot', 'Cancel AI analysis', 'View AI processing' } { 'AI processing'; break }
             { $_ -in 'Extract video frame', 'Trim recording', 'Recover interrupted recording', 'Dismiss recording recovery notice' } { 'Recording tools'; break }
-            { $_ -in 'Rename capture', 'Organize selected', 'Delete selected', 'Export selected files', 'Save this search', 'Delete saved search' } { 'Library actions'; break }
+            { $_ -in 'Rename capture', 'Organize selected', 'Delete selected', 'Export selected files', 'Save this search', 'Delete saved search',
+                'Storage and privacy', 'Back up library locally', 'Restore library backup', 'Relink missing capture',
+                'Set project baseline', 'Compare with project baseline', 'Create local evidence bundle' } { 'Library actions'; break }
         }
         if ($group) { Click (Wait-For { App-Control $group } "workspace group $group") }
         $control = Wait-For { App-Control $Name } "workspace command $Name"
@@ -337,9 +356,11 @@ try {
         recording = @{ countdownSeconds = 0; captureSystemAudio = $false; captureMicrophone = $false }
         gif = @{ maxWidth = 320; framesPerSecond = 10 }
         agents = @{ allowedApps = @('Hotshot'); enabled = $false; allowHistoryAccess = $false }
+        capture = @{ unobscuredWindows = -not $SettingsCaptureOnly }
     }
     [IO.File]::WriteAllText($settingsFile, ($fixture | ConvertTo-Json -Depth 5))
     [IO.File]::WriteAllText($historyFile, '[]')
+    if (Test-Path -LiteralPath $historyJournalFile) { Remove-Item -LiteralPath $historyJournalFile }
     if (Test-Path -LiteralPath $recordingJournal) { Remove-Item -LiteralPath $recordingJournal }
     if ($HistoryNavigationOnly -or $WorkbenchOnly) {
         Add-Type -AssemblyName System.Drawing
@@ -422,6 +443,11 @@ try {
             } 'actual physical-pixel zoom' | Out-Null
             Workspace-Action $workspace 'Pin image'
             $pin = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot pinned image') } 'pinned image window'
+            (Element-ById $pin 'PinnedOpacity').GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern).SetValue(70)
+            (Element-ById $pin 'PinnedClickThrough').GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Toggle()
+            $recovery = Wait-For { [HotshotSmokeNative]::FindWindow('Hotshot.PinnedRecovery', [NullString]::Value) } 'click-through pin recovery window'
+            [HotshotSmokeNative]::PostMessage($recovery, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot pinned image') } 'pinned mouse input resumed' | Out-Null
             [HotshotSmokeNative]::PostMessage($pin, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
             $rows[96].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
             $after = Wait-For { Element $workspace 'Capture capture-96-after.png' ([System.Windows.Automation.ControlType]::ListItem) } 'after capture row'
@@ -429,13 +455,28 @@ try {
             Workspace-Action $workspace 'Compare selected screenshots'
             $comparison = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot visual comparison') } 'native visual comparison'
             Wait-For {
-                [System.Windows.Automation.AutomationElement]::FromHandle($comparison).FindFirst([System.Windows.Automation.TreeScope]::Descendants,
-                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty,
-                        '1 changed pixels (0.01%). Red highlights changes; tolerance is 8/255 per channel.'))
+                $summary = Element-ById $comparison 'ComparisonSummary'
+                $summary -and $summary.Current.Name.Contains('1 changed / 6,912 compared pixels (0.01%)')
             } 'native measured visual diff' | Out-Null
+            Click (Element-ById $comparison 'ComparisonActualPixels')
+            Wait-For { (Element-ById $comparison 'ComparisonZoomStatus').Current.Name -eq '100%' } 'comparison physical-pixel zoom' | Out-Null
+            $mode = Element-ById $comparison 'ComparisonMode'
+            $mode.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+            (Wait-For { App-Control 'Swipe' } 'comparison swipe mode').GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            (Wait-For { Element-ById $comparison 'ComparisonSwipe' } 'comparison swipe slider after mode selection').GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern).SetValue(25)
+            $ignored = Element-ById $comparison 'ComparisonIgnoredRegions'
+            if (-not $ignored) {
+                $expander = Element $comparison 'Tolerance, alignment and ignored regions'
+                $expander.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+                $ignored = Wait-For { Element-ById $comparison 'ComparisonIgnoredRegions' } 'ignored comparison regions'
+            }
+            $ignored.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('10,10,1,1')
+            Wait-For { (Element-ById $comparison 'ComparisonSummary').Current.Name.Contains('0 changed / 6,911 compared pixels') } 'ignored pixel excluded from comparison denominator' | Out-Null
             [HotshotSmokeNative]::PostMessage($comparison, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
             foreach ($label in 'Rename capture', 'Organize selected', 'Delete selected', 'Export selected files', 'Save this search',
-                'View AI processing', 'Extract video frame', 'Trim recording', 'Recover interrupted recording') {
+                'View AI processing', 'Extract video frame', 'Trim recording', 'Recover interrupted recording',
+                'Storage and privacy', 'Back up library locally', 'Restore library backup', 'Relink missing capture',
+                'Set project baseline', 'Compare with project baseline', 'Create local evidence bundle') {
                 Workspace-Control $workspace $label | Out-Null
                 [HotshotSmokeNative]::SetForegroundWindow($workspace) | Out-Null
                 [HotshotSmokeNative]::keybd_event(0x1b, 0, 0, [UIntPtr]::Zero)
@@ -445,6 +486,61 @@ try {
                 [HotshotSmokeNative]::keybd_event(0x1b, 0, 2, [UIntPtr]::Zero)
                 Start-Sleep -Milliseconds 100
             }
+            $rows[96].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            Workspace-Action $workspace 'Export...'
+            $name = Wait-For { Element-ById $workspace 'ExportPresetName' } 'named export preset field'
+            $name.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('Synthetic native export')
+            foreach ($entry in @{ ExportWidth = '80'; ExportPadding = '8' }.GetEnumerator()) {
+                $number = Element-ById $workspace $entry.Key
+                $edit = $number.FindFirst([System.Windows.Automation.TreeScope]::Descendants,
+                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::IsValuePatternAvailableProperty, $true))
+                $edit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($entry.Value)
+                $edit.SetFocus()
+                [HotshotSmokeNative]::keybd_event(0x0d, 0, 0, [UIntPtr]::Zero)
+                [HotshotSmokeNative]::keybd_event(0x0d, 0, 2, [UIntPtr]::Zero)
+            }
+            Click (Wait-For { App-Control 'Choose destination' } 'export preference confirmation')
+            $savePicker = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Export screenshot') } 'native export file picker'
+            $cancelPicker = Wait-For { [HotshotSmokeNative]::GetDlgItem($savePicker, 2) } 'native export cancel'
+            [HotshotSmokeNative]::PostMessage($savePicker, 0x111, [IntPtr]2, $cancelPicker) | Out-Null
+            Wait-For {
+                $saved = Read-AppJson $settingsFile
+                $saved.export.last.width -eq 80 -and $saved.export.last.padding -eq 8 -and @($saved.export.presets).Count -eq 1
+            } 'export last-style and named preset persistence' | Out-Null
+            Wait-For { $control = Element $workspace 'Save'; $control -and $control.Current.IsEnabled } 'export operation idle' | Out-Null
+            Workspace-Action $workspace 'Export...'
+            Wait-For { Element-ById $workspace 'ExportPresetName' } 'reopened export preset dialog' | Out-Null
+            $preset = Element-ById $workspace 'ExportPresets'
+            $preset.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+            (Wait-For { App-Control 'Synthetic native export' } 'saved export preset option').GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            [HotshotSmokeNative]::SetForegroundWindow($workspace) | Out-Null
+            [HotshotSmokeNative]::keybd_event(0x1b, 0, 0, [UIntPtr]::Zero)
+            [HotshotSmokeNative]::keybd_event(0x1b, 0, 2, [UIntPtr]::Zero)
+            Write-Host 'PASS native named export presets and remembered last style without sharing or writing an export.'
+            $rows[96] = Element $workspace 'Capture capture-96.png' ([System.Windows.Automation.ControlType]::ListItem)
+            $rows[96].GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            Workspace-Action $workspace 'Details and tags'
+            (Wait-For { Element-ById $workspace 'CaptureProjectName' } 'native project collection field').GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('Synthetic project')
+            $saveDialog = Wait-For {
+                $root = [System.Windows.Automation.AutomationElement]::FromHandle($workspace)
+                $condition = [System.Windows.Automation.AndCondition]::new(
+                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, 'Save'),
+                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::IsEnabledProperty, $true),
+                    [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::IsInvokePatternAvailableProperty, $true))
+                $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+            } 'project details confirmation'
+            Click $saveDialog
+            Wait-For { @(Read-CaptureHistory) | Where-Object { $_.path -eq (Join-Path $output 'capture-96.png') -and $_.project -eq 'Synthetic project' } } 'project assignment persisted' | Out-Null
+            Wait-For { $control = Element $workspace 'Save'; $control -and $control.Current.IsEnabled } 'project tools idle' | Out-Null
+            Workspace-Action $workspace 'Set project baseline'
+            Click (Wait-For { App-Control 'Set baseline' } 'project baseline confirmation')
+            Wait-For { @((Read-AppJson $settingsFile).library.baselines).Count -eq 1 } 'project baseline stored in settings' | Out-Null
+            Wait-For { $control = Element $workspace 'Save'; $control -and $control.Current.IsEnabled } 'baseline tools idle' | Out-Null
+            Workspace-Action $workspace 'Compare with project baseline'
+            $baselineWindow = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot visual comparison') } 'project baseline comparison'
+            Wait-For { $summary = Element-ById $baselineWindow 'ComparisonSummary'; $summary -and $summary.Current.Name.Contains('0 changed / 6,912 compared pixels') } 'baseline compares saved evidence' | Out-Null
+            [HotshotSmokeNative]::PostMessage($baselineWindow, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+            Write-Host 'PASS native project assignment, favorite baseline persistence and baseline comparison.'
             Write-Host 'PASS native physical-pixel zoom, pin window, multi-selection, exact visual diff and workbench command accessibility.'
             if ($VideoFixture) {
                 $video = Element $workspace 'Capture generated-recording.mp4' ([System.Windows.Automation.ControlType]::ListItem)
@@ -453,6 +549,17 @@ try {
                     $preview = Element-ById $workspace 'WorkspaceVideoPreview'
                     $preview -and -not $preview.Current.IsOffscreen
                 } 'in-app recording preview' | Out-Null
+                Workspace-Action $workspace 'Trim recording'
+                $start = Wait-For { Element-ById $workspace 'VideoTrimStart' } 'visual trim start handle'
+                $end = Element-ById $workspace 'VideoTrimEnd'
+                $start.GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern).SetValue(0.5)
+                $end.GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern).SetValue(1.5)
+                Wait-For { (Element-ById $workspace 'VideoTrimSummary').Current.Name.Contains('Kept 1.0s') } 'visual trim kept duration' | Out-Null
+                [HotshotSmokeNative]::SetForegroundWindow($workspace) | Out-Null
+                [HotshotSmokeNative]::keybd_event(0x1b, 0, 0, [UIntPtr]::Zero)
+                [HotshotSmokeNative]::keybd_event(0x1b, 0, 2, [UIntPtr]::Zero)
+                Wait-For { -not (Element-ById $workspace 'VideoTrimStart') } 'visual trim canceled' | Out-Null
+                Wait-For { $control = Element $workspace 'Copy'; $control -and $control.Current.IsEnabled } 'recording tools idle after trim preview' | Out-Null
                 $count = (Read-CaptureHistory).Count
                 Workspace-Action $workspace 'Extract video frame'
                 Wait-For { (Read-CaptureHistory).Count -eq $count + 1 } 'native video frame saved' 30 | Out-Null
@@ -556,6 +663,48 @@ try {
         $review.Toggle()
         Wait-For { -not (Read-AppJson $settingsFile).general.reviewBeforeAiUpload } 'review policy restoration' | Out-Null
         foreach ($page in 'Agents', 'Capture', 'About', 'General', 'Agents') { Select-SettingsPage $settings $page; Start-Sleep -Milliseconds 150 }
+        if (Test-Path -LiteralPath (Join-Path (Split-Path $Exe -Parent) 'Mcp\Hotshot.Mcp.exe')) {
+            $scroll = Element-ById $settings 'SettingsContentScroll'
+            $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 55)
+            Click (Wait-For { Element $settings 'Test connection with generated image' ([System.Windows.Automation.ControlType]::Button) } 'synthetic native connection test')
+            Wait-For { Element-ById $settings 'AgentSyntheticConnectionImage' } 'generated connection image without capture/model request' 30 | Out-Null
+            [HotshotSmokeNative]::SetForegroundWindow($settings) | Out-Null
+            [HotshotSmokeNative]::keybd_event(0x1b, 0, 0, [UIntPtr]::Zero)
+            [HotshotSmokeNative]::keybd_event(0x1b, 0, 2, [UIntPtr]::Zero)
+            Wait-For { -not (Element-ById $settings 'AgentSyntheticConnectionImage') } 'connection result closed' | Out-Null
+            Write-Host 'PASS stdio companion/native generated-image connection test with access disabled.'
+        }
+        $scroll = Element-ById $settings 'SettingsContentScroll'
+        $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 0)
+        $access = Toggle-Control $settings 'Agent access'
+        $access.Toggle()
+        Wait-For { (Read-AppJson $settingsFile).agents.enabled } 'test agent access' | Out-Null
+        $timed = Toggle-Control $settings 'Timed session access only'
+        $timed.Toggle()
+        Wait-For { (Read-AppJson $settingsFile).agents.sessionAccessOnly } 'session policy persistence' | Out-Null
+        Click (Element $settings 'Grant timed agent session' ([System.Windows.Automation.ControlType]::Button))
+        $approval = Toggle-Control $settings 'Approve each agent request'
+        $approval.Toggle()
+        Wait-For { (Read-AppJson $settingsFile).agents.approveRequests } 'request approval policy persistence' | Out-Null
+        foreach ($decision in 'AgentDeny', 'AgentAllowOnce') {
+            $probeInfo = [Diagnostics.ProcessStartInfo]::new('pwsh')
+            $probeInfo.UseShellExecute = $false; $probeInfo.RedirectStandardOutput = $true; $probeInfo.RedirectStandardError = $true
+            foreach ($argument in '-NoProfile', '-File', (Join-Path $PSScriptRoot 'Hotshot.Agent.Probe.ps1')) { $probeInfo.ArgumentList.Add($argument) }
+            $probe = [Diagnostics.Process]::Start($probeInfo)
+            $approvalWindow = Wait-For {
+                if ($probe.HasExited) { throw "Agent probe exited before consent. $($probe.StandardError.ReadToEnd()) $($probe.StandardOutput.ReadToEnd())" }
+                [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot agent approval')
+            } 'native per-request consent'
+            Click (Element-ById $approvalWindow $decision)
+            if (-not $probe.WaitForExit(10000)) { throw 'Read-only agent probe did not finish after native consent.' }
+            $reply = $probe.StandardOutput.ReadToEnd() | ConvertFrom-Json
+            if ($decision -eq 'AgentDeny' -and $reply.errorCode -ne 'approval_denied') { throw 'Native denial was bypassed.' }
+            if ($decision -eq 'AgentAllowOnce' -and -not $reply.success) { throw 'Native one-time approval did not allow the read-only request.' }
+        }
+        Click (Element $settings 'Revoke timed session' ([System.Windows.Automation.ControlType]::Button))
+        $approval.Toggle(); $timed.Toggle(); $access.Toggle()
+        Wait-For { $saved = Read-AppJson $settingsFile; -not $saved.agents.enabled -and -not $saved.agents.sessionAccessOnly -and -not $saved.agents.approveRequests } 'agent test permissions disabled again' | Out-Null
+        Write-Host 'PASS native timed-session grant/revoke and deny/allow-once consent for a read-only local client.'
         Select-SettingsPage $settings 'About'
         $scroll = Element-ById $settings 'SettingsContentScroll'
         $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 100)
@@ -630,7 +779,7 @@ try {
         $capture = @(Read-CaptureHistory)[0]
         if ($capture.kind -ne 'window' -or $capture.width -ne ($frame.Right - $frame.Left) -or
             $capture.height -ne ($frame.Bottom - $frame.Top)) {
-            throw "Click-to-select did not capture the Settings window. Actual: $($capture.kind) $($capture.width)x$($capture.height); expected Window $(($frame.Right - $frame.Left))x$(($frame.Bottom - $frame.Top))."
+            throw "Click-to-select did not capture the Settings window. Actual: $($capture.kind) $($capture.width)x$($capture.height), process $($capture.appName); expected Window $(($frame.Right - $frame.Left))x$(($frame.Bottom - $frame.Top))."
         }
         if (-not [HotshotSmokeNative]::IsClipboardFormatAvailable(8)) { throw 'Settings screenshot was not copied to the clipboard.' }
         Add-Type -AssemblyName System.Drawing
@@ -963,6 +1112,8 @@ try {
     else { Remove-Item -LiteralPath $historyFile -ErrorAction SilentlyContinue }
     if ($null -ne $backupHistoryRecovery) { [IO.File]::WriteAllBytes($historyBackupFile, $backupHistoryRecovery) }
     else { Remove-Item -LiteralPath $historyBackupFile -ErrorAction SilentlyContinue }
+    if ($null -ne $backupHistoryJournal) { [IO.File]::WriteAllBytes($historyJournalFile, $backupHistoryJournal) }
+    else { Remove-Item -LiteralPath $historyJournalFile -ErrorAction SilentlyContinue }
     if ($null -ne $backupRecordingJournal) { [IO.File]::WriteAllBytes($recordingJournal, $backupRecordingJournal) }
     else { Remove-Item -LiteralPath $recordingJournal -ErrorAction SilentlyContinue }
     if ($VerifyStartup) {
