@@ -41,7 +41,7 @@ internal sealed partial class AppController : IDisposable
         _hotkeys = new HotkeyManager(_window);
         _copilotRuntime = new CopilotRuntimeManager(_app.Paths.DataDirectory,
             () => _app.Settings.General.CopilotRuntimePath,
-            () => !_exiting && _app.Descriptions?.IsBusy != true);
+            () => !_exiting && _app.Descriptions?.IsBusy != true && _settingsWindow?.IsCopilotAccountBusy != true);
         _app.CopilotRuntime = _copilotRuntime;
         _descriptions = new ScreenshotDescriptions(_app.History,
             () => new CopilotDescriptionProvider(Path.Combine(_app.Paths.DataDirectory, "copilot-work"), _copilotRuntime.ResolveRuntime),
@@ -181,6 +181,7 @@ internal sealed partial class AppController : IDisposable
         if (_historyWindow is not null && !await _historyWindow.PrepareToCloseAsync()) return;
         if (_settingsWindow is not null) await _settingsWindow.SavePendingAsync();
         _exiting = true;
+        if (_settingsWindow is not null) await _settingsWindow.CancelCopilotSignInAsync();
         _settingsWindow?.CloseAiComponent();
         _app.StopSettingsSync();
         Log.Info("Exiting");

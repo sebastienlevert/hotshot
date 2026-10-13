@@ -7,11 +7,14 @@ using Hotshot.Core.Descriptions;
 
 namespace Hotshot.CaptureFlow;
 
-/// <summary>Context captured at hotkey time and used for naming tokens.</summary>
+/// <summary>Original source-app context used for naming and cloud-analysis authorization.</summary>
 internal sealed record CaptureSource(DateTime Timestamp, string? AppName, string? WindowTitle, int? MonitorIndex)
 {
     public static CaptureSource Now(string? app = null, string? title = null, int? monitor = null) =>
         new(DateTime.Now, app, title, monitor);
+
+    public static CaptureSource FromHistory(HistoryItem item) =>
+        Now(item.AppName, item.WindowTitle, item.MonitorIndex);
 }
 
 /// <summary>Turns a capture into clipboard data, a named file, a thumbnail and a history entry.</summary>
@@ -50,7 +53,7 @@ internal sealed class OutputPipeline(AppServices app)
                 MonitorIndex = source.MonitorIndex,
                 IsTemporary = isTemporary,
                 DescriptionPending = CaptureAnalysisPolicy.CanAnalyzeAutomatically(general, source.AppName),
-                DescriptionNeedsReview = general.DescribeScreenshots && general.ReviewBeforeAiUpload && !CaptureAnalysisPolicy.IsExcluded(general, source.AppName),
+                DescriptionNeedsReview = CaptureAnalysisPolicy.RequiresReview(general, source.AppName),
             };
             var thumbnailPath = Path.Combine(app.Paths.ThumbnailsDirectory, item.Id + ".png");
 

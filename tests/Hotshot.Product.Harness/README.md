@@ -6,6 +6,13 @@ native control/automation checks, keyboard-focus traversal, XAML rendering and
 Win2D draw/export checks. It never invokes capture, WGC, recording, audio,
 clipboard, global input injection, user-library or signed-in provider flows.
 The accessibility fixture also hosts real native controls.
+Generated-image policy checks exercise the production derivative-source helper,
+screenshot output/history persistence, app exclusions and unknown-source review
+without allowing a description provider to start.
+The real Settings sign-in controls also run against generated auth clients:
+signed-out checks, browser handoff, verified success, cancellation, redacted
+errors and unchanged upload/agent permissions. The fixture never performs
+GitHub authorization or writes real credentials.
 The self-contained harness includes Microsoft's Windows Desktop UI Automation
 client for native-only TextBox patterns; it does not host WPF UI or enable WPF
 XAML compilation. UIA queries stay scoped to this harness's own HWND/process.

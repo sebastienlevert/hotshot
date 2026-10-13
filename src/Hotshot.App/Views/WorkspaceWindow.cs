@@ -495,8 +495,7 @@ internal sealed partial class WorkspaceWindow : Window
         var thumbnail = Path.Combine(_app.Paths.ThumbnailsDirectory, item.Id + ".png");
         if (await Task.Run(() => ImageCodec.CreateThumbnailAsync(item.Path, thumbnail))) item.ThumbnailPath = thumbnail;
         item.DescriptionPending = CaptureAnalysisPolicy.CanAnalyzeAutomatically(_app.Settings.General, item.AppName);
-        item.DescriptionNeedsReview = _app.Settings.General.DescribeScreenshots && _app.Settings.General.ReviewBeforeAiUpload &&
-            !CaptureAnalysisPolicy.IsExcluded(_app.Settings.General, item.AppName);
+        item.DescriptionNeedsReview = CaptureAnalysisPolicy.RequiresReview(_app.Settings.General, item.AppName);
         await Task.Run(() => _app.History.Update(item));
         if (item.DescriptionPending && _app.Descriptions is { } descriptions)
             _ = descriptions.EnqueueAsync(item);
@@ -518,7 +517,7 @@ internal sealed partial class WorkspaceWindow : Window
         var image = await Task.Run(() => ImageCodec.LoadAsync(selected.Path));
         var output = _app.Output ?? throw new InvalidOperationException("Capture output is not initialized.");
         var item = await output.SaveScreenshotAsync(image, CaptureKind.Region,
-            CaptureSource.Now("Imported image", Path.GetFileName(selected.Path)), copyToClipboard: false);
+            CaptureSource.Now(title: Path.GetFileName(selected.Path)), copyToClipboard: false);
         if (item is not null) { await LoadAsync(item); RenderHistory(restoreCurrent: true); }
     }
 
@@ -935,8 +934,10 @@ internal sealed partial class WorkspaceWindow : Window
         if (!_app.Settings.General.DescribeScreenshots) throw new InvalidOperationException("Enable Copilot descriptions in Settings first.");
         if (CaptureAnalysisPolicy.IsExcluded(_app.Settings.General, item.AppName)) throw new InvalidOperationException("This application is excluded from cloud analysis.");
         if (_editor.IsDirty) throw new InvalidOperationException("Save your edits and redactions before approving cloud analysis.");
+        var sourceWarning = CaptureAnalysisPolicy.HasKnownSource(item.AppName) ? "" :
+            "The original source application is unknown, so its app exclusion cannot be verified. ";
         if (await DialogAsync("Send this screenshot to Copilot?", UiStyles.Description(
-            "The current saved pixels will be sent to your signed-in Copilot account. Review and save redactions first. This consumes model quota."), "Analyze") != ContentDialogResult.Primary) return;
+            sourceWarning + "The current saved pixels will be sent to your signed-in Copilot account. Review and save redactions first. This consumes model quota."), "Analyze") != ContentDialogResult.Primary) return;
         item.DescriptionNeedsReview = false;
         await Task.Run(() => _app.History.Update(item));
         if (_app.Descriptions is { } descriptions) _ = descriptions.EnqueueAsync(item, approved: true);
@@ -1008,7 +1009,7 @@ internal sealed partial class WorkspaceWindow : Window
         var image = await Hotshot.Recording.VideoEditing.FrameAsync(item.Path, position);
         var output = _app.Output ?? throw new InvalidOperationException("Capture output is not ready.");
         var saved = await output.SaveScreenshotAsync(image, CaptureKind.Region,
-            CaptureSource.Now("Video frame", item.FileName), copyToClipboard: false);
+            CaptureSource.FromHistory(item), copyToClipboard: false);
         if (saved is not null) await LoadAsync(saved);
     }
 
@@ -1023,6 +1024,7 @@ internal sealed partial class WorkspaceWindow : Window
         if (file is null) return;
         await Hotshot.Recording.VideoEditing.TrimAsync(item.Path, file.Path, range.Value.Start, range.Value.End, OperationToken);
         await (_app.Output ?? throw new InvalidOperationException("Output is unavailable.")).AddVideoAsync(
-            file.Path, CaptureKind.Recording, item.Width, item.Height, range.Value.End - range.Value.Start, false, copyToClipboard: false);
+            file.Path, CaptureKind.Recording, item.Width, item.Height, range.Value.End - range.Value.Start, false,
+            copyToClipboard: false, source: CaptureSource.FromHistory(item));
     }
 }

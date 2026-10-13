@@ -75,9 +75,32 @@ public sealed class ReliabilityTests : IDisposable
     {
         var settings = new GeneralSettings { DescribeScreenshots = true, AiExcludedApps = ["private.exe"] };
         Assert.False(CaptureAnalysisPolicy.CanAnalyzeAutomatically(settings, "private"));
+        Assert.False(CaptureAnalysisPolicy.RequiresReview(settings, "private"));
         Assert.True(CaptureAnalysisPolicy.CanAnalyzeAutomatically(settings, "editor"));
+        Assert.False(CaptureAnalysisPolicy.RequiresReview(settings, "editor"));
         settings.ReviewBeforeAiUpload = true;
         Assert.False(CaptureAnalysisPolicy.CanAnalyzeAutomatically(settings, "editor"));
+        Assert.True(CaptureAnalysisPolicy.RequiresReview(settings, "editor"));
+        Assert.False(CaptureAnalysisPolicy.RequiresReview(settings, "private"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("Video frame")]
+    [InlineData("Imported image")]
+    [InlineData("Scrolling capture")]
+    [InlineData(" VIDEO FRAME ")]
+    public void UnknownSourceAlwaysRequiresReviewWhenDescriptionsAreEnabled(string? app)
+    {
+        var settings = new GeneralSettings { DescribeScreenshots = true, ReviewBeforeAiUpload = false };
+        Assert.False(CaptureAnalysisPolicy.HasKnownSource(app));
+        Assert.False(CaptureAnalysisPolicy.CanAnalyzeAutomatically(settings, app));
+        Assert.True(CaptureAnalysisPolicy.RequiresReview(settings, app));
+        settings.DescribeScreenshots = false;
+        Assert.False(CaptureAnalysisPolicy.CanAnalyzeAutomatically(settings, app));
+        Assert.False(CaptureAnalysisPolicy.RequiresReview(settings, app));
     }
 
     [Fact]
@@ -108,17 +131,17 @@ public sealed class ReliabilityTests : IDisposable
         var history = new HistoryStore(Path.Combine(_dir, "history.json"), 100, true);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var descriptions = new ScreenshotDescriptions(history, () => new WaitingProvider(entered), true);
-        var first = new HistoryItem { Id = "first", Path = Path.Combine(_dir, "first.png") };
+        var first = new HistoryItem { Id = "first", Path = Path.Combine(_dir, "first.png"), AppName = "Synthetic" };
         File.WriteAllBytes(first.Path, [1]);
         history.Add(first);
         var task = descriptions.EnqueueAsync(first);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.Same(task, descriptions.EnqueueAsync(first));
         for (var i = 0; i < ScreenshotDescriptions.QueueCapacity; i++)
-            _ = descriptions.EnqueueAsync(new HistoryItem { Id = "queued" + i, Path = first.Path });
+            _ = descriptions.EnqueueAsync(new HistoryItem { Id = "queued" + i, Path = first.Path, AppName = first.AppName });
         string? error = null;
         descriptions.Failed += message => error = message;
-        Assert.False(await descriptions.EnqueueAsync(new HistoryItem { Id = "overflow", Path = first.Path }));
+        Assert.False(await descriptions.EnqueueAsync(new HistoryItem { Id = "overflow", Path = first.Path, AppName = first.AppName }));
         Assert.Contains("queue is full", error!);
         Assert.Equal(ScreenshotDescriptions.QueueCapacity + 1, descriptions.PendingCount);
         descriptions.SetEnabled(false);

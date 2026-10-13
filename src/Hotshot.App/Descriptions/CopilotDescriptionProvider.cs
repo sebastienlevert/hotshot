@@ -19,25 +19,17 @@ internal sealed class CopilotDescriptionProvider(string directory, Func<string?>
         cancellationToken.ThrowIfCancellationRequested();
         if (_client is null)
         {
-            Directory.CreateDirectory(directory);
             var bundled = Path.Combine(AppContext.BaseDirectory, "runtimes",
                 UpdateChannel.ForArchitecture(RuntimeInformation.ProcessArchitecture), "native", "copilot-runtime.exe");
             var runtime = CopilotRuntimeResolver.Resolve(externalRuntime?.Invoke(), bundled, () => null);
-            _client = new CopilotClient(new CopilotClientOptions
-            {
-                Mode = CopilotClientMode.Empty,
-                Connection = RuntimeConnection.ForStdio(runtime),
-                WorkingDirectory = directory,
-                BaseDirectory = Path.Combine(directory, "copilot"),
-                UseLoggedInUser = true,
-            });
+            _client = CopilotConnection.Create(directory, runtime);
         }
         if (!_started) { await _client.StartAsync(cancellationToken); _started = true; }
         var auth = await _client.GetAuthStatusAsync(cancellationToken);
         if (!auth.IsAuthenticated)
         {
             Status = "Not signed in";
-            throw new InvalidOperationException("Sign in to GitHub Copilot before enabling screenshot descriptions.");
+            throw new InvalidOperationException("Open Settings > Screenshots > Copilot account and choose Sign in with GitHub.");
         }
         if (_model is null)
         {

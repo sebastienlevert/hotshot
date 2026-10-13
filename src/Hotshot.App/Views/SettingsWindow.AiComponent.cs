@@ -25,7 +25,7 @@ internal sealed partial class SettingsWindow
         {
             _ownsAiComponent = manager is null;
             _aiComponent = manager ?? new CopilotRuntimeManager(_app.Paths.DataDirectory,
-                () => _app.Settings.General.CopilotRuntimePath, () => _app.Descriptions?.IsBusy != true);
+                () => _app.Settings.General.CopilotRuntimePath, () => _app.Descriptions?.IsBusy != true && !IsCopilotAccountBusy);
             _aiComponent.StatusChanged += AiComponentStatusChanged;
         }
         _componentStatus = UiStyles.Description(_aiComponent.Status);
@@ -71,7 +71,7 @@ internal sealed partial class SettingsWindow
     private void RefreshAiComponentActions()
     {
         if (_aiComponent is null) return;
-        var busy = _componentCancellation is not null || _aiComponent.IsBusy || _app.Descriptions?.IsBusy == true;
+        var busy = _componentCancellation is not null || _aiComponent.IsBusy || _app.Descriptions?.IsBusy == true || IsCopilotAccountBusy;
         if (_componentInstall is not null) _componentInstall.IsEnabled = !busy && !_aiComponent.HasBundledRuntime;
         if (_componentRemove is not null) _componentRemove.IsEnabled = !busy && _aiComponent.HasManagedComponent;
         if (_componentCancel is not null) _componentCancel.IsEnabled = _componentCancellation is not null;
@@ -85,9 +85,10 @@ internal sealed partial class SettingsWindow
 
     private async Task ChangeAiComponentAsync(bool install)
     {
-        if (_aiComponent is null || _componentCancellation is not null) return;
+        if (_aiComponent is null || _componentCancellation is not null || IsCopilotAccountBusy) return;
         using var cancellation = new CancellationTokenSource();
         _componentCancellation = cancellation;
+        RefreshCopilotAccountActions();
         RefreshAiComponentActions();
         if (_componentProgress is not null)
         {
@@ -126,6 +127,7 @@ internal sealed partial class SettingsWindow
         finally
         {
             _componentCancellation = null;
+            if (!_closed) RefreshCopilotAccountActions();
             if (!_closed)
             {
                 if (_componentProgress is not null) _componentProgress.Visibility = Visibility.Collapsed;

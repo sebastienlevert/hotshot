@@ -228,7 +228,11 @@ Offline edits stay in the local cache and are retried. Incoming changes apply wh
 
 ### Search screenshots by description
 
-Enable **Screenshots > Describe screenshots with Copilot** to generate searchable summaries and descriptions. This is **off by default**, requires an existing GitHub Copilot sign-in and an image-capable model, and uses your account's quota. Full bundles the runtime; Core uses an explicitly installed optional component or your selected compatible runtime. Component download is verified and cancellable, and never enables uploads or account access itself.
+Open **Settings > Screenshots > Copilot account > Sign in with GitHub** and complete authorization in your browser. No separate Copilot CLI or GitHub CLI installation is required. Full bundles the runtime; in Core, install the optional Copilot component first. **Check sign-in** can also reuse an existing Copilot/GitHub CLI sign-in. Browser cookies alone are not authorization, and environment credentials can take priority over stored sign-ins.
+
+Sign-in uses the runtime's GitHub browser authorization with PKCE and Windows secure credential storage. Hotshot does not request a pasted token, embed an OAuth secret, or put credentials in settings, OneDrive or logs. Pending sign-in is cancellable, times out after five minutes, and is stopped when Settings closes. Plaintext token storage is refused.
+
+Then explicitly enable **Describe screenshots with Copilot** to generate searchable summaries and descriptions. This is **off by default**, requires a GitHub Copilot subscription and an image-capable model, and uses your account's quota. Signing in does not enable uploads, change review/exclusion rules or grant coding-agent access. Account checks and sign-in send no screenshot or model prompt.
 
 Descriptions are added after saving, without delaying the clipboard. PNG files also receive Unicode **Title** and **Description** metadata. Windows Explorer may not display those PNG fields even though metadata-aware tools can read them. Recordings and GIFs are not sent for descriptions.
 
@@ -300,4 +304,4 @@ Hotshot is Windows-only. It does not include upload services, public capture sha
 
 Bug reports, documentation improvements, accessibility feedback, and focused code changes are welcome. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for Windows development setup, architecture, testing, pull requests, and releases. If you are reading an installed copy, use the [online contributor guide](https://github.com/sebastienlevert/hotshot/blob/main/CONTRIBUTING.md).
 
-Hotshot is licensed under the [MIT license](https://github.com/sebastienlevert/hotshot/blob/main/LICENSE). ShareX-inspired workflows are implemented independently; Hotshot does not include ShareX GPL source, binaries, or UI.
+Hotshot is licensed under the [MIT license](https://github.com/sebastienlevert/hotshot/blob/main/LICENSE).

@@ -72,8 +72,13 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
         Changed?.Invoke();
     }
 
-    private bool PolicyAllows(Work work) => (work.Approved || !_reviewRequired) &&
-        !_excludedApps.Any(name => string.Equals(Path.GetFileNameWithoutExtension(name.Trim()), work.AppName, StringComparison.OrdinalIgnoreCase));
+    private bool RequiresReview(Work work) =>
+        !work.Approved && (_reviewRequired || !CaptureAnalysisPolicy.HasKnownSource(work.AppName));
+
+    private bool IsExcluded(Work work) =>
+        _excludedApps.Any(name => string.Equals(Path.GetFileNameWithoutExtension(name.Trim()), work.AppName, StringComparison.OrdinalIgnoreCase));
+
+    private bool PolicyAllows(Work work) => !RequiresReview(work) && !IsExcluded(work);
 
     public void SetEnabled(bool enabled)
     {
@@ -105,7 +110,8 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
             }
             var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var work = new Work(item.Id, item.Path, _generation, completion, item.AppName, approved) { RequestedRevision = item.ImageRevision };
-            if (!PolicyAllows(work)) return Task.FromResult(false);
+            if (!PolicyAllows(work))
+                return RequiresReview(work) && !IsExcluded(work) ? HoldForReviewAsync(work) : Task.FromResult(false);
             _scheduled.Add(item.Id, work);
             Interlocked.Increment(ref _pending);
             if (!_queue.Writer.TryWrite(work))
@@ -119,6 +125,16 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
             Changed?.Invoke();
             return completion.Task;
         }
+    }
+
+    private async Task<bool> HoldForReviewAsync(Work work)
+    {
+        try { await Task.Run(() => _history.HoldDescriptionForReview(work.Id)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ReportFailure(work, "The screenshot could not be held for review: " + ex.Message);
+        }
+        return false;
     }
 
     public async Task<long> SaveEditedImageAsync(HistoryItem item, byte[] png, bool preserveMetadata = true)
@@ -247,7 +263,7 @@ public sealed class ScreenshotDescriptions : IAsyncDisposable
                     {
                         Failed?.Invoke($"Screenshot description cancellation could not be saved: {ex.Message}");
                     }
-                    if (_enabled && _reviewRequired && !work.Approved) _history.HoldDescriptionForReview(work.Id);
+                    if (_enabled && RequiresReview(work) && !IsExcluded(work)) _history.HoldDescriptionForReview(work.Id);
                 }
                 lock (_state)
                 {

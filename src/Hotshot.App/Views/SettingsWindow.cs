@@ -2,6 +2,7 @@ using Hotshot.Core;
 using Hotshot.Core.Hotkeys;
 using Hotshot.Core.Naming;
 using Hotshot.Core.Settings;
+using Hotshot.Core.Descriptions;
 using Hotshot.Interop;
 using Hotshot.Shell;
 using Microsoft.UI.Dispatching;
@@ -67,10 +68,14 @@ internal sealed partial class SettingsWindow : Window
     private bool _closing;
     private bool _pickingFolder;
 
-    public SettingsWindow(AppServices app, HotkeyManager hotkeys)
+    public SettingsWindow(AppServices app, HotkeyManager hotkeys,
+        Func<CancellationToken, Task<ICopilotSignInClient>>? copilotAccountFactory = null,
+        Func<Uri, CancellationToken, Task>? copilotBrowser = null)
     {
         _app = app;
         _hotkeys = hotkeys;
+        _copilotAccountFactory = copilotAccountFactory;
+        _copilotBrowser = copilotBrowser;
         _draft = app.Settings.Clone();
         _draftBaseline = app.Settings.Clone();
         Title = "Hotshot settings";
@@ -187,12 +192,14 @@ internal sealed partial class SettingsWindow : Window
             _closing = true;
             await Task.Yield();
             _saveTimer.Stop();
+            await CancelCopilotSignInAsync();
             await PersistAsync();
             _allowClose = true;
             Close();
         };
         Closed += (_, _) =>
         {
+            _copilotAccountCancellation?.Cancel();
             CloseAiComponent();
             _closed = true;
             _saveTimer.Stop();
@@ -215,7 +222,7 @@ internal sealed partial class SettingsWindow : Window
 
     public Task SavePendingAsync() => PersistAsync();
     public bool HasPendingChanges => _editVersion != _savedVersion || _closing || _pickingFolder ||
-        IsQuickStartActive || IsQuickStartBusy || IsAiComponentBusy;
+        IsQuickStartActive || IsQuickStartBusy || IsAiComponentBusy || IsCopilotAccountBusy;
 
     private void TitleBarRootChanged(XamlRoot sender, XamlRootChangedEventArgs args) => UpdateTitleBarInsets();
 
@@ -271,6 +278,7 @@ internal sealed partial class SettingsWindow : Window
         yield return new(SettingsPage.Capture, "Show crosshair", "alignment selection screenshot");
         yield return new(SettingsPage.Capture, "Include cursor", "mouse pointer screenshot");
         yield return new(SettingsPage.Capture, "Describe screenshots with Copilot", "ai description summary search metadata image properties privacy");
+        yield return new(SettingsPage.Capture, "Copilot account", "github sign in login authenticate browser account credentials");
         yield return new(SettingsPage.Capture, "Recognize screenshot text locally", "ocr copy search text offline privacy");
         yield return new(SettingsPage.Capture, "Screenshot delay", "countdown timed capture seconds");
         foreach (var action in Enum.GetValues<HotkeyAction>())
@@ -402,9 +410,11 @@ internal sealed partial class SettingsWindow : Window
                 RefreshAiStatus();
                 panel.Children.Add(_aiStatus);
                 RenderAiComponent(panel, _app.CopilotRuntime);
+                RenderCopilotAccount(panel);
                 var runtime = new Button { Content = "Choose optional Copilot runtime" };
                 runtime.Click += async (_, _) =>
                 {
+                    if (IsCopilotAccountBusy) { SetCopilotAccountMessage("Finish or cancel sign-in before changing its runtime."); return; }
                     var picker = new FileOpenPicker(AppWindow.Id) { Title = "Choose SDK-compatible copilot-runtime.exe", FileTypeFilter = { ".exe" } };
                     var selected = await picker.PickSingleFileAsync();
                     if (selected is null) return;
@@ -413,7 +423,11 @@ internal sealed partial class SettingsWindow : Window
                 };
                 panel.Children.Add(runtime);
                 var bundled = new Button { Content = "Use app-managed Copilot runtime" };
-                bundled.Click += (_, _) => { _draft.General.CopilotRuntimePath = null; Changed(); };
+                bundled.Click += (_, _) =>
+                {
+                    if (IsCopilotAccountBusy) { SetCopilotAccountMessage("Finish or cancel sign-in before changing its runtime."); return; }
+                    _draft.General.CopilotRuntimePath = null; Changed();
+                };
                 panel.Children.Add(bundled);
                 Note(panel, "Full includes the runtime. Core uses an explicitly installed optional component or your selected SDK-compatible external runtime. Installation never enables cloud analysis or signs into an account.");
                 Section(panel, "Selection");
@@ -687,7 +701,12 @@ internal sealed partial class SettingsWindow : Window
 
     private void RefreshAiStatus() => _app.Post(() =>
     {
-        if (!_closed) _aiStatus.Text = $"{_app.Descriptions?.Status}\n{_app.Descriptions?.ProviderStatus}";
+        if (!_closed)
+        {
+            _aiStatus.Text = $"{_app.Descriptions?.Status}\n{_app.Descriptions?.ProviderStatus}";
+            RefreshCopilotAccountActions();
+            RefreshAiComponentActions();
+        }
     });
 
     private void MicrophoneChoice(StackPanel panel)

@@ -32,6 +32,7 @@ internal sealed partial class AppController
             Exiting: _exiting,
             Describing: _descriptions.IsBusy || _textIndex.IsBusy || _agentServer.IsBusy,
             ComponentOperation: _copilotRuntime.IsBusy || (_settingsWindow?.IsAiComponentBusy ?? false) ||
+                (_settingsWindow?.IsCopilotAccountBusy ?? false) ||
                 (_settingsWindow?.IsQuickStartActive ?? false));
     }
 

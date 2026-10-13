@@ -4,6 +4,7 @@ using System.IO.Hashing;
 using System.Text;
 using Hotshot.Core.Descriptions;
 using Hotshot.Core.History;
+using Hotshot.Core.Settings;
 using Hotshot.Core.Updates;
 
 namespace Hotshot.Core.Tests;
@@ -50,6 +51,81 @@ public sealed class ScreenshotDescriptionTests : IDisposable
         await using var service = new ScreenshotDescriptions(history, () => throw new InvalidOperationException("Provider must not start."), false);
         Assert.False(await service.EnqueueAsync(item));
         Assert.Equal(original, await File.ReadAllBytesAsync(item.Path, TestContext.Current.CancellationToken));
+        Assert.Null(item.Description);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("Video frame")]
+    [InlineData("Imported image")]
+    [InlineData("Scrolling capture")]
+    public async Task UnknownSourceCannotUploadAndPendingWorkIsPersistedForReview(string? app)
+    {
+        var (history, item) = Fixture();
+        item.AppName = app;
+        item.DescriptionPending = true;
+        history.Update(item);
+        var original = File.ReadAllBytes(item.Path);
+        await using var service = new ScreenshotDescriptions(history,
+            () => throw new InvalidOperationException("Unknown source must not contact the provider."), true);
+        service.ApplyPolicy(new GeneralSettings { DescribeScreenshots = true, ReviewBeforeAiUpload = false });
+
+        Assert.False(await service.EnqueueAsync(item));
+        Assert.False(item.DescriptionPending);
+        Assert.True(item.DescriptionNeedsReview);
+        Assert.False(service.IsBusy);
+        Assert.Equal(original, File.ReadAllBytes(item.Path));
+        var reloaded = new HistoryStore(history.CheckpointPath, 10);
+        reloaded.Load();
+        var saved = Assert.Single(reloaded.Items);
+        Assert.False(saved.DescriptionPending);
+        Assert.True(saved.DescriptionNeedsReview);
+        Assert.Null(saved.Description);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Video frame")]
+    [InlineData("Imported image")]
+    [InlineData("Scrolling capture")]
+    public async Task UnknownSourceCanBeAnalyzedOnlyAfterExplicitApproval(string? app)
+    {
+        var (history, item) = Fixture();
+        item.AppName = app;
+        var calls = 0;
+        await using var service = new ScreenshotDescriptions(history, () => new Provider((_, _) =>
+        {
+            calls++;
+            return Task.FromResult(new CaptureDescription("Reviewed", "Explicitly approved generated image."));
+        }), true);
+        service.ApplyPolicy(new GeneralSettings { DescribeScreenshots = true, ReviewBeforeAiUpload = false });
+
+        Assert.True(await service.EnqueueAsync(item, approved: true));
+        Assert.Equal(1, calls);
+        Assert.Equal("Reviewed", item.Summary);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SourceAppExclusionCannotBeOverriddenByApproval(bool approved)
+    {
+        var (history, item) = Fixture();
+        item.AppName = "Private";
+        var original = File.ReadAllBytes(item.Path);
+        await using var service = new ScreenshotDescriptions(history,
+            () => throw new InvalidOperationException("Excluded source must not contact the provider."), true);
+        service.ApplyPolicy(new GeneralSettings
+        {
+            DescribeScreenshots = true, ReviewBeforeAiUpload = false, AiExcludedApps = ["private.exe"],
+        });
+
+        Assert.False(await service.EnqueueAsync(item, approved));
+        Assert.False(service.IsBusy);
+        Assert.False(item.DescriptionNeedsReview);
+        Assert.Equal(original, File.ReadAllBytes(item.Path));
         Assert.Null(item.Description);
     }
 
@@ -254,7 +330,7 @@ public sealed class ScreenshotDescriptionTests : IDisposable
         var path = Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".png");
         File.WriteAllBytes(path, Png());
         var history = new HistoryStore(Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".json"), 10);
-        var item = new HistoryItem { Path = path, FileSize = new FileInfo(path).Length };
+        var item = new HistoryItem { Path = path, FileSize = new FileInfo(path).Length, AppName = "Synthetic" };
         history.Add(item);
         return (history, item);
     }

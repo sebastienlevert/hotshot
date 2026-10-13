@@ -140,7 +140,7 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         window.Activate();
         var image = await window.Completion;
         _scrollingWindow = null;
-        if (image is not null) await SaveAsync(image, CaptureKind.Region, CaptureSource.Now("Scrolling capture"));
+        if (image is not null) await SaveAsync(image, CaptureKind.Region, CaptureSource.Now(title: "Scrolling capture"));
     });
 
     /// <summary>Re-captures the last region without showing the overlay (falls back to the region flow).</summary>
