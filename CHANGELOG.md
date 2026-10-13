@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.18](https://github.com/sebastienlevert/hotshot/compare/v0.1.17...v0.1.18) (2026-10-13)
+
+
+### Bug Fixes
+
+* enable secure Copilot storage with restricted desktop sessions ([381f0ff](https://github.com/sebastienlevert/hotshot/commit/381f0ffd26852784fe37a369c5e59c4be6bdb787))
+* optimize mobile website and remove comparison branding ([3eb1132](https://github.com/sebastienlevert/hotshot/commit/3eb11327189150f7403cfd82e2fe205c0f41a88f))
+* preserve capture privacy and add secure Copilot sign-in ([acfc206](https://github.com/sebastienlevert/hotshot/commit/acfc206be6bb25a09dae383e726cc8c9a8908e80))
+* resolve release harness and mobile browser regressions ([ae5a05c](https://github.com/sebastienlevert/hotshot/commit/ae5a05ceb765db7a887386060cd710cf58fae4f5))
+
 ## [0.1.17](https://github.com/sebastienlevert/hotshot/compare/v0.1.16...v0.1.17) (2026-10-12)
 
 
