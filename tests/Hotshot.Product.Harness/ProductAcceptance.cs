@@ -3,6 +3,7 @@ using Hotshot.Capture;
 using Hotshot.CaptureFlow;
 using Hotshot.Core;
 using Hotshot.Core.Descriptions;
+using Hotshot.Descriptions;
 using Hotshot.Core.History;
 using Hotshot.Core.Hotkeys;
 using Hotshot.Core.Settings;
@@ -251,6 +252,14 @@ internal static class ProductAcceptance
         Queue<ICopilotSignInClient> clients, List<Uri> browserVisits)
     {
         var baseline = app.Settings.Clone();
+        var restricted = CopilotConnection.RestrictedSession();
+        if (restricted.AvailableTools is not { Count: 0 } || restricted.EnableConfigDiscovery != false ||
+            restricted.EnableFileHooks != false || restricted.EnableHostGitOperations != false ||
+            restricted.EnableSessionStore != false || restricted.EnableSkills != false ||
+            restricted.EnableSessionTelemetry != false || restricted.Memory?.Enabled != false ||
+            restricted.SkipCustomInstructions != true || restricted.CustomAgentsLocalOnly != true ||
+            restricted.SystemMessage?.Mode != GitHub.Copilot.SystemMessageMode.Replace)
+            throw new InvalidDataException("Desktop keychain access must not restore ambient session capabilities.");
         settings.SelectPage(SettingsPage.Capture);
         await ReadyAsync(settings);
         var signIn = Find<Button>(settings.Content, "CopilotSignIn");

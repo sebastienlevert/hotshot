@@ -43,16 +43,7 @@ internal sealed class CopilotAccountClient(CopilotClient client) : ICopilotSignI
     public async Task<CopilotSignInStart> BeginAsync(CancellationToken cancellationToken)
     {
         if (_session is not null) throw new InvalidOperationException("A sign-in flow already owns this connection.");
-        _session = await client.CreateSessionAsync(new SessionConfig
-        {
-            AvailableTools = [],
-            SkipCustomInstructions = true,
-            EnableSkills = false,
-            EnableSessionStore = false,
-            EnableHostGitOperations = false,
-            EnableFileHooks = false,
-            OnPermissionRequest = (_, _) => Task.FromResult(PermissionDecision.Reject("Account sign-in cannot execute tools.")),
-        }, cancellationToken);
+        _session = await CopilotConnection.CreateRestrictedSessionAsync(client, CopilotConnection.RestrictedSession(), cancellationToken);
         var available = await _session.Rpc.Accounts.EnumerateAsync(new AuthEnumerateQueryProviders { BrokerAvailable = false }, cancellationToken);
         if (available is not AuthEnumerateValueProviders providers ||
             !providers.Items.Any(provider => provider.Kind == LoginProviderKind.GitHubDotCom && provider.Available))

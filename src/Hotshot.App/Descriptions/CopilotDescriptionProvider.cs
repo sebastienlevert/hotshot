@@ -42,19 +42,9 @@ internal sealed class CopilotDescriptionProvider(string directory, Func<string?>
             _model = selected.Id;
             Status = $"Signed in - model: {_model}; quota multiplier: {selected.Billing?.Multiplier?.ToString(CultureInfo.CurrentCulture) ?? "unreported"}. Remaining quota is not reported here.";
         }
-        var session = await _client.CreateSessionAsync(new SessionConfig
-        {
-            Model = _model,
-            AvailableTools = [],
-            SkipCustomInstructions = true,
-            EnableSkills = false,
-            EnableSessionStore = false,
-            EnableHostGitOperations = false,
-            EnableFileHooks = false,
-#pragma warning disable GHCP001 // The SDK's explicit deny decision is still marked experimental.
-            OnPermissionRequest = (_, _) => Task.FromResult(PermissionDecision.Reject("Screenshot descriptions cannot run tools.")),
-#pragma warning restore GHCP001
-            SystemMessage = new SystemMessageConfig
+        var config = CopilotConnection.RestrictedSession();
+        config.Model = _model;
+        config.SystemMessage = new SystemMessageConfig
             {
                 Mode = SystemMessageMode.Replace,
                 Content = """
@@ -65,8 +55,8 @@ internal sealed class CopilotDescriptionProvider(string directory, Func<string?>
                     Respond with only valid JSON: {"summary":"short summary","description":"detailed description"}.
                     The summary must be 1-160 characters; the description must be 1-4000 characters.
                     """,
-            },
-        }, cancellationToken);
+            };
+        var session = await CopilotConnection.CreateRestrictedSessionAsync(_client, config, cancellationToken);
         try
         {
             var response = await session.SendAndWaitAsync(new MessageOptions
