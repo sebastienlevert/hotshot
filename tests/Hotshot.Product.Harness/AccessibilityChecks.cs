@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Hotshot.Editor;
 using Hotshot.Editor.Model;
+using Hotshot.Editor.UI;
 using Hotshot.Views;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
@@ -12,6 +13,7 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Input;
 using Windows.Graphics;
 using Windows.System;
 using Windows.UI;
@@ -39,6 +41,10 @@ internal static class AccessibilityChecks
         var canvas = editorRoot.Children.OfType<CanvasControl>().Single();
         canvas.ForceSoftwareRenderer = true;
         var tools = CommandControl<ComboBox>(commands, "EditorTool");
+        var color = CommandControl<DropDownButton>(commands, "EditorColor");
+        var stroke = CommandControl<ComboBox>(commands, "EditorStroke");
+        var preview = CommandControl<ToolPreview>(commands, "EditorToolPreview");
+        preview.Canvas.ForceSoftwareRenderer = true;
         var layers = CommandControl<ComboBox>(commands, "EditorLayers");
         var text = CommandControl<TextBox>(commands, "EditorText");
         var fontSize = CommandControl<NumberBox>(commands, "EditorFontSize");
@@ -233,10 +239,84 @@ internal static class AccessibilityChecks
                 "Native focus navigation reached an unavailable control.");
             Pass("Native FocusManager next-focus traversal");
 
+            tools.FontSize = 14;
+            tools.SelectedItem = EditorTool.Arrow;
+            commands.IsOpen = false;
+            await Task.Delay(150);
+            var controls = new FrameworkElement[] { tools, color, stroke, preview };
+            var previousRight = double.NegativeInfinity;
+            var buttonCenter = undo.TransformToVisual(commands).TransformPoint(new Windows.Foundation.Point(0, undo.ActualHeight / 2)).Y;
+            foreach (var control in controls)
+            {
+                var bounds = control.TransformToVisual(commands).TransformBounds(new Windows.Foundation.Rect(0, 0, control.ActualWidth, control.ActualHeight));
+                Require(control.ActualWidth > 0 && bounds.Left - previousRight >= 7 &&
+                    Math.Abs(bounds.Y + bounds.Height / 2 - buttonCenter) <= 1,
+                    $"Editor control spacing/alignment is wrong: {AutomationProperties.GetAutomationId(control)}, bounds={bounds}, button center={buttonCenter}.");
+                previousRight = bounds.Right;
+            }
+            RequireRole(color, "Annotation color", AutomationControlType.Button);
+            color.Flyout.ShowAt(color);
+            await Task.Delay(200);
+            var picker = VisualTreeHelper.GetOpenPopupsForXamlRoot(root.XamlRoot)
+                .Select(popup => TryFind<ColorPicker>(popup.Child, "EditorColorPicker")).FirstOrDefault(found => found is not null)
+                ?? throw new InvalidDataException("The full color picker did not open.");
+            Require(picker.IsAlphaEnabled && picker.IsAlphaSliderVisible && picker.IsHexInputVisible &&
+                picker.IsColorChannelTextInputVisible, "Full RGB, hex and transparency controls must be available.");
+            picker.Color = Color.FromArgb(73, 7, 133, 215);
+            stroke.SelectedIndex = 2;
+            color.Flyout.Hide();
+            Require(preview.Annotation is ArrowAnnotation { StrokeWidth: 10 } custom &&
+                custom.Color == new RgbaColor(7, 133, 215, 73), "The preview did not reflect the custom RGBA color and thick stroke.");
+            Require(editor.ProcessCanvasKey(VirtualKey.Insert, VirtualKeyModifiers.None), "Custom-colored arrow insertion failed.");
+            var colored = (await ReadDocumentAsync()).Annotations.OfType<ArrowAnnotation>().Last();
+            Require(colored.Color == new RgbaColor(7, 133, 215, 73) && colored.StrokeWidth == 10,
+                "The real annotation/save did not retain the full color and stroke.");
+            tools.SelectedItem = EditorTool.Arrow;
+            picker.Color = Color.FromArgb(255, RgbaColor.Green.R, RgbaColor.Green.G, RgbaColor.Green.B);
+            using (var target = new CanvasRenderTarget(canvas.Device, 112, 40, 96))
+            {
+                using (var drawing = target.CreateDrawingSession())
+                {
+                    drawing.Clear(default(Color));
+                    preview.Render(drawing, canvas.Device);
+                }
+                var thickPixels = target.GetPixelBytes();
+                var thick = GreenPixels(thickPixels);
+                await target.SaveAsync(Path.Combine(outputDirectory, "editor-green-thick-preview.png"), CanvasBitmapFileFormat.Png);
+                stroke.SelectedIndex = 0;
+                using (var drawing = target.CreateDrawingSession())
+                {
+                    drawing.Clear(default(Color));
+                    preview.Render(drawing, canvas.Device);
+                }
+                Require(thick > GreenPixels(target.GetPixelBytes()) * 1.3,
+                    "The thick green preview must visibly differ from the thin preview.");
+            }
+            editor.UpdateCanvasPointer(true);
+            Require(editor.EditingCursorShape == InputSystemCursorShape.Cross, "Drawing must use an editing crosshair.");
+            tools.SelectedItem = EditorTool.Text;
+            Require(editor.EditingCursorShape == InputSystemCursorShape.IBeam, "Text must use its editing cursor.");
+            tools.SelectedItem = EditorTool.Select;
+            Require(editor.EditingCursorShape == InputSystemCursorShape.SizeAll, "Selection must use the move cursor.");
+            editor.SetHostBusy(true);
+            Require(editor.EditingCursorShape == InputSystemCursorShape.Wait, "Busy editing must use the wait cursor.");
+            editor.SetHostBusy(false);
+            editor.UpdateCanvasPointer(false);
+            Require(editor.EditingCursorShape is null, "Leaving the canvas must restore the normal pointer.");
+            Pass("Spaced/centered editor controls, full native color picker, RGBA save, rendered thick green preview and scoped editing cursors");
+
             async Task<AnnotationDocument> ReadDocumentAsync()
             {
                 Require(await editor.SaveAsync(), "Generated annotation sidecar could not be saved.");
                 return AnnotationDocument.FromJson(await File.ReadAllTextAsync(options.AnnotationsPath));
+            }
+
+            static int GreenPixels(byte[] pixels)
+            {
+                var count = 0;
+                for (var index = 0; index < pixels.Length; index += 4)
+                    if (pixels[index + 1] > pixels[index] + 35 && pixels[index + 1] > pixels[index + 2] + 35) count++;
+                return count;
             }
         }
         catch (Exception exception)

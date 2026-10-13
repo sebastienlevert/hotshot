@@ -25,7 +25,16 @@ public sealed class EditorView : UserControl, IDisposable
     private readonly RenderTargetPair _targets = new();
     private readonly TaskCompletionSource<CanvasDevice> _deviceReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ComboBox _tools = new() { ItemsSource = Enum.GetValues<EditorTool>(), SelectedItem = EditorTool.Arrow, MinWidth = 110 };
-    private readonly ComboBox _colors = new() { ItemsSource = RgbaColor.Palette.Select(p => p.Name).ToArray(), SelectedIndex = 0, MinWidth = 92 };
+    private readonly DropDownButton _colors = new() { MinWidth = 64, VerticalAlignment = VerticalAlignment.Center };
+    private readonly ColorPicker _colorPicker = new()
+    {
+        Color = DocumentRenderer.ToColor(RgbaColor.Red), Width = 280,
+        IsAlphaEnabled = true, IsAlphaSliderVisible = true, IsAlphaTextInputVisible = true,
+        IsHexInputVisible = true, IsColorChannelTextInputVisible = true,
+    };
+    private readonly Border _colorSwatch = new() { Width = 24, Height = 20, CornerRadius = new CornerRadius(3) };
+    private readonly ToolPreview _preview = new();
+    private readonly Dictionary<InputSystemCursorShape, InputSystemCursor> _cursors = [];
     private readonly ComboBox _widths = new() { ItemsSource = StylePresets.StrokeNames, SelectedIndex = 1, MinWidth = 90 };
     private readonly TextBox _text = new() { PlaceholderText = "Annotation text", MinWidth = 150, Visibility = Visibility.Collapsed };
     private readonly ComboBox _layers = new() { PlaceholderText = "Select annotation", MinWidth = 140, MaxWidth = 200 };
@@ -63,6 +72,8 @@ public sealed class EditorView : UserControl, IDisposable
     private bool _busy;
     private bool _hostBusy;
     private bool _disposed;
+    private bool _pointerInCanvas;
+    private Vector2? _hoverPoint;
 
     public EditorView()
     {
@@ -80,6 +91,28 @@ public sealed class EditorView : UserControl, IDisposable
         AutomationProperties.SetAutomationId(_tools, "EditorTool");
         AutomationProperties.SetName(_colors, "Annotation color");
         AutomationProperties.SetAutomationId(_colors, "EditorColor");
+        AutomationProperties.SetAutomationId(_colorPicker, "EditorColorPicker");
+        AutomationProperties.SetName(_colorPicker, "Choose annotation color");
+        AutomationProperties.SetAutomationId(_preview, "EditorToolPreview");
+        var swatch = new Grid { Width = 24, Height = 20 };
+        swatch.ColumnDefinitions.Add(new ColumnDefinition());
+        swatch.ColumnDefinitions.Add(new ColumnDefinition());
+        swatch.RowDefinitions.Add(new RowDefinition());
+        swatch.RowDefinitions.Add(new RowDefinition());
+        for (var index = 0; index < 4; index++)
+        {
+            var cell = new Border { Background = new SolidColorBrush(Color.FromArgb(255,
+                (byte)(index is 0 or 3 ? 248 : 200), (byte)(index is 0 or 3 ? 248 : 200), (byte)(index is 0 or 3 ? 248 : 200))) };
+            Grid.SetRow(cell, index / 2);
+            Grid.SetColumn(cell, index % 2);
+            swatch.Children.Add(cell);
+        }
+        Grid.SetRowSpan(_colorSwatch, 2);
+        Grid.SetColumnSpan(_colorSwatch, 2);
+        swatch.Children.Add(_colorSwatch);
+        _colors.Content = swatch;
+        _colors.Flyout = new Flyout { Content = _colorPicker };
+        ToolTipService.SetToolTip(_colors, "Choose any color");
         AutomationProperties.SetName(_widths, "Stroke thickness");
         AutomationProperties.SetAutomationId(_widths, "EditorStroke");
         AutomationProperties.SetName(_text, "Annotation text");
@@ -88,6 +121,7 @@ public sealed class EditorView : UserControl, IDisposable
         ToolTipService.SetToolTip(_tools, "Select moves your marks. Redact hides details in saved copies; private originals are kept.");
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _colors });
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _widths });
+        commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _preview });
         commands.PrimaryCommands.Add(_undo);
         commands.PrimaryCommands.Add(_redo);
         var fit = new AppBarButton { Label = "Fit image", Icon = new SymbolIcon(Symbol.ZoomOut) };
@@ -125,6 +159,13 @@ public sealed class EditorView : UserControl, IDisposable
         resetCrop.Click += (_, _) => _state?.Document.SetCrop(null);
         commands.SecondaryCommands.Add(resetCrop);
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _text });
+        foreach (var container in commands.PrimaryCommands.Concat(commands.SecondaryCommands).OfType<AppBarElementContainer>())
+        {
+            container.Margin = new Thickness(0, 0, 8, 0);
+            container.MinHeight = 48;
+            container.VerticalAlignment = VerticalAlignment.Center;
+            if (container.Content is FrameworkElement control) control.VerticalAlignment = VerticalAlignment.Center;
+        }
         foreach (var command in commands.PrimaryCommands.Concat(commands.SecondaryCommands).OfType<AppBarButton>())
             AutomationProperties.SetName(command, command.Label);
         AutomationProperties.SetAutomationId(_undo, "EditorUndo");
@@ -156,6 +197,8 @@ public sealed class EditorView : UserControl, IDisposable
         };
         _canvas.Draw += Draw;
         _canvas.PointerPressed += OnPointerPressed;
+        _canvas.PointerEntered += (_, args) => UpdateCanvasPointer(true, ImagePoint(args));
+        _canvas.PointerExited += (_, _) => UpdateCanvasPointer(false);
         _canvas.PointerMoved += OnPointerMoved;
         _canvas.PointerReleased += OnPointerReleased;
         _canvas.PointerCanceled += (_, _) => CancelGesture();
@@ -187,10 +230,11 @@ public sealed class EditorView : UserControl, IDisposable
                 state.Tool = tool;
             }
         };
-        _colors.SelectionChanged += (_, _) =>
+        _colorPicker.ColorChanged += (_, args) =>
         {
-            if (!_updating && _colors.SelectedIndex >= 0) _state?.SetColor(RgbaColor.Palette[_colors.SelectedIndex].Color);
+            if (!_updating) _state?.SetColor(new RgbaColor(args.NewColor.R, args.NewColor.G, args.NewColor.B, args.NewColor.A));
         };
+        _preview.Failed += Error;
         _widths.SelectionChanged += (_, _) =>
         {
             if (!_updating && _widths.SelectedIndex >= 0) _state?.SetStrokeWidth(StylePresets.StrokeWidths[_widths.SelectedIndex]);
@@ -248,6 +292,45 @@ public sealed class EditorView : UserControl, IDisposable
     public bool IsBusy => _busy;
     public bool HasRedactions => _state?.Document.Annotations.Any(annotation => annotation is RedactionAnnotation) == true;
     internal bool HighContrastNotificationsAvailable => _contrastNotificationsAvailable;
+    internal InputSystemCursorShape? EditingCursorShape => (ProtectedCursor as InputSystemCursor)?.CursorShape;
+
+    internal void UpdateCanvasPointer(bool isInside, Vector2? point = null)
+    {
+        _pointerInCanvas = isInside;
+        _hoverPoint = isInside ? point : null;
+        UpdateCursor();
+    }
+
+    private void UpdateCursor()
+    {
+        if (_disposed || !_pointerInCanvas || _state is not { } state)
+        {
+            ProtectedCursor = null;
+            return;
+        }
+        var shape = _busy || _hostBusy ? InputSystemCursorShape.Wait :
+            _panning ? InputSystemCursorShape.Hand :
+            state.Tool == EditorTool.Text ? InputSystemCursorShape.IBeam :
+            state.Tool == EditorTool.Select ? InputSystemCursorShape.SizeAll : InputSystemCursorShape.Cross;
+        var handle = _resizeHandle ?? (_hoverPoint is { } point
+            ? state.Selected?.GetHandles().FirstOrDefault(candidate => Vector2.Distance(candidate.Position, point) <= 8 / _scale).Kind
+            : null);
+        if (state.Tool == EditorTool.Select && !_busy && !_hostBusy && !_panning)
+            shape = handle switch
+            {
+                HandleKind.TopLeft or HandleKind.BottomRight => InputSystemCursorShape.SizeNorthwestSoutheast,
+                HandleKind.TopRight or HandleKind.BottomLeft => InputSystemCursorShape.SizeNortheastSouthwest,
+                HandleKind.Top or HandleKind.Bottom => InputSystemCursorShape.SizeNorthSouth,
+                HandleKind.Left or HandleKind.Right => InputSystemCursorShape.SizeWestEast,
+                _ => shape,
+            };
+        if (!_cursors.TryGetValue(shape, out var cursor))
+        {
+            cursor = InputSystemCursor.Create(shape);
+            _cursors.Add(shape, cursor);
+        }
+        ProtectedCursor = cursor;
+    }
 
     internal bool ProcessCanvasKey(VirtualKey key, VirtualKeyModifiers modifiers)
     {
@@ -555,6 +638,7 @@ public sealed class EditorView : UserControl, IDisposable
             pointer.Properties.IsLeftButtonPressed && (InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Space) & CoreVirtualKeyStates.Down) != 0))
         {
             _panning = true;
+            UpdateCursor();
             _panPoint = new Vector2((float)pointer.Position.X, (float)pointer.Position.Y);
             _canvas.CapturePointer(args.Pointer);
             _canvas.Focus(FocusState.Pointer);
@@ -593,11 +677,13 @@ public sealed class EditorView : UserControl, IDisposable
             state.Select(annotation.Id);
         }
         _canvas.CapturePointer(args.Pointer);
+        UpdateCursor();
         args.Handled = true;
     }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs args)
     {
+        if (_pointerInCanvas) UpdateCanvasPointer(true, ImagePoint(args));
         if (_panning)
         {
             var position = args.GetCurrentPoint(_canvas).Position;
@@ -633,6 +719,7 @@ public sealed class EditorView : UserControl, IDisposable
         if (_panning)
         {
             _panning = false;
+            UpdateCursor();
             _canvas.ReleasePointerCapture(args.Pointer);
             args.Handled = true;
             return;
@@ -645,6 +732,7 @@ public sealed class EditorView : UserControl, IDisposable
         _resizeHandle = null;
         _canvas.ReleasePointerCapture(args.Pointer);
         _canvas.Invalidate();
+        UpdateCursor();
         args.Handled = true;
     }
 
@@ -655,6 +743,7 @@ public sealed class EditorView : UserControl, IDisposable
         _drawing = null;
         _moving = _cropping = false;
         _resizeHandle = null;
+        UpdateCursor();
     }
 
     private void StateChanged(object? sender, EventArgs args) => Refresh();
@@ -669,7 +758,9 @@ public sealed class EditorView : UserControl, IDisposable
         _updating = true;
         _tools.SelectedItem = state.Tool;
         var style = state.CurrentStyle;
-        _colors.SelectedIndex = RgbaColor.Palette.ToList().FindIndex(p => p.Color == style.Color);
+        _colorPicker.Color = DocumentRenderer.ToColor(style.Color);
+        _colorSwatch.Background = new SolidColorBrush(DocumentRenderer.ToColor(style.Color));
+        ToolTipService.SetToolTip(_colors, "Color " + style.Color.ToHex());
         _widths.SelectedIndex = StylePresets.NearestStrokeIndex(style.StrokeWidth);
         _text.Visibility = showText ? Visibility.Visible : Visibility.Collapsed;
         if (state.Selected is TextAnnotation text) _text.Text = text.Text;
@@ -697,6 +788,8 @@ public sealed class EditorView : UserControl, IDisposable
         }
         _layers.SelectedItem = selectedItem;
         _updating = false;
+        _preview.Update(state);
+        UpdateCursor();
         _status.Text = $"{state.Document.ImageWidth} x {state.Document.ImageHeight} pixels{(IsDirty ? " - unsaved changes" : string.Empty)}";
         if (recoverFocus) _canvas.Focus(FocusState.Keyboard);
         _canvas.Invalidate();
@@ -738,7 +831,7 @@ public sealed class EditorView : UserControl, IDisposable
         if (_busy || _hostBusy || _disposed || !IsEnabled || XamlRoot is null) return false;
         if (modifiers == VirtualKeyModifiers.None) return HasFocusWithin(_canvas);
         for (var focused = FocusManager.GetFocusedElement(XamlRoot) as DependencyObject; focused is not null; focused = VisualTreeHelper.GetParent(focused))
-            if (focused is TextBox or NumberBox or AutoSuggestBox or RichEditBox or PasswordBox) return false;
+            if (focused is TextBox or NumberBox or AutoSuggestBox or RichEditBox or PasswordBox or ColorPicker) return false;
         return true;
     }
 
@@ -752,6 +845,7 @@ public sealed class EditorView : UserControl, IDisposable
 
     private void UpdateEnabled()
     {
+        UpdateCursor();
         var enabled = !_busy && !_hostBusy;
         if (IsEnabled && !enabled && HasFocusWithin(this))
             _focusBeforeBusy = FocusManager.GetFocusedElement(XamlRoot) as Control;
@@ -776,6 +870,7 @@ public sealed class EditorView : UserControl, IDisposable
         if (_disposed) return;
         _status.Opacity = _accessibility.HighContrast ? 1 : 0.75;
         _canvas.Invalidate();
+        _preview.Canvas.Invalidate();
     }
 
     private void ReleaseDocument()
@@ -791,6 +886,7 @@ public sealed class EditorView : UserControl, IDisposable
         _renderer = null;
         _bitmap?.Dispose();
         _bitmap = null;
+        UpdateCanvasPointer(false);
     }
 
     public void Dispose()
@@ -800,6 +896,11 @@ public sealed class EditorView : UserControl, IDisposable
         _systemColors.ColorValuesChanged -= _colorsChanged;
         if (_contrastNotificationsAvailable) _accessibility.HighContrastChanged -= _contrastChanged;
         ReleaseDocument();
+        _colors.Flyout.Hide();
+        ProtectedCursor = null;
+        foreach (var cursor in _cursors.Values) cursor.Dispose();
+        _cursors.Clear();
+        _preview.Dispose();
         _canvas.RemoveFromVisualTree();
     }
 

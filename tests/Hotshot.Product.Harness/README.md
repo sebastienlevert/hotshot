@@ -6,6 +6,9 @@ native control/automation checks, keyboard-focus traversal, XAML rendering and
 Win2D draw/export checks. It never invokes capture, WGC, recording, audio,
 clipboard, global input injection, user-library or signed-in provider flows.
 The accessibility fixture also hosts real native controls.
+Editor checks cover centered controls with gaps, full RGB/hex/transparency
+selection, custom-color saves, canvas-only editing cursors and a rendered
+thick green arrow preview beside the controls.
 GIF, recording and naming settings also verify that headings and cards remain
 left-aligned with the content gutter at compact, normal and 1920-DIP widths in
 both themes, with the shared page viewport capped at 920 DIPs.

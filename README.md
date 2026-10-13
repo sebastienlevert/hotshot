@@ -125,6 +125,10 @@ Annotate with arrows, shapes, text, ink, highlights, numbered steps, or pixelati
 
 Export remembers your last style. Save named presets to reuse a look; up to 50 presets are supported. Flattened exports omit AI/OCR text metadata.
 
+Choose any color, including transparency. The preview beside the controls shows
+your tool, color and thickness before you draw. Editing pointers change with
+the tool; the normal pointer returns outside the canvas.
+
 > [!WARNING]
 > **Redacting the visible image does not erase its private original or editable sidecar.** Saved redactions remove old AI/OCR text metadata, but originals can still contain sensitive content. Share only the flattened exported image, not the application-data folder or a backup containing originals. Pixelation is not the same as opaque redaction.
 
