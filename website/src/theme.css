@@ -172,8 +172,8 @@ kbd { border: 1px solid var(--cp-border-strong); border-bottom-width: 2px; borde
 .demo-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--cp-border); font-size: .8125rem; font-weight: 650; }
 .demo-header > span { display: inline-flex; align-items: center; gap: 8px; }
 .demo-header img { width: 22px; height: 22px; }
-.demo-tabs { display: flex; padding: 12px 14px; gap: 4px; }
-.demo-tabs button { flex: 1; border: 0; border-radius: 8px; padding: 8px 4px; font-size: .8125rem; font-weight: 650; background: var(--cp-surface-soft); color: var(--cp-text); }
+.demo-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 12px 14px; gap: 4px; }
+.demo-tabs button { min-width: 0; overflow-wrap: anywhere; border: 0; border-radius: 8px; padding: 8px 4px; font-size: .8125rem; font-weight: 650; background: var(--cp-surface-soft); color: var(--cp-text); }
 .demo-tabs button[aria-selected="true"] { background: var(--cp-brand-orange); color: var(--cp-brand-ink); }
 .demo-stage { padding: 4px 16px 18px; }
 .demo-canvas { position: relative; padding: 20px; background: var(--cp-bg-elevated); border-radius: 12px; min-height: 280px; overflow: hidden; }
@@ -211,6 +211,7 @@ input[type="range"] { accent-color: var(--cp-accent); min-width: 0; width: 100%;
 .product-video, .product-gallery figure { margin: 0 0 24px; }
 .product-video video { display: block; width: 100%; max-height: 72dvh; border: 1px solid var(--cp-border); border-radius: 12px; background: var(--cp-surface-soft); }
 .product-video figcaption, .product-gallery figcaption { margin-top: 12px; color: var(--cp-readable-muted); font-size: .875rem; }
+.video-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 16px; }
 .product-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
 .product-gallery img { display: block; width: 100%; height: auto; border: 1px solid var(--cp-border); border-radius: 10px; }
 .section h2 { font: 800 clamp(2.5rem, 4.5vw, 4rem)/1 var(--cp-display-font); letter-spacing: -.01em; }

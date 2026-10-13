@@ -139,7 +139,7 @@ test('real product media loads with captions and user-controlled playback', asyn
   await expect(video).not.toHaveAttribute('autoplay', /.*/);
   await expect(video.locator('track')).toHaveAttribute('src', /workflow\.vtt$/);
   await video.scrollIntoViewIfNeeded();
-  await video.evaluate(element => element.play());
+  await page.getByRole('button', { name: 'Play the 13-second walkthrough' }).click();
   await expect.poll(() => video.evaluate(element => element.duration)).toBeGreaterThan(10);
   await video.evaluate(element => element.pause());
   await expect(page.locator('.product-gallery img')).toHaveCount(2);

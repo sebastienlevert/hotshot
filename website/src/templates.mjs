@@ -97,9 +97,11 @@ export function home({ base, version, logo }) {
       <div class="product-heading"><h2>Not a mockup.<br>Your next workflow.</h2>
         <p>Actual WinUI windows, captured with Hotshot's native pipeline. The library contains generated demo content only — no personal screenshots, clipboard, microphone, or account data.</p></div>
       <figure class="product-video"><video controls preload="none" playsinline poster="${base}media/editor.png" aria-label="Real Hotshot editor walkthrough using generated content, thirteen seconds, no audio">
-        <source src="${base}media/workflow.mp4" type="video/mp4"><track kind="captions" src="${base}media/workflow.vtt" srclang="en" label="English descriptions">
+        <source data-video-src="${base}media/workflow.mp4" type="video/mp4"><track kind="captions" src="${base}media/workflow.vtt" srclang="en" label="English descriptions">
         Your browser cannot play this video. <a href="${base}media/workflow.mp4">Download the walkthrough</a>.
-      </video><figcaption>Real filename navigation and editable annotations. 13 seconds, no audio; optional captions describe the action.</figcaption></figure>
+      </video><div class="video-actions"><button class="button" data-video-play hidden>Play the 13-second walkthrough ${icon('arrow')}</button>
+        <a href="${base}media/workflow.mp4">Download the walkthrough</a></div>
+      <figcaption>Real filename navigation and editable annotations. 13 seconds, no audio; optional captions describe the action.</figcaption></figure>
       <div class="product-gallery">
         <figure><a href="${base}media/settings.png"><img src="${base}media/settings.png" alt="Real Hotshot Settings showing file-naming patterns, token dropdowns and examples" loading="lazy" decoding="async" width="2178" height="1489"></a><figcaption>Native Settings, not a browser wrapper.</figcaption></figure>
         <figure><a href="${base}media/comparison.png"><img src="${base}media/comparison.png" alt="Real Hotshot comparison window showing the pixel difference between two generated checkout captures" loading="lazy" decoding="async" width="2178" height="1489"></a><figcaption>Full-resolution visual comparison.</figcaption></figure>

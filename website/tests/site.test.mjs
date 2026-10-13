@@ -81,7 +81,7 @@ test('all internal links, assets, fragments and search URLs resolve under the pr
   }
   for (const file of anchors.keys()) {
     const html = await fs.readFile(path.join(output, file), 'utf8');
-    for (const match of html.matchAll(/\b(?:href|src)="([^"]+)"/g)) await check(match[1], file);
+    for (const match of html.matchAll(/\b(?:href|src|data-video-src)="([^"]+)"/g)) await check(match[1], file);
   }
   const index = JSON.parse(await fs.readFile(path.join(output, 'search.json'), 'utf8'));
   for (const record of index) await check(record.url, 'docs/index.html');
