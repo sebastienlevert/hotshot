@@ -46,7 +46,7 @@ jobs:
       NATIVE_UI_ROOT: C:\HotshotNativeUi\${{ github.run_id }}-${{ github.run_attempt }}\${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         id: sdk
         with:
           global-json-file: global.json
