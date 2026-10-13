@@ -9,6 +9,8 @@ The accessibility fixture also hosts real native controls.
 GIF, recording and naming settings also verify that headings and cards remain
 left-aligned with the content gutter at compact, normal and 1920-DIP widths in
 both themes, with the shared page viewport capped at 920 DIPs.
+Normal and wide windows exercise both collapsed and expanded navigation panes;
+the wide GIF-page images preserve their native aspect ratio.
 Generated-image policy checks exercise the production derivative-source helper,
 screenshot output/history persistence, app exclusions and unknown-source review
 without allowing a description provider to start.

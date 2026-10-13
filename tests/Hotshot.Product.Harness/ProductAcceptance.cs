@@ -251,50 +251,63 @@ internal static class ProductAcceptance
 
     private static async Task CheckSettingsAlignmentAsync(SettingsWindow settings, string output)
     {
-        var root = (FrameworkElement)settings.Content;
+        var root = (Grid)settings.Content;
+        var navigation = root.Children.OfType<NavigationView>().Single();
+        var previousTheme = root.RequestedTheme;
+        var previousBackground = root.Background;
         foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
         {
             root.RequestedTheme = theme;
+            root.Background = new SolidColorBrush(theme == ElementTheme.Dark
+                ? Windows.UI.Color.FromArgb(255, 32, 32, 32) : Windows.UI.Color.FromArgb(255, 249, 249, 249));
             foreach (var width in new[] { 520, 1100, 1920 })
             {
                 settings.AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(width * root.XamlRoot.RasterizationScale),
                     (int)(900 * root.XamlRoot.RasterizationScale)));
                 await UntilAsync(() => root.ActualWidth >= width - 24, "The fixture did not reach the requested settings width.");
-                foreach (var page in new[] { SettingsPage.Gif, SettingsPage.Recording, SettingsPage.Naming })
+                foreach (var paneOpen in width == 520 ? new[] { false } : new[] { false, true })
                 {
-                    settings.SelectPage(page);
-                    await ReadyAsync(settings);
-                    if (Math.Abs(root.ActualWidth - width) > 24)
-                        throw new InvalidDataException($"The fixture reached {root.ActualWidth:F1} DIPs rather than the requested {width}-DIP width.");
-                    var scroll = Find<ScrollViewer>(settings.Content, "SettingsContentScroll");
-                    var panel = scroll.Content as StackPanel ?? throw new InvalidDataException("Settings have no page panel.");
-                    var container = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(scroll) as Grid
-                        ?? throw new InvalidDataException("Settings have no padded content grid.");
-                    var scrollOrigin = scroll.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                    var panelOrigin = panel.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                    var containerOrigin = container.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                    var expectedLeft = containerOrigin.X + container.Padding.Left;
-                    var expectedWidth = Math.Min(920, container.ActualWidth - container.Padding.Left - container.Padding.Right);
-                    Console.WriteLine($"Settings {page} at {width} DIPs ({theme}): root={root.ActualWidth:F1}, expected={expectedLeft:F1}/{expectedWidth:F1}, scroll={scrollOrigin.X:F1}/{scroll.ActualWidth:F1}, panel={panelOrigin.X:F1}/{panel.ActualWidth:F1}.");
-                    if (Math.Abs(scrollOrigin.X - expectedLeft) > 1 || Math.Abs(panelOrigin.X - expectedLeft) > 1 ||
-                        Math.Abs(scroll.ActualWidth - expectedWidth) > 1)
-                        throw new InvalidDataException($"{page} at {width} DIPs ({theme}) is horizontally shifted: expected {expectedLeft:F1}/{expectedWidth:F1}, scroll {scrollOrigin.X:F1}/{scroll.ActualWidth:F1}, panel {panelOrigin.X:F1}.");
-                    var heading = panel.Children.OfType<TextBlock>().First();
-                    var headingOrigin = heading.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                    if (Math.Abs(headingOrigin.X - expectedLeft) > 1)
-                        throw new InvalidDataException("The settings heading does not align with the page's cards.");
-                    foreach (var card in panel.Children.OfType<CommunityToolkit.WinUI.Controls.SettingsCard>())
+                    navigation.IsPaneOpen = paneOpen;
+                    await Task.Delay(250);
+                    foreach (var page in new[] { SettingsPage.Gif, SettingsPage.Recording, SettingsPage.Naming })
                     {
-                        var cardOrigin = card.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                        if (Math.Abs(cardOrigin.X - expectedLeft) > 1 ||
-                            Math.Abs(card.ActualWidth - (panel.ActualWidth - panel.Padding.Left - panel.Padding.Right)) > 1)
-                            throw new InvalidDataException("A settings card does not align with or fill the page panel.");
+                        settings.SelectPage(page);
+                        await ReadyAsync(settings);
+                        if (Math.Abs(root.ActualWidth - width) > 24 || navigation.IsPaneOpen != paneOpen)
+                            throw new InvalidDataException($"The fixture did not reach the requested {width}-DIP width and pane state.");
+                        var scroll = Find<ScrollViewer>(settings.Content, "SettingsContentScroll");
+                        var panel = scroll.Content as StackPanel ?? throw new InvalidDataException("Settings have no page panel.");
+                        var container = VisualTreeHelper.GetParent(scroll) as Grid
+                            ?? throw new InvalidDataException("Settings have no padded content grid.");
+                        var scrollOrigin = scroll.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        var panelOrigin = panel.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        var containerOrigin = container.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        var expectedLeft = containerOrigin.X + container.Padding.Left;
+                        var expectedWidth = Math.Min(920, container.ActualWidth - container.Padding.Left - container.Padding.Right);
+                        Console.WriteLine($"Settings {page} at {width} DIPs ({theme}, paneOpen={paneOpen}): root={root.ActualWidth:F1}, expected={expectedLeft:F1}/{expectedWidth:F1}, scroll={scrollOrigin.X:F1}/{scroll.ActualWidth:F1}, panel={panelOrigin.X:F1}/{panel.ActualWidth:F1}.");
+                        if (Math.Abs(scrollOrigin.X - expectedLeft) > 1 || Math.Abs(panelOrigin.X - expectedLeft) > 1 ||
+                            Math.Abs(scroll.ActualWidth - expectedWidth) > 1)
+                            throw new InvalidDataException($"{page} at {width} DIPs ({theme}, paneOpen={paneOpen}) is horizontally shifted: expected {expectedLeft:F1}/{expectedWidth:F1}, scroll {scrollOrigin.X:F1}/{scroll.ActualWidth:F1}, panel {panelOrigin.X:F1}.");
+                        var heading = panel.Children.OfType<TextBlock>().First();
+                        var headingOrigin = heading.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        if (Math.Abs(headingOrigin.X - expectedLeft) > 1)
+                            throw new InvalidDataException("The settings heading does not align with the page's cards.");
+                        foreach (var card in panel.Children.OfType<CommunityToolkit.WinUI.Controls.SettingsCard>())
+                        {
+                            var cardOrigin = card.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                            if (Math.Abs(cardOrigin.X - expectedLeft) > 1 ||
+                                Math.Abs(card.ActualWidth - (panel.ActualWidth - panel.Padding.Left - panel.Padding.Right)) > 1)
+                                throw new InvalidDataException("A settings card does not align with or fill the page panel.");
+                        }
+                        if (page == SettingsPage.Gif && width == 1920 && paneOpen)
+                            await RenderAsync(settings, Path.Combine(output, $"gif-settings-{theme.ToString().ToLowerInvariant()}.png"),
+                                preserveAspectRatio: true);
                     }
-                    if (page == SettingsPage.Gif && width == 1920)
-                        await RenderAsync(settings, Path.Combine(output, $"gif-settings-{theme.ToString().ToLowerInvariant()}.png"));
                 }
             }
         }
+        root.RequestedTheme = previousTheme;
+        root.Background = previousBackground;
         settings.SelectPage(SettingsPage.Naming);
         await ReadyAsync(settings);
     }
@@ -507,10 +520,12 @@ internal static class ProductAcceptance
         await Task.Delay(150);
     }
 
-    private static async Task RenderAsync(Window window, string path)
+    private static async Task RenderAsync(Window window, string path, bool preserveAspectRatio = false)
     {
+        var root = (FrameworkElement)window.Content;
+        var height = preserveAspectRatio ? (int)Math.Round(960 * root.ActualHeight / root.ActualWidth) : 720;
         var bitmap = new RenderTargetBitmap();
-        await bitmap.RenderAsync((FrameworkElement)window.Content, 960, 720);
+        await bitmap.RenderAsync(root, 960, height);
         if (bitmap.PixelWidth < 100 || bitmap.PixelHeight < 100)
             throw new InvalidDataException("Native XAML rendering returned an empty surface.");
         var pixels = (await bitmap.GetPixelsAsync()).ToArray();
