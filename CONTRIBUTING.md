@@ -217,7 +217,7 @@ Website work requires **Node.js 24 or newer**. It is independent of the native a
 Set-Location website
 npm ci
 npm test
-npx playwright install chromium
+npx playwright install chromium webkit
 npm run test:browser
 npm run dev
 ```
@@ -277,4 +277,4 @@ For repair/bootstrap, maintainers can dispatch **Release Please and publish** wi
 
 Contributions are made under Hotshot's [MIT license](LICENSE). Use dependencies and assets with compatible licensing and preserve required notices.
 
-ShareX capability research used [REA](https://github.com/morluto/rea) to inspect the official ShareX assemblies. It informed independent native implementations; no ShareX GPL source, binaries, or UI are included. Preserve that boundary rather than copying implementation code.
+Hotshot's native workflows are independently implemented. Do not copy third-party source, binaries, or UI assets without compatible licensing and the required notices.

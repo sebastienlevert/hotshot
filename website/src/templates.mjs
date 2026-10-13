@@ -96,13 +96,13 @@ export function home({ base, version, logo }) {
     <section class="section product-section" id="in-action"><div class="container">
       <div class="product-heading"><h2>Not a mockup.<br>Your next workflow.</h2>
         <p>Actual WinUI windows, captured with Hotshot's native pipeline. The library contains generated demo content only — no personal screenshots, clipboard, microphone, or account data.</p></div>
-      <figure class="product-video"><video controls preload="metadata" playsinline poster="${base}media/editor.png" aria-label="Real Hotshot editor walkthrough using generated content, thirteen seconds, no audio">
+      <figure class="product-video"><video controls preload="none" playsinline poster="${base}media/editor.png" aria-label="Real Hotshot editor walkthrough using generated content, thirteen seconds, no audio">
         <source src="${base}media/workflow.mp4" type="video/mp4"><track kind="captions" src="${base}media/workflow.vtt" srclang="en" label="English descriptions">
         Your browser cannot play this video. <a href="${base}media/workflow.mp4">Download the walkthrough</a>.
       </video><figcaption>Real filename navigation and editable annotations. 13 seconds, no audio; optional captions describe the action.</figcaption></figure>
       <div class="product-gallery">
-        <figure><a href="${base}media/settings.png"><img src="${base}media/settings.png" alt="Real Hotshot Settings showing file-naming patterns, token dropdowns and examples" loading="lazy" width="2178" height="1489"></a><figcaption>Native Settings, not a browser wrapper.</figcaption></figure>
-        <figure><a href="${base}media/comparison.png"><img src="${base}media/comparison.png" alt="Real Hotshot comparison window showing the pixel difference between two generated checkout captures" loading="lazy" width="2178" height="1489"></a><figcaption>Full-resolution visual comparison.</figcaption></figure>
+        <figure><a href="${base}media/settings.png"><img src="${base}media/settings.png" alt="Real Hotshot Settings showing file-naming patterns, token dropdowns and examples" loading="lazy" decoding="async" width="2178" height="1489"></a><figcaption>Native Settings, not a browser wrapper.</figcaption></figure>
+        <figure><a href="${base}media/comparison.png"><img src="${base}media/comparison.png" alt="Real Hotshot comparison window showing the pixel difference between two generated checkout captures" loading="lazy" decoding="async" width="2178" height="1489"></a><figcaption>Full-resolution visual comparison.</figcaption></figure>
       </div><p class="small">High-DPI capture of fixture-owned windows. <a href="${base}docs/compatibility/">What was tested, and what was not</a>.</p>
     </div></section>
     <section class="section capability-section" id="features"><div class="container capability-layout">
@@ -158,7 +158,7 @@ export function home({ base, version, logo }) {
       <details><summary>Can I skip the installer?</summary><p>Yes. Extract the complete managed-portable ZIP into a permanent writable folder. Keep the files together. Installers and managed-portable releases support automatic updates.</p></details>
       <details><summary>Does OneDrive upload my screenshots?</summary><p>Hotshot settings sync shares portable preferences, not captures or history. A capture folder backed up by another service can still be uploaded independently.</p></details>
       <details><summary>What if Print Screen opens Snipping Tool?</summary><p>Disable Windows' screen-snipping shortcut for Print Screen, or choose another shortcut in Hotshot. <a href="${base}docs/troubleshooting/">Get troubleshooting help</a>.</p></details>
-      <details><summary>Is it a full ShareX replacement?</summary><p>Hotshot uses independently built, ShareX-inspired workflows with a native WinUI experience. It does not include upload services or fully automated scrolling. <a href="${base}docs/troubleshooting/#current-boundaries">Current limits</a>.</p></details>
+      <details><summary>Does Hotshot upload captures or scroll automatically?</summary><p>No. Hotshot keeps capture workflows local and uses guided scrolling. Public capture sharing, upload services, and fully automated scrolling are not included. <a href="${base}docs/troubleshooting/#current-boundaries">Current limits</a>.</p></details>
     </div></div></section>
   </main>`;
 }

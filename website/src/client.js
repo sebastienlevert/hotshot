@@ -24,26 +24,42 @@
     updateThemeLabel();
   });
 
+  const disclosures = [];
+  const mobileLayout = window.matchMedia('(max-width: 760px)');
   for (const [buttonSelector, panelSelector] of [['[data-nav-toggle]', '#site-nav'], ['[data-docs-toggle]', '#docs-sidebar']]) {
     const button = document.querySelector(buttonSelector);
     const panel = document.querySelector(panelSelector);
     if (!button || !panel) continue;
-    button.addEventListener('click', () => {
-      const open = panel.classList.toggle('open');
+    function setOpen(open, restoreFocus = false) {
+      panel.classList.toggle('open', open);
       button.setAttribute('aria-expanded', String(open));
-    });
+      if (button.matches('[data-nav-toggle]')) button.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+      if (restoreFocus && button.getClientRects().length) button.focus();
+    }
+    disclosures.push({ button, panel, close: restoreFocus => setOpen(false, restoreFocus) });
+    button.addEventListener('click', () => setOpen(!panel.classList.contains('open')));
     panel.addEventListener('click', event => {
       if (event.target.closest('a')) {
-        panel.classList.remove('open');
-        button.setAttribute('aria-expanded', 'false');
+        setOpen(false);
       }
     });
-    button.addEventListener('keydown', event => {
-      if (event.key === 'Escape') {
-        panel.classList.remove('open');
-        button.setAttribute('aria-expanded', 'false');
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && panel.classList.contains('open')) {
+        event.preventDefault();
+        setOpen(false, true);
       }
     });
+    document.addEventListener('pointerdown', event => {
+      if (panel.classList.contains('open') && !panel.contains(event.target) && !button.contains(event.target))
+        setOpen(false);
+    });
+    mobileLayout.addEventListener('change', () => setOpen(false, mobileLayout.matches && panel.contains(document.activeElement)));
+  }
+  const header = document.querySelector('.site-header');
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(() => {
+      document.documentElement.style.setProperty('--sticky-header-height', `${header.getBoundingClientRect().height}px`);
+    }).observe(header);
   }
 
   const dialog = document.querySelector('.search-dialog');
@@ -53,6 +69,14 @@
   let records;
   let loading;
   let lastTrigger;
+  function updateSearchViewport() {
+    const viewport = window.visualViewport;
+    dialog.style.setProperty('--search-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+    dialog.style.setProperty('--search-viewport-top', `${viewport?.offsetTop ?? 0}px`);
+  }
+  window.visualViewport?.addEventListener('resize', updateSearchViewport);
+  window.visualViewport?.addEventListener('scroll', updateSearchViewport);
+  window.addEventListener('resize', updateSearchViewport);
   async function loadIndex() {
     if (records) return records;
     if (!loading) {
@@ -103,7 +127,10 @@
   }
   function openSearch(trigger) {
     lastTrigger = trigger ?? document.activeElement;
+    disclosures.forEach(disclosure => disclosure.close(false));
+    updateSearchViewport();
     if (!dialog.open) dialog.showModal();
+    document.documentElement.classList.add('search-open');
     query.focus();
     query.select();
     void showResults();
@@ -112,7 +139,15 @@
     trigger.addEventListener('click', event => { event.preventDefault(); openSearch(trigger); });
   });
   document.querySelector('[data-search-close]').addEventListener('click', () => dialog.close());
-  dialog.addEventListener('close', () => lastTrigger?.focus());
+  dialog.addEventListener('close', () => {
+    document.documentElement.classList.remove('search-open');
+    lastTrigger?.focus();
+  });
+  dialog.addEventListener('click', event => {
+    const bounds = dialog.getBoundingClientRect();
+    if (event.target === dialog && (event.clientX < bounds.left || event.clientX > bounds.right ||
+        event.clientY < bounds.top || event.clientY > bounds.bottom)) dialog.close();
+  });
   query.addEventListener('input', () => { void showResults(); });
   dialog.addEventListener('keydown', event => {
     if (event.key === 'Escape') {

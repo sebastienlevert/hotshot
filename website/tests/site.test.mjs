@@ -42,11 +42,13 @@ test('all documented pages, search entries, and SEO files are generated', async 
     assert.match(html, /data-theme/);
     assert.match(html, /rel="canonical"/);
     assert.doesNotMatch(html, /\[!WARNING\]/);
+    assert.doesNotMatch(html, /share[-\s]?x/i);
   }
   const index = JSON.parse(await fs.readFile(path.join(output, 'search.json'), 'utf8'));
   assert.ok(index.length > documents.length);
   assert.ok(searchDocuments(index, 'OneDrive')[0].url.includes('onedrive'));
   assert.ok(searchDocuments(index, 'hotshot_capture_window').some(result => result.url.includes('agents')));
+  assert.doesNotMatch(JSON.stringify(index), /share[-\s]?x/i);
   for (const file of ['sitemap.xml', 'robots.txt', '404.html', '.nojekyll'])
     await fs.access(path.join(output, file));
   await fs.access(path.join(output, 'assets', 'display-font-license.txt'));
@@ -55,6 +57,7 @@ test('all documented pages, search entries, and SEO files are generated', async 
   assert.match(landing, /data:font\/woff2;base64,/);
   assert.doesNotMatch(landing, /__HOTSHOT_DISPLAY_FONT__/);
   assert.doesNotMatch(landing, /class="feature-grid"/);
+  assert.doesNotMatch(landing, /share[-\s]?x/i);
 });
 
 test('all internal links, assets, fragments and search URLs resolve under the project base path', async () => {
