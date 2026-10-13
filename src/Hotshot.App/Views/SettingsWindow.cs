@@ -36,7 +36,11 @@ internal sealed partial class SettingsWindow : Window
         PaneDisplayMode = NavigationViewPaneDisplayMode.Auto, OpenPaneLength = 230,
         AlwaysShowHeader = false,
     };
-    private readonly ScrollViewer _scroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    private readonly ScrollViewer _scroll = new()
+    {
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        HorizontalContentAlignment = HorizontalAlignment.Stretch,
+    };
     private readonly InfoBar _error = new() { IsClosable = true, Severity = InfoBarSeverity.Error };
     private readonly TextBlock _status = UiStyles.Description("Changes are saved automatically.");
     private TextBlock _updateStatus = UiStyles.Description(string.Empty);
@@ -136,6 +140,7 @@ internal sealed partial class SettingsWindow : Window
         };
 
         var content = new Grid { Padding = new Thickness(28, 24, 28, 16), RowSpacing = 12 };
+        content.ColumnDefinitions.Add(new ColumnDefinition { MaxWidth = 920 });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
