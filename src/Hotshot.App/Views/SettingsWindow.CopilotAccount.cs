@@ -20,7 +20,7 @@ internal sealed partial class SettingsWindow
     private Button? _copilotCheckAccount;
     private Button? _copilotCancelSignIn;
     private ProgressBar? _copilotAccountProgress;
-    private string _copilotAccountMessage = "Sign in here, or check an existing GitHub/Copilot sign-in. No separate CLI install is required.";
+    private string _copilotAccountMessage = "Sign in with your GitHub account.";
     public bool IsCopilotAccountBusy => _copilotAccountCancellation is not null;
 
     private void RenderCopilotAccount(StackPanel panel)
@@ -29,7 +29,7 @@ internal sealed partial class SettingsWindow
         UiStyles.LiveStatus(_copilotAccountStatus, "CopilotAccountStatus");
         _copilotSignIn = new Button { Content = "Sign in with GitHub" };
         _copilotCheckAccount = new Button { Content = "Check sign-in" };
-        _copilotCancelSignIn = new Button { Content = "Cancel sign-in" };
+        _copilotCancelSignIn = new Button { Content = "Cancel" };
         _copilotAccountProgress = new ProgressBar { IsIndeterminate = true };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(_copilotSignIn, "CopilotSignIn");
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetAutomationId(_copilotCheckAccount, "CopilotCheckSignIn");
@@ -40,8 +40,7 @@ internal sealed partial class SettingsWindow
         actions.Children.Add(_copilotCancelSignIn);
         Card(panel, "Copilot account", _copilotAccountStatus, actions);
         panel.Children.Add(_copilotAccountProgress);
-        Note(panel, "Your browser handles GitHub authorization with PKCE. The Copilot runtime owns credentials in Windows secure storage; Hotshot never puts tokens in settings, OneDrive or logs. " +
-            "Sign-in does not enable descriptions, change review/exclusion rules, grant coding-agent access, or send screenshots/model prompts. A GitHub Copilot subscription and an image-capable model are still required for descriptions.");
+        Note(panel, "Requires a GitHub Copilot plan. Signing in doesn't send screenshots.");
         _copilotSignIn.Click += async (_, _) => await ChangeCopilotAccountAsync(signIn: true);
         _copilotCheckAccount.Click += async (_, _) => await ChangeCopilotAccountAsync(signIn: false);
         _copilotCancelSignIn.Click += (_, _) => _copilotAccountCancellation?.Cancel();
@@ -67,7 +66,7 @@ internal sealed partial class SettingsWindow
         if (_closed || IsCopilotAccountBusy) return _copilotAccountTask ?? Task.CompletedTask;
         if (IsAiComponentBusy || _app.Descriptions?.IsBusy == true || IsQuickStartBusy)
         {
-            SetCopilotAccountMessage("Wait for active analysis, setup or component operations before changing the Copilot account.");
+            SetCopilotAccountMessage("Wait for the current task to finish.");
             return Task.CompletedTask;
         }
         var cancellation = new CancellationTokenSource(signIn ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(45));
@@ -84,7 +83,7 @@ internal sealed partial class SettingsWindow
         await Task.Yield();
         try
         {
-            SetCopilotAccountMessage(signIn ? "Preparing secure GitHub sign-in..." : "Checking authentication only; no screenshot or model request.");
+            SetCopilotAccountMessage(signIn ? "Opening GitHub sign-in..." : "Checking sign-in...");
             async Task RunAsync()
             {
                 var factory = _copilotAccountFactory ?? (token => CopilotAccountClient.ConnectAsync(
@@ -113,9 +112,9 @@ internal sealed partial class SettingsWindow
                     status = persisted;
                 }
                 SetCopilotAccountMessage(status.IsAuthenticated
-                    ? $"Signed in{(string.IsNullOrWhiteSpace(status.Login) ? "" : " as " + status.Login)}. Screenshot permissions are unchanged." +
-                        (status.Source == "env" ? " An environment credential takes priority over stored sign-ins." : "")
-                    : "Not signed in. Choose Sign in with GitHub. Screenshot permissions are unchanged.");
+                    ? $"Signed in{(string.IsNullOrWhiteSpace(status.Login) ? "" : " as " + status.Login)}." +
+                        (status.Source == "env" ? " A system sign-in takes priority." : "")
+                    : "Not signed in.");
             }
             if (_app.Descriptions is { } descriptions)
                 await descriptions.RunProviderMaintenanceAsync(RunAsync);
@@ -123,7 +122,7 @@ internal sealed partial class SettingsWindow
         }
         catch (OperationCanceledException)
         {
-            SetCopilotAccountMessage("Sign-in cancelled or timed out. Screenshot permissions are unchanged. Check sign-in if GitHub authorization had already completed.");
+            SetCopilotAccountMessage("Sign-in cancelled or timed out. Check sign-in if you finished in the browser.");
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException or
             HttpRequestException or JsonException or ArgumentException or TimeoutException or RemoteRpcException or
@@ -132,7 +131,7 @@ internal sealed partial class SettingsWindow
             // Authentication exceptions may contain callback addresses or credentials; never log their contents.
             Log.Warn($"Copilot account operation failed ({ex.GetType().Name}).");
             var message = ex is CopilotSignInException ? ex.Message :
-                "Could not complete the Copilot account operation. Check the runtime, network and browser, then retry. In Core, install the optional Copilot component first.";
+                "Could not sign in. Check your connection and Copilot setup, then try again.";
             SetCopilotAccountMessage(message);
             if (!_closed)
             {
@@ -174,7 +173,7 @@ internal sealed partial class SettingsWindow
         var choices = new ComboBox { ItemsSource = accounts.Select(account => account.Login).ToArray(), PlaceholderText = "Choose your GitHub account" };
         var dialog = new ContentDialog
         {
-            Title = "Choose the GitHub account for Copilot", Content = choices, PrimaryButtonText = "Use account",
+            Title = "Choose your GitHub account", Content = choices, PrimaryButtonText = "Use account",
             CloseButtonText = "Cancel", IsPrimaryButtonEnabled = false, XamlRoot = _navigation.XamlRoot,
         };
         choices.SelectionChanged += (_, _) => dialog.IsPrimaryButtonEnabled = choices.SelectedIndex >= 0;

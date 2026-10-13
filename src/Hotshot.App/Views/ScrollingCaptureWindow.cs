@@ -17,12 +17,12 @@ internal sealed class ScrollingCaptureWindow : Window
         _image = new ScrollingImage(first);
         _includeCursor = includeCursor;
         Title = "Hotshot scrolling capture";
-        var status = new TextBlock { Text = "1 frame captured.", TextWrapping = TextWrapping.Wrap };
-        var next = new Button { Content = "Add next frame" };
-        var save = new Button { Content = "Finish and save" };
+        var status = new TextBlock { Text = "1 part captured.", TextWrapping = TextWrapping.Wrap };
+        var next = new Button { Content = "Add next part" };
+        var save = new Button { Content = "Save" };
         var cancel = new Button { Content = "Cancel" };
         var body = new StackPanel { Spacing = 12, Padding = new Thickness(20) };
-        body.Children.Add(UiStyles.Description("Scroll the target down yourself, leaving at least one quarter of the previous content visible. Keep its position and size fixed. Select content only, without sticky headers."));
+        body.Children.Add(UiStyles.Description("Scroll down, keeping a quarter of the previous area visible. Don't move or resize the window. Avoid fixed headers."));
         body.Children.Add(status); body.Children.Add(next); body.Children.Add(save); body.Children.Add(cancel);
         next.Click += async (_, _) =>
         {
@@ -35,8 +35,8 @@ internal sealed class ScrollingCaptureWindow : Window
                 if (bounds.Intersect(Monitors.VirtualScreen) != bounds) throw new InvalidOperationException("The target region is no longer on screen.");
                 CapturedImage frame;
                 using (var screenshot = ScreenSnapshot.Take(bounds, _includeCursor)) frame = screenshot.ToImage();
-                var overlap = await Task.Run(() => _image.Append(frame));
-                status.Text = $"{_image.FrameCount} frames; {_image.Image.Width} x {_image.Image.Height} pixels; overlap {overlap} pixels.";
+                await Task.Run(() => _image.Append(frame));
+                status.Text = $"{_image.FrameCount} parts captured.";
             }
             catch (Exception ex) { Log.Error("Scrolling capture failed", ex); status.Text = ex.Message; }
             finally

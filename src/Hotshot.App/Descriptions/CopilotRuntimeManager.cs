@@ -34,9 +34,8 @@ internal sealed class CopilotRuntimeManager : IDisposable
         _bundled = BundledRuntimePath;
         _store = new CopilotComponentStore(Path.Combine(dataDirectory, "components", "copilot"), AppVersion, Runtime,
             canChange: canChange);
-        Status = HasBundledRuntime ? "Full edition: the stdio Copilot runtime is bundled. No component download is needed." :
-            HasManagedComponent ? "A local component receipt exists; compatibility and SHA256 are checked before use." :
-            "The optional Copilot component is not installed. Screenshot analysis and coding-agent access remain unchanged.";
+        Status = HasBundledRuntime ? "Included with Hotshot." :
+            HasManagedComponent ? "Copilot is installed." : "Install Copilot to use screenshot descriptions.";
     }
 
     public static string BundledRuntimePath => Path.Combine(AppContext.BaseDirectory, "runtimes",
@@ -51,21 +50,19 @@ internal sealed class CopilotRuntimeManager : IDisposable
             var external = _externalRuntime();
             if (!string.IsNullOrWhiteSpace(external))
                 return File.Exists(external)
-                    ? "Your configured external runtime remains selected. Installing/removing a managed component never changes that preference."
-                    : "Your configured external runtime is missing. No bundled/managed fallback is selected; choose a valid runtime or clear the preference.";
-            if (HasBundledRuntime) return "Full edition: bundled Copilot runtime available; no download is needed.";
+                    ? "Using your custom Copilot file."
+                    : "Custom Copilot file missing. Choose another file or use Hotshot's Copilot.";
+            if (HasBundledRuntime) return "Included with Hotshot.";
             var manifest = _store.ReadInstalledManifest();
-            return manifest is null ? "Optional Copilot component not installed." :
-                $"Local Copilot component from Hotshot {manifest.AppVersion}; SDK {manifest.CopilotSdkVersion}, {manifest.Runtime}. " +
-                (manifest.AppVersion == AppVersion ? "Matches this release." : "Retained across app updates: exact SDK/architecture compatibility is required.");
+            return manifest is null ? "Install Copilot to use screenshot descriptions." : "Copilot is installed.";
         }, cancellationToken);
         SetStatus(status);
     }
 
     public async Task InstallAsync(IProgress<ComponentProgress>? progress, CancellationToken cancellationToken)
     {
-        if (HasBundledRuntime) throw new InvalidOperationException("The Full edition already includes the runtime.");
-        SetStatus("Preparing the explicitly requested component installation...");
+        if (HasBundledRuntime) throw new InvalidOperationException("Copilot is already included with Hotshot.");
+        SetStatus("Preparing installation...");
         try
         {
             await Task.Run(() => _store.InstallAsync(new ReleaseAssetDownloader(_http), TestRuntimeAsync,
@@ -77,11 +74,11 @@ internal sealed class CopilotRuntimeManager : IDisposable
 
     public async Task RemoveAsync(CancellationToken cancellationToken = default)
     {
-        SetStatus("Removing only verified, managed component directories...");
+        SetStatus("Removing Copilot...");
         try
         {
             await _store.RemoveAsync(cancellationToken: cancellationToken);
-            SetStatus("Managed Copilot component removed. External/bundled runtimes, images, AI settings and agent permissions are unchanged.");
+            SetStatus("Copilot removed. Your screenshots and settings are unchanged.");
         }
         finally { StatusChanged?.Invoke(); }
     }

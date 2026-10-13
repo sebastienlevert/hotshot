@@ -32,7 +32,7 @@ internal static class VideoTrimDialog
         Update(false);
         var body = new StackPanel { Spacing = 8 };
         body.Children.Add(preview); body.Children.Add(start); body.Children.Add(end); body.Children.Add(summary);
-        body.Children.Add(UiStyles.Description("Drag the start/end handles or use arrow keys. A separate MP4 is written; the original remains unchanged."));
+        body.Children.Add(UiStyles.Description("Drag the handles to choose what to keep. Saves a new video; your original stays unchanged."));
         var dialog = new ContentDialog { Title = "Trim recording", Content = new ScrollViewer { Content = body, MaxHeight = 500 },
             PrimaryButtonText = "Choose destination", CloseButtonText = "Cancel", XamlRoot = root };
         dialog.PrimaryButtonClick += (_, args) =>

@@ -42,7 +42,7 @@ internal sealed partial class SettingsWindow : Window
         HorizontalContentAlignment = HorizontalAlignment.Stretch,
     };
     private readonly InfoBar _error = new() { IsClosable = true, Severity = InfoBarSeverity.Error };
-    private readonly TextBlock _status = UiStyles.Description("Changes are saved automatically.");
+    private readonly TextBlock _status = UiStyles.Description("Saved automatically.");
     private TextBlock _updateStatus = UiStyles.Description(string.Empty);
     private TextBlock _agentStatus = UiStyles.Description(string.Empty);
     private TextBlock _aiStatus = UiStyles.Description(string.Empty);
@@ -99,7 +99,7 @@ internal sealed partial class SettingsWindow : Window
         AddPage(SettingsPage.Gif, "GIF conversion", Symbol.RepeatAll);
         AddPage(SettingsPage.Hotkeys, "Keyboard shortcuts", Symbol.Keyboard);
         AddPage(SettingsPage.Naming, "File naming", Symbol.Folder);
-        AddPage(SettingsPage.Agents, "Coding agents", Symbol.Remote);
+        AddPage(SettingsPage.Agents, "AI assistants", Symbol.Remote);
         AddPage(SettingsPage.About, "About Hotshot", Symbol.Help, footer: true);
         _navigation.SelectionChanged += (_, args) =>
         {
@@ -282,9 +282,9 @@ internal sealed partial class SettingsWindow : Window
         yield return new(SettingsPage.Capture, "Show magnifier", "zoom pixels selection screenshot");
         yield return new(SettingsPage.Capture, "Show crosshair", "alignment selection screenshot");
         yield return new(SettingsPage.Capture, "Include cursor", "mouse pointer screenshot");
-        yield return new(SettingsPage.Capture, "Describe screenshots with Copilot", "ai description summary search metadata image properties privacy");
+        yield return new(SettingsPage.Capture, "Copilot descriptions", "ai describe screenshots summary search metadata image properties privacy");
         yield return new(SettingsPage.Capture, "Copilot account", "github sign in login authenticate browser account credentials");
-        yield return new(SettingsPage.Capture, "Recognize screenshot text locally", "ocr copy search text offline privacy");
+        yield return new(SettingsPage.Capture, "Read text in screenshots", "recognize ocr copy search text offline locally privacy");
         yield return new(SettingsPage.Capture, "Screenshot delay", "countdown timed capture seconds");
         foreach (var action in Enum.GetValues<HotkeyAction>())
             yield return new(SettingsPage.Hotkeys, action.DisplayName(), $"shortcut hotkey keyboard {action.Description()}");
@@ -300,25 +300,25 @@ internal sealed partial class SettingsWindow : Window
         yield return new(SettingsPage.Recording, "Also create a GIF", "convert animation mp4");
         yield return new(SettingsPage.Gif, "Frame rate", "fps frames animation");
         yield return new(SettingsPage.Gif, "Maximum width", "size scale resize animation");
-        yield return new(SettingsPage.Gif, "Dither colors", "palette gradient animation");
+        yield return new(SettingsPage.Gif, "Smoother colors", "dither palette gradient animation");
         yield return new(SettingsPage.Gif, "Loop animation", "repeat gif");
         yield return new(SettingsPage.About, "Automatic updates", "version releases github download install");
-        yield return new(SettingsPage.About, "Diagnostics", "logs errors troubleshooting");
-        yield return new(SettingsPage.Agents, "Agent access", "mcp coding agents screenshots automation permissions");
-        yield return new(SettingsPage.Agents, "Allow history access", "mcp search ocr descriptions privacy");
-        yield return new(SettingsPage.Agents, "Connect a coding agent", "copilot claude cursor vscode codex mcp configuration skills");
-        yield return new(SettingsPage.Agents, "Plugins and skills", "marketplace install visual verification screenshot");
+        yield return new(SettingsPage.About, "Troubleshooting", "diagnostics logs errors");
+        yield return new(SettingsPage.Agents, "Allow assistant access", "mcp coding agents screenshots automation permissions");
+        yield return new(SettingsPage.Agents, "Allow saved screenshots", "history mcp search ocr descriptions privacy");
+        yield return new(SettingsPage.Agents, "Connect an assistant", "coding agent copilot claude cursor vscode codex mcp configuration skills");
+        yield return new(SettingsPage.Agents, "Extra tools", "plugins skills marketplace install visual verification screenshot");
         yield return new(SettingsPage.General, "Keep saved captures searchable", "library retention archive history");
         yield return new(SettingsPage.General, "Settings across devices", "onedrive sync roaming preferences machines cloud settings");
-        yield return new(SettingsPage.Capture, "Review before cloud analysis", "ai privacy redact approval");
-        yield return new(SettingsPage.Capture, "Exclude applications from AI", "privacy process cloud");
+        yield return new(SettingsPage.Capture, "Review before sending", "ai cloud analysis privacy redact approval");
+        yield return new(SettingsPage.Capture, "Exclude apps", "applications ai privacy process cloud");
         yield return new(SettingsPage.Recording, "Microphone device", "audio input selection");
-        yield return new(SettingsPage.Agents, "Allowed agent applications", "privacy restrictions allowlist");
-        yield return new(SettingsPage.Agents, "Allow agent monitor capture", "permissions privacy monitor");
-        yield return new(SettingsPage.Agents, "Allow agent region capture", "permissions privacy region");
-        yield return new(SettingsPage.Agents, "Timed session access only", "approval permissions session expire");
-        yield return new(SettingsPage.Agents, "Approve each agent request", "consent permissions approval");
-        yield return new(SettingsPage.Capture, "Unobscured window screenshots", "wgc windows graphics hdr dpi");
+        yield return new(SettingsPage.Agents, "Allowed apps", "agent applications privacy restrictions allowlist");
+        yield return new(SettingsPage.Agents, "Allow full-screen capture", "agent permissions privacy monitor");
+        yield return new(SettingsPage.Agents, "Allow area capture", "agent permissions privacy region");
+        yield return new(SettingsPage.Agents, "Temporary access only", "timed approval permissions session expire");
+        yield return new(SettingsPage.Agents, "Ask each time", "agent request consent permissions approval");
+        yield return new(SettingsPage.Capture, "Capture covered windows", "unobscured wgc windows graphics hdr dpi");
     }
 
     private void NavigateSearch(SearchResult result)
@@ -366,86 +366,87 @@ internal sealed partial class SettingsWindow : Window
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
         panel.Children.Add(UiStyles.Description(page switch
         {
-            SettingsPage.General => "Make Hotshot work the way you do. Changes apply immediately.",
-            SettingsPage.Capture => "Fast, silent screenshots. Saved as PNG and copied without opening a window.",
-            SettingsPage.Hotkeys => "Global shortcuts that work while Hotshot is in the tray.",
-            SettingsPage.Naming => "Organize captures with folders and filename tokens.",
-            SettingsPage.Recording => "Record a window or region with optional audio.",
-            SettingsPage.Gif => "Turn recordings into shareable animations. Original videos are kept.",
-            SettingsPage.Agents => "Give coding agents native screenshot tools through a local MCP server.",
-            _ => "A lightweight native capture utility, always one shortcut away.",
+            SettingsPage.General => "Make Hotshot yours.",
+            SettingsPage.Capture => "Capture quietly. Edit when you want.",
+            SettingsPage.Hotkeys => "Capture without opening Hotshot.",
+            SettingsPage.Naming => "Choose how your files are named.",
+            SettingsPage.Recording => "Choose video and sound options.",
+            SettingsPage.Gif => "Turn a recording into a GIF.",
+            SettingsPage.Agents => "Let trusted assistants use your screenshots.",
+            _ => "Screenshots, recordings and quick edits.",
         }));
         switch (page)
         {
             case SettingsPage.General:
-                Section(panel, "Appearance and behavior");
-                Choice(panel, "App theme", "Follow Windows or choose a light or dark appearance.",
+                Section(panel, "Appearance");
+                Choice(panel, "App theme", "Match Windows, or choose light or dark.",
                     Enum.GetValues<AppTheme>(), _draft.General.Theme, v => _draft.General.Theme = v);
                 Toggle(panel, "Start with Windows", "Run in the tray when you sign in.", _draft.General.StartWithWindows, v => _draft.General.StartWithWindows = v);
                 Section(panel, "Output");
                 CapturesFolder(panel);
-                Toggle(panel, "Copy captures to clipboard", "PNG images for screenshots; files for recordings and GIFs.", _draft.General.CopyToClipboard, v => _draft.General.CopyToClipboard = v);
-                Toggle(panel, "Save captures to files", "Keep captures on disk as well as in recent history.", _draft.General.SaveToFile, v => _draft.General.SaveToFile = v);
+                Toggle(panel, "Copy captures to clipboard", "Ready to paste after capturing.", _draft.General.CopyToClipboard, v => _draft.General.CopyToClipboard = v);
+                Toggle(panel, "Save captures to files", "Save automatically to your folder.", _draft.General.SaveToFile, v => _draft.General.SaveToFile = v);
                 Section(panel, "History and editor");
                 Number(panel, "Recent captures", "Saved files are never deleted when history is trimmed.", _draft.General.HistorySize, 5, 500, v => _draft.General.HistorySize = v);
-                Toggle(panel, "Keep saved captures searchable", "Keep saved files in the library indefinitely. The recent-capture limit then applies only to temporary captures.",
+                Toggle(panel, "Keep saved captures searchable", "Keep saved files in history, without a time limit.",
                     _draft.Library.KeepSavedCaptures, value => _draft.Library.KeepSavedCaptures = value);
-                Note(panel, "Library actions in the workspace provide reviewed storage cleanup, local backups, restore and relinking moved files. Originals are never automatically deleted.");
-                Note(panel, "Click the tray icon to open the editor and history. Nothing opens automatically after a screenshot.");
+                Note(panel, "Click Hotshot in the taskbar tray to browse and edit.");
                 SettingsSynchronization(panel);
                 break;
             case SettingsPage.Capture:
-                Section(panel, "Text recognition");
-                Toggle(panel, "Recognize screenshot text locally",
-                    "Index text in new screenshots using Windows OCR. Nothing is uploaded; requires an installed OCR language.",
+                Section(panel, "Text");
+                Toggle(panel, "Read text in screenshots",
+                    "Works on this device. Nothing is sent.",
                     _draft.General.RecognizeScreenshotText, value => _draft.General.RecognizeScreenshotText = value);
-                Number(panel, "Screenshot delay", "Wait before showing the selection overlay or capturing the screen. 0 captures immediately.",
+                Number(panel, "Screenshot delay", "Wait this many seconds. 0 means no delay.",
                     _draft.Capture.DelaySeconds, 0, 30, value => _draft.Capture.DelaySeconds = value);
-                Section(panel, "AI descriptions");
-                Toggle(panel, "Describe screenshots with Copilot",
-                    "Send new screenshots to your signed-in GitHub Copilot account. Descriptions are searchable in history and embedded in PNG metadata. Uses your Copilot quota.",
+                Section(panel, "Copilot");
+                Toggle(panel, "Copilot descriptions",
+                    "Sends screenshots to GitHub Copilot. Uses your Copilot plan.",
                     _draft.General.DescribeScreenshots, value => _draft.General.DescribeScreenshots = value);
-                Note(panel, "Off by default. Screenshots may contain sensitive information; enable only when you are comfortable sending their contents to Copilot. Image analysis runs after saving, without delaying the clipboard.");
-                Toggle(panel, "Review before cloud analysis", "Hold new captures until you review/redact, save, and choose Analyze selected screenshot in the workspace.",
+                Toggle(panel, "Review before sending", "Choose which screenshots to send after hiding anything private.",
                     _draft.General.ReviewBeforeAiUpload, value => _draft.General.ReviewBeforeAiUpload = value);
-                TextInput(panel, "Exclude applications from AI", string.Join(", ", _draft.General.AiExcludedApps),
+                TextInput(panel, "Exclude apps", string.Join(", ", _draft.General.AiExcludedApps),
                     value => _draft.General.AiExcludedApps = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-                Note(panel, "Use process names such as password-manager.exe. Exclusions use the capture's recorded application, not content detection; a monitor capture may contain other applications. Use review mode when in doubt.");
+                Note(panel, "Whole-screen captures may still include excluded apps. Review before sending.");
                 _aiStatus = UiStyles.Description(string.Empty);
                 RefreshAiStatus();
                 panel.Children.Add(_aiStatus);
-                RenderAiComponent(panel, _app.CopilotRuntime);
                 RenderCopilotAccount(panel);
-                var runtime = new Button { Content = "Choose optional Copilot runtime" };
+                RenderAiComponent(panel, _app.CopilotRuntime);
+                var advanced = new StackPanel { Spacing = 8 };
+                var runtime = new Button { Content = "Choose custom Copilot file" };
                 runtime.Click += async (_, _) =>
                 {
-                    if (IsCopilotAccountBusy) { SetCopilotAccountMessage("Finish or cancel sign-in before changing its runtime."); return; }
-                    var picker = new FileOpenPicker(AppWindow.Id) { Title = "Choose SDK-compatible copilot-runtime.exe", FileTypeFilter = { ".exe" } };
+                    if (IsCopilotAccountBusy) { SetCopilotAccountMessage("Finish or cancel sign-in first."); return; }
+                    var picker = new FileOpenPicker(AppWindow.Id) { Title = "Choose copilot-runtime.exe", FileTypeFilter = { ".exe" } };
                     var selected = await picker.PickSingleFileAsync();
                     if (selected is null) return;
                     _draft.General.CopilotRuntimePath = selected.Path;
                     Changed();
                 };
-                panel.Children.Add(runtime);
-                var bundled = new Button { Content = "Use app-managed Copilot runtime" };
+                advanced.Children.Add(UiStyles.Description("For custom Copilot installations only."));
+                advanced.Children.Add(runtime);
+                var bundled = new Button { Content = "Use Hotshot's Copilot" };
                 bundled.Click += (_, _) =>
                 {
-                    if (IsCopilotAccountBusy) { SetCopilotAccountMessage("Finish or cancel sign-in before changing its runtime."); return; }
+                    if (IsCopilotAccountBusy) { SetCopilotAccountMessage("Finish or cancel sign-in first."); return; }
                     _draft.General.CopilotRuntimePath = null; Changed();
                 };
-                panel.Children.Add(bundled);
-                Note(panel, "Full includes the runtime. Core uses an explicitly installed optional component or your selected SDK-compatible external runtime. Installation never enables cloud analysis or signs into an account.");
+                advanced.Children.Add(bundled);
+                panel.Children.Add(new Expander { Header = "Advanced", Content = advanced,
+                    HorizontalAlignment = HorizontalAlignment.Stretch });
                 Section(panel, "Selection");
                 Toggle(panel, "Snap to windows", "Click a window instead of dragging a region.", _draft.Capture.SnapToWindows, v => _draft.Capture.SnapToWindows = v);
                 Toggle(panel, "Show magnifier", "Inspect individual pixels while selecting a region.", _draft.Capture.ShowMagnifier, v => _draft.Capture.ShowMagnifier = v);
                 Toggle(panel, "Show crosshair", "Align the selection precisely.", _draft.Capture.ShowCrosshair, v => _draft.Capture.ShowCrosshair = v);
                 Toggle(panel, "Include cursor", "Include the mouse pointer in the saved screenshot.", _draft.Capture.IncludeCursor, v => _draft.Capture.IncludeCursor = v);
-                Toggle(panel, "Unobscured window screenshots", "Capture a selected window through Windows Graphics Capture, even when another window covers it. Unsupported/protected targets report an error; no silent desktop fallback. Uses the cursor setting and may show a Windows capture border.",
+                Toggle(panel, "Capture covered windows", "Capture a window even when another window covers it.",
                     _draft.Capture.UnobscuredWindows, value => _draft.Capture.UnobscuredWindows = value);
-                Note(panel, "Drag a region, click a window, or press Space for the monitor under the cursor. Escape cancels.");
+                Note(panel, "Drag an area or click a window. Space captures the screen; Esc cancels.");
                 break;
             case SettingsPage.Hotkeys:
-                Section(panel, "Activation shortcuts");
+                Section(panel, "Shortcuts");
                 foreach (var action in Enum.GetValues<HotkeyAction>())
                 {
                     var label = UiStyles.Description(string.Empty);
@@ -463,16 +464,16 @@ internal sealed partial class SettingsWindow : Window
                 var windows = new Button { Content = "Open Windows keyboard settings" };
                 windows.Click += (_, _) => CaptureActions.OpenPath("ms-settings:easeofaccess-keyboard");
                 Card(panel, "Print Screen and Snipping Tool",
-                    UiStyles.Description("If Windows reserves Print Screen, turn off its Snipping Tool option or choose another shortcut."), windows);
+                    UiStyles.Description("Already used by Windows? Change its setting or choose another shortcut."), windows);
                 break;
             case SettingsPage.Naming:
-                Section(panel, "Naming patterns");
+                Section(panel, "File names");
                 Pattern(panel, "Screenshots", _draft.Naming.ScreenshotPattern, CaptureKind.Region, v => _draft.Naming.ScreenshotPattern = v);
                 Pattern(panel, "Recordings and GIFs", _draft.Naming.RecordingPattern, CaptureKind.Recording, v => _draft.Naming.RecordingPattern = v);
-                Note(panel, @"Use \ for subfolders. Extensions are automatic and collisions receive a numeric suffix.");
+                Note(panel, @"Use \ for subfolders. Duplicate names get a number.");
                 var tokens = new SettingsExpander
                 {
-                    Header = "Available tokens", Description = "Reference examples for filename patterns.",
+                    Header = "Available fields", Description = "Add dates, app names and more.",
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                 };
                 var sample = NamingContext.Sample();
@@ -488,34 +489,34 @@ internal sealed partial class SettingsWindow : Window
                 Number(panel, "Countdown", "Seconds before recording begins.", _draft.Recording.CountdownSeconds, 0, 10, v => _draft.Recording.CountdownSeconds = v);
                 Section(panel, "Audio");
                 Toggle(panel, "Record system audio", "Include audio played by Windows and apps.", _draft.Recording.CaptureSystemAudio, v => _draft.Recording.CaptureSystemAudio = v);
-                Toggle(panel, "Record microphone", "Use the default Windows microphone.", _draft.Recording.CaptureMicrophone, v => _draft.Recording.CaptureMicrophone = v);
+                Toggle(panel, "Record microphone", "Include your voice.", _draft.Recording.CaptureMicrophone, v => _draft.Recording.CaptureMicrophone = v);
                 MicrophoneChoice(panel);
-                Toggle(panel, "Also create a GIF", "Convert after recording and keep the MP4.", _draft.Recording.AlsoCreateGif, v => _draft.Recording.AlsoCreateGif = v);
-                Note(panel, "Disable both audio sources for silent video. Recording regions must fit within a single monitor.");
+                Toggle(panel, "Also create a GIF", "Keep the video and make a GIF too.", _draft.Recording.AlsoCreateGif, v => _draft.Recording.AlsoCreateGif = v);
+                Note(panel, "Choose an area on one screen. Turn off both audio options for silent video.");
                 break;
             case SettingsPage.Gif:
                 Section(panel, "Animation");
                 Number(panel, "Frame rate", "Lower frame rates produce smaller files.", _draft.Gif.FramesPerSecond, 5, 30, v => _draft.Gif.FramesPerSecond = v);
-                Number(panel, "Maximum width", "0 keeps the source width; aspect ratio is preserved.", _draft.Gif.MaxWidth, 0, 3840, v => _draft.Gif.MaxWidth = v);
-                Toggle(panel, "Dither colors", "Smooth gradients in the GIF's limited color palette.", _draft.Gif.Dither, v => _draft.Gif.Dither = v);
-                Toggle(panel, "Loop animation", "Repeat the animation continuously.", _draft.Gif.Loop, v => _draft.Gif.Loop = v);
-                Note(panel, "GIFs have no audio. Select a recording in history to convert it.");
+                Number(panel, "Maximum width", "Width in pixels. 0 keeps the original size.", _draft.Gif.MaxWidth, 0, 3840, v => _draft.Gif.MaxWidth = v);
+                Toggle(panel, "Smoother colors", "Reduce harsh color changes.", _draft.Gif.Dither, v => _draft.Gif.Dither = v);
+                Toggle(panel, "Loop animation", "Play again automatically.", _draft.Gif.Loop, v => _draft.Gif.Loop = v);
+                Note(panel, "Select a recording in history to make a GIF. GIFs have no sound.");
                 break;
             case SettingsPage.Agents:
                 Section(panel, "Permissions");
-                Toggle(panel, "Agent access",
-                    "Allow local coding agents running as your Windows user to list targets and capture them without another prompt. Off by default.",
+                Toggle(panel, "Allow assistant access",
+                    "Let assistants take screenshots. Only enable for assistants you trust.",
                     _draft.Agents.Enabled, value => _draft.Agents.Enabled = value);
-                Toggle(panel, "Allow history access",
-                    "Separately allow agents to search previous captures, OCR and AI descriptions, and read capture images by ID.",
+                Toggle(panel, "Allow saved screenshots",
+                    "Let assistants read and search your saved screenshots.",
                     _draft.Agents.AllowHistoryAccess, value => _draft.Agents.AllowHistoryAccess = value);
-                Toggle(panel, "Timed session access only", "Require a grant for this Hotshot run. No grant survives restart; existing app restrictions still apply.",
+                Toggle(panel, "Temporary access only", "Access expires when time runs out or Hotshot restarts.",
                     _draft.Agents.SessionAccessOnly, value => _draft.Agents.SessionAccessOnly = value);
-                Number(panel, "Agent session duration", "Minutes for a native access grant.", _draft.Agents.SessionMinutes, 5, 240,
+                Number(panel, "Access duration", "Minutes before temporary access expires.", _draft.Agents.SessionMinutes, 5, 240,
                     value => _draft.Agents.SessionMinutes = value);
-                Toggle(panel, "Approve each agent request", "Ask before capture or historical-content requests. Status, activity and generated connection tests do not need approval.",
+                Toggle(panel, "Ask each time", "Ask before taking or reading a screenshot.",
                     _draft.Agents.ApproveRequests, value => _draft.Agents.ApproveRequests = value);
-                var grant = new Button { Content = "Grant timed agent session" };
+                var grant = new Button { Content = "Allow temporary access" };
                 grant.Click += async (_, _) =>
                 {
                     await PersistAsync();
@@ -523,29 +524,29 @@ internal sealed partial class SettingsWindow : Window
                     catch (InvalidOperationException ex) { _error.Title = "Agent access"; _error.Message = ex.Message; _error.IsOpen = true; }
                 };
                 panel.Children.Add(grant);
-                var revoke = new Button { Content = "Revoke timed session" };
+                var revoke = new Button { Content = "End access" };
                 revoke.Click += (_, _) => _app.AgentServer?.RevokeSession();
                 panel.Children.Add(revoke);
-                Toggle(panel, "Allow agent monitor capture", "Permit whole-monitor requests. An allowed-app list disables this automatically.",
+                Toggle(panel, "Allow full-screen capture", "Unavailable when access is limited to specific apps.",
                     _draft.Agents.AllowMonitorCapture, value => _draft.Agents.AllowMonitorCapture = value);
-                Toggle(panel, "Allow agent region capture", "Permit arbitrary screen regions. An allowed-app list disables this automatically.",
+                Toggle(panel, "Allow area capture", "Unavailable when access is limited to specific apps.",
                     _draft.Agents.AllowRegionCapture, value => _draft.Agents.AllowRegionCapture = value);
-                TextInput(panel, "Allowed agent applications", string.Join(", ", _draft.Agents.AllowedApps),
+                TextInput(panel, "Allowed apps", string.Join(", ", _draft.Agents.AllowedApps),
                     value => _draft.Agents.AllowedApps = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-                Note(panel, "Leave the list empty to allow any target. Otherwise only listed process names can be captured/read from history. This is target filtering, not a guarantee that a window is unobscured.");
-                Note(panel, "Images returned to a coding agent may be sent to its model provider. Only enable access for agents you trust. Captures follow your save, clipboard, cursor, delay, OCR and Copilot-description settings; agents cannot change settings or control the mouse/keyboard.");
+                Note(panel, "Leave empty to allow all apps. Overlapping windows may still appear in screenshots.");
+                Note(panel, "Assistants may send screenshots to their AI service.");
                 _agentStatus = UiStyles.Description(string.Empty);
                 RefreshAgentStatus();
                 panel.Children.Add(_agentStatus);
-                var test = new Button { Content = "Test connection with generated image" };
+                var test = new Button { Content = "Test connection" };
                 test.Click += async (_, _) => await TestAgentConnectionAsync(test);
                 panel.Children.Add(test);
-                var activity = new Button { Content = "View agent activity" };
+                var activity = new Button { Content = "View activity" };
                 activity.Click += async (_, _) =>
                 {
                     var lines = _app.AgentServer?.Activity.Reverse().Select(entry =>
                         $"{entry.Timestamp:t}  {entry.Operation}  {(entry.Success ? "Completed" : entry.ErrorCode ?? "Failed")}") ?? [];
-                    await new ContentDialog { Title = "Local agent activity (this run)", Content = new ScrollViewer
+                    await new ContentDialog { Title = "Assistant activity", Content = new ScrollViewer
                         { Content = new TextBlock { Text = string.Join("\n", lines), TextWrapping = TextWrapping.Wrap }, MaxHeight = 400 },
                         CloseButtonText = "Close", XamlRoot = _navigation.XamlRoot }.ShowAsync();
                 };
@@ -555,25 +556,25 @@ internal sealed partial class SettingsWindow : Window
             case SettingsPage.About:
                 panel.Children.Add(new Image { Source = Logo(), Width = 96, Height = 96, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 24, 0, 12) });
                 Section(panel, "Hotshot");
-                Note(panel, $"Version {typeof(SettingsWindow).Assembly.GetName().Version?.ToString(3)} - native Windows screenshots, recordings and annotation.");
-                Note(panel, "A PowerToys-inspired experience built with WinUI 3. Captures stay local unless you enable Copilot screenshot descriptions or share them with a coding agent.");
+                Note(panel, $"Version {typeof(SettingsWindow).Assembly.GetName().Version?.ToString(3)}");
+                Note(panel, "Your captures stay on this device unless you choose to share them.");
                 Section(panel, "Updates");
                 _checkUpdates = new Button { Content = "Check now" };
                 _checkUpdates.Click += async (_, _) => { if (_app.Updates is { } updates) await updates.CheckAsync(); };
                 _updateStatus = UiStyles.Description(string.Empty);
                 Card(panel, "Automatic updates", _updateStatus, _checkUpdates);
                 RefreshUpdateStatus();
-                Note(panel, "New versions download from GitHub Releases. Updates restart Hotshot silently only when capture, recording and editing are idle.");
-                var releases = new Button { Content = "Open GitHub Releases" };
+                Note(panel, "Updates install when you're not capturing or editing.");
+                var releases = new Button { Content = "What's new" };
                 releases.Click += (_, _) => CaptureActions.OpenPath(Hotshot.Updates.AutomaticUpdates.RepositoryUrl + "/releases/latest");
                 panel.Children.Add(releases);
                 var guide = new Button { Content = "Quick start guide" };
                 guide.Click += async (_, _) => await ShowQuickStartAsync();
                 panel.Children.Add(guide);
-                var logs = new Button { Content = "Open diagnostic log" };
+                var logs = new Button { Content = "Open log" };
                 logs.Click += (_, _) => CaptureActions.OpenPath(Log.FilePath);
-                Card(panel, "Diagnostics", UiStyles.Description("Local logs help diagnose capture and shortcut issues."), logs);
-                var diagnostic = new Button { Content = "Show diagnostics" };
+                Card(panel, "Troubleshooting", UiStyles.Description("Details to help solve a problem."), logs);
+                var diagnostic = new Button { Content = "Show details" };
                 diagnostic.Click += async (_, _) =>
                 {
                     diagnostic.IsEnabled = false;
@@ -619,10 +620,10 @@ internal sealed partial class SettingsWindow : Window
         var errors = _draft.Validate();
         if (errors.Count > 0)
         {
-            _error.Title = "These changes cannot be applied";
+            _error.Title = "Check these settings";
             _error.Message = string.Join(Environment.NewLine, errors);
             _error.IsOpen = true;
-            _status.Text = "Invalid changes have not been saved.";
+            _status.Text = "Not saved yet.";
             return;
         }
         var snapshot = _draft.Clone();
@@ -641,7 +642,7 @@ internal sealed partial class SettingsWindow : Window
         else if (!_closed)
         {
             _error.Title = "Settings could not be saved";
-            _error.Message = "Your last saved configuration is still available. See the diagnostic log.";
+            _error.Message = "Your previous settings are safe. Check the log for details.";
             _error.IsOpen = true;
         }
     }
@@ -667,7 +668,7 @@ internal sealed partial class SettingsWindow : Window
         var dialog = new ContentDialog
         {
             Title = action.DisplayName(), Content = input, PrimaryButtonText = "Apply",
-            SecondaryButtonText = "Clear shortcut", CloseButtonText = "Cancel", XamlRoot = _navigation.XamlRoot,
+            SecondaryButtonText = "Clear", CloseButtonText = "Cancel", XamlRoot = _navigation.XamlRoot,
         };
         dialog.Opened += (_, _) => input.Focus(FocusState.Programmatic);
         var result = await dialog.ShowAsync();
@@ -689,7 +690,7 @@ internal sealed partial class SettingsWindow : Window
     private void RefreshUpdateStatus()
     {
         if (_closed) return;
-        _updateStatus.Text = _app.Updates?.Status ?? "Update service is starting.";
+        _updateStatus.Text = _app.Updates?.Status ?? "Starting...";
         if (_checkUpdates is not null)
             _checkUpdates.IsEnabled = _app.Updates is { IsManaged: true, IsChecking: false };
     }
@@ -699,8 +700,8 @@ internal sealed partial class SettingsWindow : Window
         if (!_closed)
         {
             var clients = _app.AgentServer?.Clients ?? [];
-            _agentStatus.Text = (_app.AgentServer?.Status ?? "Agent service is starting.") + "\n" +
-                string.Join("\n", clients.Select(client => $"{client.ProcessName} PID {client.ProcessId}: {(client.Connected ? "connected" : "last seen")} {client.LastSeen:t}"));
+            _agentStatus.Text = (_app.AgentServer?.Status ?? "Starting...") + "\n" +
+                string.Join("\n", clients.Select(client => $"{client.ProcessName}: {(client.Connected ? "connected" : "last seen")} {client.LastSeen:t}"));
         }
     }
 
@@ -708,7 +709,9 @@ internal sealed partial class SettingsWindow : Window
     {
         if (!_closed)
         {
-            _aiStatus.Text = $"{_app.Descriptions?.Status}\n{_app.Descriptions?.ProviderStatus}";
+            _aiStatus.Text = _app.Descriptions?.Status ?? string.Empty;
+            _aiStatus.Visibility = _draft.General.DescribeScreenshots || _app.Descriptions?.IsBusy == true
+                ? Visibility.Visible : Visibility.Collapsed;
             RefreshCopilotAccountActions();
             RefreshAiComponentActions();
         }
@@ -732,7 +735,7 @@ internal sealed partial class SettingsWindow : Window
             _draft.Recording.MicrophoneDeviceId = device.Id.Length == 0 ? null : device.Id;
             Changed();
         };
-        Card(panel, "Microphone device", UiStyles.Description("Choose an active input endpoint. If it disappears, recording reports a warning before falling back."), input);
+        Card(panel, "Microphone device", UiStyles.Description("Choose which microphone to use."), input);
     }
 
     private void TextInput(StackPanel panel, string title, string value, Action<string> update)
@@ -740,7 +743,7 @@ internal sealed partial class SettingsWindow : Window
         var input = new TextBox { Text = value, MinWidth = 180, MaxWidth = 320 };
         AutomationProperties.SetName(input, title);
         input.TextChanged += (_, _) => { if (!_rendering) { update(input.Text); Changed(); } };
-        Card(panel, title, UiStyles.Description("Comma-separated process names."), input);
+        Card(panel, title, UiStyles.Description("App filenames, separated by commas. Example: app.exe"), input);
     }
 
     private void AgentConnections(StackPanel panel)
@@ -761,40 +764,45 @@ internal sealed partial class SettingsWindow : Window
         }
         choices.SelectionChanged += (_, _) => Update();
         Update();
-        var copy = new Button { Content = "Copy MCP configuration" };
+        var copy = new Button { Content = "Copy connection settings" };
         copy.Click += async (_, _) =>
         {
             if (!File.Exists(executable))
             {
-                _error.Title = "MCP server is not installed";
-                _error.Message = "Use the packaged Hotshot release, or publish the MCP project into the application's Mcp directory.";
+                _error.Title = "Connection unavailable";
+                _error.Message = "Reinstall Hotshot to restore assistant connections.";
                 _error.IsOpen = true;
                 return;
             }
             if (!await ClipboardService.SetTextAsync(_app.MessageWindowHandle, preview.Text))
             {
-                _error.Title = "Could not copy the MCP configuration";
+                _error.Title = "Could not copy settings";
                 _error.Message = "Another application is using the clipboard.";
                 _error.IsOpen = true;
             }
         };
         var body = new StackPanel { Spacing = 8 };
         body.Children.Add(choices);
-        body.Children.Add(location);
-        body.Children.Add(preview);
         body.Children.Add(copy);
-        Card(panel, "Connect a coding agent", body);
+        var manual = new StackPanel { Spacing = 8 };
+        manual.Children.Add(location);
+        manual.Children.Add(preview);
+        body.Children.Add(new Expander { Header = "Manual setup", Content = manual,
+            HorizontalAlignment = HorizontalAlignment.Stretch });
+        Card(panel, "Connect an assistant", body);
         var plugins = new StackPanel { Spacing = 8 };
-        plugins.Children.Add(UiStyles.Description("Install the Hotshot capture, visual verification and library-search skills from the repository marketplace. No agent configuration files are changed automatically."));
-        plugins.Children.Add(new TextBox
+        plugins.Children.Add(UiStyles.Description("Add Hotshot tools to your assistant."));
+        var commands = new TextBox
         {
             IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
             Text = "Copilot CLI:\ncopilot plugin marketplace add sebastienlevert/hotshot\ncopilot plugin install hotshot@hotshot\n\nClaude Code:\n/plugin marketplace add sebastienlevert/hotshot\n/plugin install hotshot@hotshot",
-        });
-        var docs = new Button { Content = "Open agent integration guide" };
+        };
+        plugins.Children.Add(new Expander { Header = "Install commands", Content = commands,
+            HorizontalAlignment = HorizontalAlignment.Stretch });
+        var docs = new Button { Content = "Connection guide" };
         docs.Click += (_, _) => CaptureActions.OpenPath("https://github.com/sebastienlevert/hotshot/blob/main/agents/README.md");
         plugins.Children.Add(docs);
-        Card(panel, "Plugins and skills", plugins);
+        Card(panel, "Extra tools", plugins);
     }
 
     private void Toggle(StackPanel panel, string title, string description, bool current, Action<bool> changed)
@@ -848,7 +856,7 @@ internal sealed partial class SettingsWindow : Window
             }
         };
         var body = new StackPanel { Spacing = 8 };
-        body.Children.Add(UiStyles.Description("Choose the root folder for all saved screenshots and recordings."));
+        body.Children.Add(UiStyles.Description("Where screenshots and recordings are saved."));
         body.Children.Add(path);
         body.Children.Add(browse);
         Card(panel, "Captures folder", body);
@@ -868,16 +876,16 @@ internal sealed partial class SettingsWindow : Window
             changed(value);
             var invalid = FileNameTemplate.FindInvalidTokens(value);
             preview.Text = invalid.Count == 0 ? "Example: " + FileNameTemplate.BuildRelativePath(value, sample)
-                : "Unknown tokens: " + string.Join(", ", invalid);
+                : "Unknown fields: " + string.Join(", ", invalid);
         }
         input.TextChanged += (_, _) => { Update(input.Text); Changed(); };
         var tokens = new ComboBox
         {
-            PlaceholderText = "Insert a token",
+            PlaceholderText = "Add a field",
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
         };
-        AutomationProperties.SetName(tokens, $"Insert token into {title}");
+        AutomationProperties.SetName(tokens, $"Add a field to {title}");
         AutomationProperties.SetAutomationId(tokens, $"Naming{kind}Tokens");
         foreach (var token in FileNameTemplate.Tokens)
         {
@@ -899,7 +907,7 @@ internal sealed partial class SettingsWindow : Window
             input.Select(start + token.Length, 0);
         };
         var body = new StackPanel { Spacing = 8 };
-        body.Children.Add(UiStyles.Description("Type a pattern or insert a token at the cursor. Examples show how each token expands."));
+        body.Children.Add(UiStyles.Description("Type a name and add fields such as the date."));
         body.Children.Add(input);
         body.Children.Add(tokens);
         body.Children.Add(preview);

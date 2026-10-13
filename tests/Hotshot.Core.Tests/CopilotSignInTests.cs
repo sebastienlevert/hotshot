@@ -72,7 +72,7 @@ public sealed class CopilotSignInTests
     {
         await using var client = new Client(new(CopilotSignInStepKind.PlaintextRequired));
         var error = await Assert.ThrowsAsync<CopilotSignInException>(() => RunAsync(client, cancellationToken: TestContext.Current.CancellationToken));
-        Assert.Contains("plaintext", error.Message, StringComparison.Ordinal);
+        Assert.Contains("securely", error.Message, StringComparison.Ordinal);
         Assert.Empty(client.Advanced);
         Assert.Equal("generated-flow", Assert.Single(client.Cancelled));
     }
@@ -145,7 +145,7 @@ public sealed class CopilotSignInTests
         var cleanupFailure = new IOException("Generated cleanup failure");
         await using var client = new Client(new(CopilotSignInStepKind.PlaintextRequired)) { CancelFailure = cleanupFailure };
         var error = await Assert.ThrowsAsync<CopilotSignInException>(() => RunAsync(client, cancellationToken: TestContext.Current.CancellationToken));
-        Assert.Contains("plaintext", error.Message, StringComparison.Ordinal);
+        Assert.Contains("securely", error.Message, StringComparison.Ordinal);
         Assert.Same(cleanupFailure, error.Data["Hotshot.SignInCancellationError"]);
     }
 

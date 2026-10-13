@@ -9,9 +9,13 @@ namespace Hotshot.Views;
 
 internal sealed partial class SettingsWindow
 {
+    private TextBlock? _syncDetails;
+    private Button? _syncKeepLocal;
+    private Button? _syncUseShared;
+
     private void SettingsSynchronization(StackPanel panel)
     {
-        Section(panel, "Settings across devices");
+        Section(panel, "OneDrive");
         var body = new StackPanel { Spacing = 8 };
         _syncStatus = UiStyles.Description(string.Empty);
         AutomationProperties.SetAutomationId(_syncStatus, "SettingsSyncStatus");
@@ -22,50 +26,56 @@ internal sealed partial class SettingsWindow
             HorizontalAlignment = HorizontalAlignment.Stretch };
         AutomationProperties.SetName(choice, "OneDrive settings folder");
         body.Children.Add(choice);
-        var use = new Button { Content = "Use OneDrive preferences", IsEnabled = folders.Length > 0 };
+        var use = new Button { Content = "Use OneDrive", IsEnabled = folders.Length > 0 };
         use.Click += async (_, _) =>
         {
             if (choice.SelectedItem is OneDriveFolder folder) await ChangeSettingsLocationAsync(SettingsSyncMode.OneDrive, folder.Path);
         };
         body.Children.Add(use);
-        var choose = new Button { Content = "Choose another OneDrive folder" };
+        var choose = new Button { Content = "Choose OneDrive folder" };
         choose.Click += async (_, _) =>
         {
-            var selected = await new FolderPicker(AppWindow.Id) { Title = "Choose the local OneDrive root folder" }.PickSingleFolderAsync();
+            var selected = await new FolderPicker(AppWindow.Id) { Title = "Choose your OneDrive folder" }.PickSingleFolderAsync();
             if (selected is not null) await ChangeSettingsLocationAsync(SettingsSyncMode.OneDrive, selected.Path);
         };
         body.Children.Add(choose);
-        var local = new Button { Content = "Use local preferences only" };
+        var local = new Button { Content = "Keep on this device" };
         local.Click += async (_, _) => await ChangeSettingsLocationAsync(SettingsSyncMode.Local, null);
         body.Children.Add(local);
-        var reload = new Button { Content = "Reload shared preferences" };
+        var reload = new Button { Content = "Reload settings" };
         reload.Click += async (_, _) =>
         {
             if (HasPendingChanges)
             {
-                _error.Title = "Settings have unapplied changes";
-                _error.Message = "Fix or apply your edits before reloading shared preferences.";
+                _error.Title = "Save your changes first";
+                _error.Message = "Fix any settings errors before reloading.";
                 _error.IsOpen = true;
                 return;
             }
             await _app.ReloadSharedSettingsAsync(manual: true);
         };
         body.Children.Add(reload);
-        var resolveMine = new Button { Content = "Resolve conflict using this machine's preferences" };
+        var resolveMine = _syncKeepLocal = new Button { Content = "Keep this device's settings" };
         resolveMine.Click += async (_, _) => await ResolveSharedConflictAsync(true);
-        var resolveRemote = new Button { Content = "Resolve conflict using OneDrive preferences" };
+        var resolveRemote = _syncUseShared = new Button { Content = "Use OneDrive's settings" };
         resolveRemote.Click += async (_, _) => await ResolveSharedConflictAsync(false);
         body.Children.Add(resolveMine); body.Children.Add(resolveRemote);
-        body.Children.Add(UiStyles.Description("OneDrive stores Apps\\Hotshot\\settings.json. Theme, hotkeys, naming, capture/recording options, saved searches and export presets roam. Paths, layouts, microphone IDs, counters, AI upload/review and agent permissions remain local. Capture files, originals, history and credentials are not synchronized."));
-        body.Children.Add(UiStyles.Description("OneDrive's client handles cloud transport. Valid changes reload when this app is idle and Settings is not being edited. Simultaneous offline edits can conflict; local proposals and the shared backup are retained instead of silently choosing a winner."));
+        body.Children.Add(UiStyles.Description("Share preferences across devices. Captures, sign-ins and permissions stay on this device."));
+        _syncDetails = UiStyles.Description(string.Empty);
+        body.Children.Add(new Expander { Header = "File locations", Content = _syncDetails,
+            HorizontalAlignment = HorizontalAlignment.Stretch });
         Card(panel, "Settings across devices", body);
+        RefreshSyncStatus();
     }
 
     private void RefreshSyncStatus()
     {
         if (_closed) return;
-        _syncStatus.Text = _app.SettingsSyncStatus + "\nShared file: " + (_app.SharedSettingsFile ?? "None") +
-            "\nLocal cache and device overrides: " + _app.Paths.SettingsFile;
+        _syncStatus.Text = _app.SettingsSyncStatus;
+        if (_syncDetails is not null)
+            _syncDetails.Text = "OneDrive: " + (_app.SharedSettingsFile ?? "Not used") + "\nThis device: " + _app.Paths.SettingsFile;
+        if (_syncKeepLocal is not null) _syncKeepLocal.Visibility = _app.SettingsSyncConflict ? Visibility.Visible : Visibility.Collapsed;
+        if (_syncUseShared is not null) _syncUseShared.Visibility = _app.SettingsSyncConflict ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ReloadSharedPreferences()
@@ -80,9 +90,9 @@ internal sealed partial class SettingsWindow
         await PersistAsync();
         if (HasPendingChanges) return;
         var message = mode == SettingsSyncMode.Local
-            ? "Keep the current preferences on this machine. The existing OneDrive file will not be deleted."
-            : $"Store portable preferences under {root}\\Apps\\Hotshot\\settings.json. If a shared file already exists, load it while retaining this machine's paths and permissions.";
-        if (await new ContentDialog { Title = "Change settings location?", Content = message, PrimaryButtonText = "Apply",
+            ? "Keep settings on this device. Your OneDrive copy won't be deleted."
+            : "Share preferences through OneDrive. Existing shared settings will be loaded; this device's folders and permissions stay unchanged.";
+        if (await new ContentDialog { Title = "Change where settings are kept?", Content = message, PrimaryButtonText = "Apply",
             CloseButtonText = "Cancel", XamlRoot = _navigation.XamlRoot }.ShowAsync() != ContentDialogResult.Primary) return;
         if (!await _app.ConfigureSettingsSyncAsync(mode, root))
         { _error.Title = "Settings location could not be changed"; _error.Message = _app.SettingsSyncStatus; _error.IsOpen = true; }
@@ -92,9 +102,9 @@ internal sealed partial class SettingsWindow
     private async Task ResolveSharedConflictAsync(bool local)
     {
         if (!_app.SettingsSyncConflict) { RefreshSyncStatus(); return; }
-        var message = local ? "Replace the shared portable preferences with your current edits on this machine. Device-specific values are not uploaded." :
-            "Discard local portable edits and use the current OneDrive preferences. Device paths and permissions remain local.";
-        if (await new ContentDialog { Title = "Resolve shared-settings conflict?", Content = message, PrimaryButtonText = "Use selected preferences",
+        var message = local ? "Replace OneDrive's shared preferences with this device's. Folders and permissions won't be shared." :
+            "Replace this device's shared preferences with OneDrive's. Folders and permissions won't change.";
+        if (await new ContentDialog { Title = "Which settings should be kept?", Content = message, PrimaryButtonText = "Use these settings",
             CloseButtonText = "Cancel", XamlRoot = _navigation.XamlRoot }.ShowAsync() != ContentDialogResult.Primary) return;
         var source = local ? _draft.Clone() : null;
         if (await _app.ConfigureSettingsSyncAsync(_app.SettingsSyncMode, null, useLocalConflict: local, proposed: source))

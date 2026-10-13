@@ -88,7 +88,7 @@ public sealed class RoamingSettingsStore
                 {
                     _configuration.PendingLocalChanges = true;
                     SaveConfiguration();
-                    SetStatus("Changes saved locally; OneDrive is unavailable and will be retried.");
+                    SetStatus("Saved on this device. OneDrive will be retried.");
                 }
                 return candidate;
             }
@@ -105,7 +105,7 @@ public sealed class RoamingSettingsStore
                     WriteShared(serialized, remote.Hash);
                 _local.Save(result);
                 SetBaseline(merged, Hash(serialized));
-                SetStatus("Preferences saved in OneDrive. Upload/sync is handled by the OneDrive client.");
+                SetStatus("Saved to OneDrive.");
                 return result;
             }
             catch (SettingsSyncConflictException ex)
@@ -149,7 +149,7 @@ public sealed class RoamingSettingsStore
                 if (_configuration.PendingLocalChanges && Hash(serialized) != remote.Hash) WriteShared(serialized, remote.Hash);
                 _local.Save(updated);
                 SetBaseline(merged, _configuration.PendingLocalChanges ? Hash(serialized) : remote.Hash);
-                SetStatus("OneDrive preferences loaded; device paths and permissions were kept local.");
+                SetStatus("OneDrive settings loaded.");
                 return updated;
             }
             catch (SettingsSyncConflictException ex) { HasConflict = true; Error(ex.Message); return null; }
@@ -174,7 +174,7 @@ public sealed class RoamingSettingsStore
             SaveConfiguration();
             if (mode == SettingsSyncMode.Local)
             {
-                SharedFilePath = null; _local.Save(current); SetStatus("Preferences are stored locally. The existing OneDrive file is not deleted.");
+                SharedFilePath = null; _local.Save(current); SetStatus("Kept on this device. Your OneDrive copy stays unchanged.");
                 return current.Clone();
             }
             return LoadShared(current, seed: true);
@@ -198,7 +198,7 @@ public sealed class RoamingSettingsStore
             if (useThisMachine && Hash(json) != remote.Hash) WriteShared(json, remote.Hash);
             _local.Save(result);
             SetBaseline(portable, useThisMachine ? Hash(json) : remote.Hash);
-            SetStatus("The selected preferences were applied. OneDrive handles transport to other machines.");
+            SetStatus("Settings applied. OneDrive will sync them.");
             return result;
         }
     }
@@ -215,7 +215,7 @@ public sealed class RoamingSettingsStore
                 var json = EncodeDocument(portable);
                 WriteShared(json, expectedHash: null);
                 SetBaseline(portable, Hash(json));
-                SetStatus("Portable preferences were copied to OneDrive. Device-specific settings remain in the local cache.");
+                SetStatus("Preferences copied to OneDrive.");
                 return local;
             }
             var remote = ReadShared();
@@ -226,7 +226,7 @@ public sealed class RoamingSettingsStore
             if (_configuration.PendingLocalChanges && Hash(jsonResult) != remote.Hash) WriteShared(jsonResult, remote.Hash);
             _local.Save(result);
             SetBaseline(merged, _configuration.PendingLocalChanges ? Hash(jsonResult) : remote.Hash);
-            SetStatus("Portable preferences loaded from OneDrive; local device settings were retained.");
+            SetStatus("OneDrive settings loaded.");
             return result;
         }
         catch (SettingsSyncConflictException ex) { HasConflict = true; Error(ex.Message); return local; }
@@ -239,10 +239,10 @@ public sealed class RoamingSettingsStore
 
     private bool ResolveSharedPath()
     {
-        if (_configuration.Mode == SettingsSyncMode.Local) { SharedFilePath = null; SetStatus("Preferences are stored locally."); return false; }
+        if (_configuration.Mode == SettingsSyncMode.Local) { SharedFilePath = null; SetStatus("Kept on this device."); return false; }
         var root = _configuration.Mode == SettingsSyncMode.OneDrive ? _configuration.OneDriveRoot : _discoverRoot();
         if (string.IsNullOrWhiteSpace(root) || !Path.IsPathFullyQualified(root) || !Directory.Exists(root))
-        { SharedFilePath = null; SetStatus("OneDrive folder is unavailable. Preferences remain in the local cache."); return false; }
+        { SharedFilePath = null; SetStatus("OneDrive unavailable. Settings kept on this device."); return false; }
         SharedFilePath = Path.Combine(root, "Apps", "Hotshot", "settings.json");
         return true;
     }

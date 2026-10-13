@@ -11,6 +11,9 @@ left-aligned with the content gutter at compact, normal and 1920-DIP widths in
 both themes, with the shared page viewport capped at 920 DIPs.
 Normal and wide windows exercise both collapsed and expanded navigation panes;
 the wide GIF-page images preserve their native aspect ratio.
+Default Settings pages also check that descriptions stay under 30 words,
+technical setup text stays out of the default view, and Copilot permissions
+remain unchanged. `settings-plain-language.png` shows the simplified page.
 Generated-image policy checks exercise the production derivative-source helper,
 screenshot output/history persistence, app exclusions and unknown-source review
 without allowing a description provider to start.

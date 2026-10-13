@@ -17,17 +17,18 @@ internal sealed class ComparisonWindow : Window
     private readonly CapturedImage _after;
     private readonly ComparisonViewport _viewport;
     private readonly TextBlock _summary = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock _measurements = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _zoom = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _exportStatus = new() { TextWrapping = TextWrapping.Wrap };
     private readonly InfoBar _error = new() { Severity = InfoBarSeverity.Error, IsClosable = true };
     private readonly ProgressBar _progress = new() { IsIndeterminate = true, Height = 3, Visibility = Visibility.Collapsed };
-    private readonly Button _export = new() { Content = "Export local report…", IsEnabled = false };
-    private readonly NumberBox _tolerance = Number("Tolerance / 255", 8, 0, 255);
-    private readonly NumberBox _offsetX = Number("After X offset (px)", 0, int.MinValue, int.MaxValue);
-    private readonly NumberBox _offsetY = Number("After Y offset (px)", 0, int.MinValue, int.MaxValue);
+    private readonly Button _export = new() { Content = "Save report…", IsEnabled = false };
+    private readonly NumberBox _tolerance = Number("Ignore small differences (0-255)", 8, 0, 255);
+    private readonly NumberBox _offsetX = Number("Move After sideways (pixels)", 0, int.MinValue, int.MaxValue);
+    private readonly NumberBox _offsetY = Number("Move After vertically (pixels)", 0, int.MinValue, int.MaxValue);
     private readonly TextBox _ignored = new()
     {
-        Header = "Ignored rectangles: x,y,width,height (one per line, before-image pixels)",
+        Header = "Areas to ignore: x,y,width,height",
         PlaceholderText = "Example: 20,30,100,40",
         AcceptsReturn = true,
         TextWrapping = TextWrapping.NoWrap,
@@ -53,7 +54,7 @@ internal sealed class ComparisonWindow : Window
         _ignored.Text = string.Join(Environment.NewLine, _resultOptions.IgnoredRegions.Select(region =>
             string.Create(CultureInfo.InvariantCulture, $"{region.X},{region.Y},{region.Width},{region.Height}")));
         _viewport = new ComparisonViewport(before.Width, before.Height, after.Width, after.Height);
-        Title = "Hotshot visual comparison";
+        Title = "Hotshot screenshot comparison";
         var mode = new ComboBox { ItemsSource = new[] { "Before", "After", "Difference", "Swipe" }, SelectedIndex = 2, MinWidth = 135 };
         AutomationProperties.SetName(mode, "Comparison display mode");
         AutomationProperties.SetAutomationId(mode, "ComparisonMode");
@@ -63,11 +64,11 @@ internal sealed class ComparisonWindow : Window
         fit.Click += (_, _) => _viewport.Fit();
         var actual = new Button { Content = "100%" };
         AutomationProperties.SetAutomationId(_zoom, "ComparisonZoomStatus");
-        var cancel = new Button { Content = "Cancel work" };
+        var cancel = new Button { Content = "Cancel" };
         cancel.Click += (_, _) => _active?.Cancel();
         AutomationProperties.SetAutomationId(actual, "ComparisonActualPixels");
         actual.Click += (_, _) => _viewport.ActualPixels();
-        ToolTipService.SetToolTip(actual, "One image pixel per physical screen pixel");
+        ToolTipService.SetToolTip(actual, "Show the original size");
         _viewport.ZoomChanged += percent => _zoom.Text = $"{percent:F0}%";
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         toolbar.Children.Add(mode); toolbar.Children.Add(fit); toolbar.Children.Add(actual);
@@ -75,15 +76,16 @@ internal sealed class ComparisonWindow : Window
         _export.Click += async (_, _) => await ExportAsync();
         AutomationProperties.SetAutomationId(_export, "ComparisonExport");
         UiStyles.LiveStatus(_summary, "ComparisonSummary");
+        AutomationProperties.SetAutomationId(_measurements, "ComparisonDetails");
         UiStyles.LiveStatus(_exportStatus, "ComparisonExportStatus");
         AutomationProperties.SetAutomationId(_error, "ComparisonError");
-        var swipe = new Slider { Minimum = 0, Maximum = 100, Value = 50, Width = 230, Header = "Swipe: after on left, before on right" };
+        var swipe = new Slider { Minimum = 0, Maximum = 100, Value = 50, Width = 230, Header = "Slide between images" };
         AutomationProperties.SetAutomationId(swipe, "ComparisonSwipe");
         swipe.ValueChanged += (_, args) => _viewport.SetSwipe(args.NewValue / 100);
-        var draw = new CheckBox { Content = "Drag to ignore a rectangle", VerticalAlignment = VerticalAlignment.Bottom };
+        var draw = new CheckBox { Content = "Drag to ignore an area", VerticalAlignment = VerticalAlignment.Bottom };
         draw.Checked += (_, _) => _viewport.DrawIgnoredRegions = true;
         draw.Unchecked += (_, _) => _viewport.DrawIgnoredRegions = false;
-        var clear = new Button { Content = "Clear ignored regions", VerticalAlignment = VerticalAlignment.Bottom };
+        var clear = new Button { Content = "Clear ignored areas", VerticalAlignment = VerticalAlignment.Bottom };
         clear.Click += (_, _) => _ignored.Text = "";
         var tools = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16 };
         tools.Children.Add(swipe); tools.Children.Add(draw); tools.Children.Add(clear);
@@ -101,12 +103,13 @@ internal sealed class ComparisonWindow : Window
         var options = new StackPanel { Spacing = 8 };
         options.Children.Add(new ScrollViewer { Content = numbers, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
         options.Children.Add(_ignored);
+        options.Children.Add(_measurements);
         options.Children.Add(new TextBlock
         {
-            Text = $"Positive offsets move After right/down. Compare only overlap; mismatched sizes are allowed here. Gray = ignored/unmatched. Up to {ImageComparison.MaximumIgnoredRegions} rectangles; 64 MP per input.",
+            Text = $"Positive values move After right or down. Only overlapping areas are compared. Use one ignored area per line; up to {ImageComparison.MaximumIgnoredRegions} areas.",
             TextWrapping = TextWrapping.Wrap,
         });
-        var expander = new Expander { Header = "Tolerance, alignment and ignored regions", Content = options, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var expander = new Expander { Header = "Advanced", Content = options, HorizontalAlignment = HorizontalAlignment.Stretch };
         var header = new StackPanel { Spacing = 8 };
         header.Children.Add(new ScrollViewer { Content = toolbar, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
         header.Children.Add(new ScrollViewer { Content = tools, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
@@ -121,7 +124,7 @@ internal sealed class ComparisonWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.Children.Add(header);
         Grid.SetRow(_viewport, 1); root.Children.Add(_viewport);
-        var help = new TextBlock { Text = "Wheel: synchronized zoom • Drag: pan • Fit / 100% preserve alignment • Orange: ignored • Red in Difference: changes", TextWrapping = TextWrapping.Wrap };
+        var help = new TextBlock { Text = "Scroll to zoom. Drag to move. Red shows changes; orange marks ignored areas.", TextWrapping = TextWrapping.Wrap };
         Grid.SetRow(help, 2); root.Children.Add(help);
         Content = root;
         _viewport.RegionDrawn += region =>
@@ -143,7 +146,7 @@ internal sealed class ComparisonWindow : Window
             if (_exporting)
             {
                 args.Cancel = true;
-                _exportStatus.Text = "Finishing the local export. You can close this window when it completes.";
+                _exportStatus.Text = "Finishing export. Please wait before closing.";
             }
         };
         WindowTools.Configure(this, 1120, 820);
@@ -281,9 +284,11 @@ internal sealed class ComparisonWindow : Window
 
     private void UpdateSummary()
     {
-        var bounds = _result.ChangedBounds is { } rectangle ? $" Changed bounds: {rectangle}." : "";
-        _summary.Text = $"{_result.ChangedPixels:N0} changed / {_result.ComparedPixels:N0} compared pixels ({_result.ChangedPercent:F2}%). Tolerance: {_result.Tolerance}/255 per RGB channel.{bounds}" +
-            (_result.ComparedPixels == 0 ? " Nothing is compared: no overlap or all overlap is ignored." : "");
+        _summary.Text = _result.ComparedPixels == 0
+            ? "Nothing to compare. Images don't overlap, or all overlapping areas are ignored."
+            : $"{_result.ChangedPercent:F2}% changed.";
+        _measurements.Text = $"{_result.ChangedPixels:N0} changed / {_result.ComparedPixels:N0} compared pixels. Tolerance: {_result.Tolerance}/255.";
+        if (_result.ChangedBounds is { } rectangle) _measurements.Text += $" Changed area: {rectangle}.";
     }
 
     private async Task ExportAsync()
@@ -295,12 +300,12 @@ internal sealed class ComparisonWindow : Window
         _error.IsOpen = false; _exportStatus.Text = "";
         try
         {
-            var folder = await new FolderPicker(AppWindow.Id) { Title = "Export comparison report and flattened PNGs locally" }.PickSingleFolderAsync();
+            var folder = await new FolderPicker(AppWindow.Id) { Title = "Choose a report folder" }.PickSingleFolderAsync();
             if (folder is null) return;
             var result = _result; var options = _resultOptions;
             _progress.Visibility = Visibility.Visible;
             var path = await Task.Run(() => ComparisonExport.SaveAsync(folder.Path, _before, _after, result, options, cancellation.Token), cancellation.Token);
-            _exportStatus.Text = "Local report saved: " + path;
+            _exportStatus.Text = "Report saved: " + path;
         }
         catch (Exception ex) { ShowError(ex); }
         finally

@@ -22,10 +22,10 @@ internal sealed class PinnedImageWindow : Window
         var preview = new Image { Source = image, Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform };
         var opacity = new Slider { Minimum = 20, Maximum = 100, Value = 100, Width = 150, Header = "Window opacity" };
         var opacityLabel = new TextBlock { Text = "100%", VerticalAlignment = VerticalAlignment.Center };
-        var through = new CheckBox { Content = "Click-through (20 s)", VerticalAlignment = VerticalAlignment.Center };
+        var through = new CheckBox { Content = "Click behind image (20 s)", VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetAutomationId(opacity, "PinnedOpacity");
         AutomationProperties.SetAutomationId(through, "PinnedClickThrough");
-        ToolTipService.SetToolTip(through, "Automatically resumes mouse input after 20 seconds. A separate native Resume button remains clickable.");
+        ToolTipService.SetToolTip(through, "Click Resume or wait 20 seconds to interact with this image again.");
         var close = new Button { Content = "Close", VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetAutomationId(close, "PinnedClose");
         close.Click += (_, _) => Close();
@@ -33,7 +33,7 @@ internal sealed class PinnedImageWindow : Window
         controls.Children.Add(opacity); controls.Children.Add(opacityLabel); controls.Children.Add(through); controls.Children.Add(close);
         panel.Children.Add(new ScrollViewer { Content = controls, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled });
         Grid.SetRow(preview, 1); panel.Children.Add(preview);
-        var status = new TextBlock { Text = "Always on top • ESC closes • Excluded from Hotshot captures", TextWrapping = TextWrapping.Wrap };
+        var status = new TextBlock { Text = "Stays on top • Esc closes • Not included in captures", TextWrapping = TextWrapping.Wrap };
         AutomationProperties.SetAutomationId(status, "PinnedStatus");
         Grid.SetRow(status, 2); panel.Children.Add(status);
         Content = panel;
@@ -48,7 +48,7 @@ internal sealed class PinnedImageWindow : Window
             {
                 _updating = true; through.IsChecked = false; _updating = false;
                 Title = "Hotshot pinned image";
-                status.Text = "Mouse input resumed • Always on top • ESC closes • Excluded from Hotshot captures";
+                status.Text = "Mouse restored • Esc closes • Not included in captures";
             },
             ex =>
             {
@@ -65,7 +65,7 @@ internal sealed class PinnedImageWindow : Window
             catch (Exception ex)
             {
                 Log.Error("Pinned image opacity failed", ex);
-                status.Text = "Opacity unavailable: " + ex.Message;
+                status.Text = "Could not change opacity.";
             }
         };
         through.Checked += (_, _) =>
@@ -75,13 +75,13 @@ internal sealed class PinnedImageWindow : Window
             {
                 Interaction().Enable();
                 Title = "Hotshot pinned image — click-through (20 s)";
-                status.Text = "Click-through active. Use the native Resume button or wait up to 20 seconds.";
+                status.Text = "Click behind the image. Click Resume or wait 20 seconds to stop.";
             }
             catch (Exception ex)
             {
                 Log.Error("Pinned image click-through failed", ex);
                 _updating = true; through.IsChecked = false; _updating = false;
-                status.Text = "Click-through unavailable: " + ex.Message;
+                status.Text = "Could not enable clicking behind the image.";
             }
         };
         through.Unchecked += (_, _) => { if (!_updating) _interaction?.Restore(); };

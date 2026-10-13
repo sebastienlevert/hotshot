@@ -38,7 +38,7 @@ internal sealed class AutomaticUpdates : IDisposable
         _applyTimer.Tick += async (_, _) => await TryApplyAsync();
         Status = _manager.IsInstalled
             ? "Automatic updates are enabled."
-            : "This development/unmanaged build cannot update itself. Install Hotshot from GitHub Releases.";
+            : "Install the released version of Hotshot for automatic updates.";
     }
 
     public string Channel { get; }
@@ -71,7 +71,7 @@ internal sealed class AutomaticUpdates : IDisposable
         if (_disposed || _checking || _applying || !IsManaged) return;
         if (_pending is not null) { await TryApplyAsync(); return; }
         _checking = true;
-        SetStatus("Checking GitHub Releases...");
+        SetStatus("Checking for updates...");
         try
         {
             var update = await _manager.CheckForUpdatesAsync().WaitAsync(TimeSpan.FromMinutes(2), _stop.Token);
@@ -86,7 +86,7 @@ internal sealed class AutomaticUpdates : IDisposable
                 percent => SetStatus($"Downloading Hotshot {update.TargetFullRelease.Version}: {percent}%"), _stop.Token);
             _pending = update.TargetFullRelease;
             Log.Info($"Update {_pending.Version} downloaded and verified; waiting for idle.");
-            SetStatus($"Hotshot {_pending.Version} is ready. It will restart automatically when idle.");
+            SetStatus($"Update {_pending.Version} is ready. Hotshot will restart when you're not using it.");
             _applyTimer.Start();
             await TryApplyAsync();
         }
@@ -94,7 +94,7 @@ internal sealed class AutomaticUpdates : IDisposable
         catch (Exception ex)
         {
             Log.Error("Automatic update check/download failed", ex);
-            SetStatus("Updates could not be checked or downloaded. Hotshot will retry automatically; see the diagnostic log.");
+            SetStatus("Could not update. Hotshot will try again automatically.");
         }
         finally
         {
@@ -118,7 +118,7 @@ internal sealed class AutomaticUpdates : IDisposable
         catch (Exception ex)
         {
             Log.Error("Automatic update restart failed", ex);
-            SetStatus("The update is downloaded but could not be applied. Hotshot will retry automatically.");
+            SetStatus("Could not install the update. Hotshot will try again.");
             _applyTimer.Interval = TimeSpan.FromMinutes(5);
         }
         finally { _applying = false; }

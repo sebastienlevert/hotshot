@@ -85,7 +85,7 @@ public sealed class EditorView : UserControl, IDisposable
         AutomationProperties.SetName(_text, "Annotation text");
         AutomationProperties.SetAutomationId(_text, "EditorText");
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _tools });
-        ToolTipService.SetToolTip(_tools, "Select moves/resizes annotations. Redact permanently covers pixels in exported copies; private originals are retained.");
+        ToolTipService.SetToolTip(_tools, "Select moves your marks. Redact hides details in saved copies; private originals are kept.");
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _colors });
         commands.PrimaryCommands.Add(new AppBarElementContainer { Content = _widths });
         commands.PrimaryCommands.Add(_undo);
@@ -459,7 +459,7 @@ public sealed class EditorView : UserControl, IDisposable
             {
                 Path = options.ImagePath, IsSaveAs = false, Width = crop.Width, Height = crop.Height, FileSize = fileSize,
             });
-            AnnounceStatus("Image saved. Your original and editable annotations are kept.");
+            AnnounceStatus("Saved. Your original and editable marks are kept.");
             return true;
         }
         catch (Exception ex)
@@ -483,7 +483,7 @@ public sealed class EditorView : UserControl, IDisposable
         {
             var png = await Task.Run(() => ImageExporter.EncodeAsync(renderer, state.Document));
             await copy(png);
-            AnnounceStatus("Edited image copied to the clipboard.");
+            AnnounceStatus("Copied. Ready to paste.");
         }
         catch (Exception ex)
         {
