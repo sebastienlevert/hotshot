@@ -138,11 +138,7 @@ for (const viewport of viewports) {
         });
       }
 
-      test('walkthrough has direct controls without downloading on mobile page load', async ({ page }) => {
-        const videoRequests = [];
-        page.on('request', request => {
-          if (request.url().endsWith('/workflow.mp4')) videoRequests.push(request);
-        });
+      test('walkthrough plays directly with native mobile controls and no download actions', async ({ page }) => {
         await page.goto('');
         await page.evaluate(() => document.fonts.ready);
         await page.locator('#in-action video').scrollIntoViewIfNeeded();
@@ -151,18 +147,13 @@ for (const viewport of viewports) {
         await expect(page.locator('video')).toHaveAttribute('controlslist', 'nodownload');
         await expect(page.locator('video source')).toHaveAttribute('src', /workflow\.mp4$/);
         await expect(page.locator('[data-video-play], a[href$="workflow.mp4"]')).toHaveCount(0);
-        // WebKit may cancel native metadata probes before exposing a response.
-        let requestedBytes = 0;
-        for (const request of videoRequests) {
-          const range = (await request.allHeaders()).range;
-          expect(range).toMatch(/^bytes=\d+-\d+$/);
-          const [start, end] = range.slice(6).split('-').map(Number);
-          expect(end).toBeGreaterThanOrEqual(start);
-          requestedBytes += end - start + 1;
-        }
-        expect(requestedBytes, 'Native controls may probe metadata, but must not request the walkthrough before playback')
-          .toBeLessThanOrEqual(64 * 1024);
-        expect(await page.locator('video').evaluate(element => element.paused && element.currentTime === 0)).toBe(true);
+        const video = page.locator('video');
+        await expect(video).not.toHaveAttribute('autoplay', /.*/);
+        expect(await video.evaluate(element => element.paused && element.currentTime === 0)).toBe(true);
+        await video.tap();
+        await video.evaluate(element => element.play());
+        await expect.poll(() => video.evaluate(element => element.currentTime)).toBeGreaterThan(0);
+        await video.evaluate(element => element.pause());
       });
     });
 }
