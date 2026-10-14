@@ -175,6 +175,15 @@ function downloadCard(architecture, title, description) {
     <p class="full-alternative">Want the Copilot runtime bundled? <a href="${repository}/releases/latest/download/${file}-Setup.exe">Full installer</a> · <a href="${repository}/releases/latest/download/${file}-Portable.zip">Full portable</a>. Existing Full installs stay on Full updates.</p></article>`;
 }
 
+function sampleWindow(updated = false, comparison = false) {
+  return `<div class="sample-window${updated ? ' sample-updated' : ''}"><div class="sample-title"><strong>Homepage review.png</strong><span>Example content</span></div>
+    <div class="sample-art"><p>Good ideas.<br>${updated ? 'Big impact.' : 'Clearly captured.'}</p>
+      <div class="sample-orbit" aria-hidden="true"><span></span></div>
+      <span class="sample-caption">${updated ? 'Same idea. Impossible to ignore.' : 'One detail worth pointing out.'}</span></div>
+    ${comparison ? `<span class="compare-badge ${updated ? 'compare-after' : 'compare-before'}" aria-hidden="true">${updated ? 'After' : 'Before'}</span>` : ''}
+  </div>`;
+}
+
 function workflowDemo(logo) {
   const labels = ['Capture', 'Annotate', 'Find', 'Compare'];
   return `<div class="workflow-demo">
@@ -183,20 +192,20 @@ function workflowDemo(logo) {
       `<button role="tab" id="demo-tab-${index}" aria-controls="demo-panel-${index}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-demo-tab="${index}">${label}</button>`).join('')}</div>
     <div class="demo-stage">${labels.map((label, index) => `<div role="tabpanel" id="demo-panel-${index}" aria-labelledby="demo-tab-${index}"${index ? ' hidden' : ''}>
       <div class="demo-canvas">
-        <div class="sample-window"><div class="sample-title"><strong>Homepage review.png</strong><span>Example content</span></div>
-          <div class="sample-art"><p>Good ideas.<br>Clearly captured.</p><div class="sample-orbit" aria-hidden="true"><span></span></div><span class="sample-caption">One detail worth pointing out.</span></div>
-        </div>
+        ${index === 3 ? `<div class="comparison-images" role="img" aria-label="Before: a cream layout with round artwork. After: a bold dark layout with an orange headline and tilted artwork.">
+          ${sampleWindow(false, true)}<div class="demo-compare">${sampleWindow(true, true)}</div>
+          <div class="compare-divider" aria-hidden="true"><span>${icon('compare')}</span></div>
+        </div>` : sampleWindow()}
         ${index === 0 ? '<div class="capture-outline"><span class="capture-crosshair" aria-hidden="true"></span></div>' : ''}
         ${index === 1 ? '<div class="demo-annotation">Make the point here</div>' : ''}
         ${index === 2 ? `<div class="demo-search"><div class="demo-query">project:website tag:review</div><div class="demo-result">${icon('capture')}<div><strong>homepage-review.png</strong><small>Website · review · today</small></div></div><div class="demo-result">${icon('capture')}<div><strong>settings-update.png</strong><small>Website · review · yesterday</small></div></div></div>` : ''}
-        ${index === 3 ? '<div class="demo-compare"></div>' : ''}
       </div>
       ${index === 3 ? '<div class="compare-controls"><label for="compare-slider">Before</label><input id="compare-slider" aria-label="Comparison swipe position" type="range" min="0" max="100" value="50"><span>After</span></div>' : ''}
       <div class="demo-note">${icon(index === 3 ? 'compare' : 'check')}<span>${[
         'Copied. Saved. Nothing to dismiss.',
         'Open the workspace when you want to make a point.',
         'One filename. One capture. Right there in the editor.',
-        'Swipe through the change. Inspect it at full resolution.',
+        'Same idea. Two very different looks.',
       ][index]}</span></div>
     </div>`).join('')}</div></div>`;
 }

@@ -53,6 +53,47 @@ for (const width of [320, 390, 1280]) {
       expect(coverage.uncovered, 'Sample text must stay behind the opaque Find preview').toEqual([]);
       await expectPageFits(page);
     });
+
+    test(`workflow comparison reveals distinct designs at ${width}px in ${theme} theme`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`?scoutTheme=${theme}`);
+      await page.evaluate(() => document.fonts.ready);
+      await page.getByRole('tab', { name: 'Compare', exact: true }).click();
+      const comparison = page.locator('.comparison-images');
+      const before = comparison.locator('> .sample-window');
+      const after = comparison.locator('.sample-updated');
+      await expect(before.locator('.sample-art > p')).toHaveText('Good ideas.Clearly captured.');
+      await expect(after.locator('.sample-art > p')).toHaveText('Good ideas.Big impact.');
+      expect(await before.locator('.sample-art').evaluate(element => getComputedStyle(element).backgroundColor))
+        .not.toBe(await after.locator('.sample-art').evaluate(element => getComputedStyle(element).backgroundColor));
+      expect(await comparison.locator('.demo-compare').evaluate(element => getComputedStyle(element).opacity)).toBe('1');
+      const slider = page.getByRole('slider', { name: 'Comparison swipe position' });
+      for (const value of [0, 50, 100]) {
+        await slider.evaluate((element, position) => {
+          element.value = String(position);
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+        }, value);
+        await comparison.scrollIntoViewIfNeeded();
+        const geometry = await comparison.evaluate(element => {
+          const bounds = element.getBoundingClientRect();
+          const divider = element.querySelector('.compare-divider').getBoundingClientRect();
+          const beforeBounds = element.querySelector(':scope > .sample-window').getBoundingClientRect();
+          const afterBounds = element.querySelector('.sample-updated').getBoundingClientRect();
+          return { position: (divider.left + divider.width / 2 - bounds.left) / bounds.width * 100,
+            beforeWidth: beforeBounds.width, afterWidth: afterBounds.width,
+            beforeHeight: beforeBounds.height, afterHeight: afterBounds.height,
+            clip: getComputedStyle(element.querySelector('.demo-compare')).clipPath };
+        });
+        expect(geometry.position).toBeCloseTo(value, 1);
+        expect(geometry.beforeWidth).toBeCloseTo(geometry.afterWidth, 1);
+        expect(geometry.beforeHeight).toBeCloseTo(geometry.afterHeight, 1);
+        expect(geometry.clip).toContain(`${value}%`);
+        await page.locator('.workflow-demo').screenshot({ path: testInfo.outputPath(`workflow-compare-${width}-${theme}-${value}.png`) });
+      }
+      const accessibility = await new AxeBuilder({ page }).include('#demo-panel-3').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+      expect(accessibility.violations).toEqual([]);
+      await expectPageFits(page);
+    });
   }
 }
 

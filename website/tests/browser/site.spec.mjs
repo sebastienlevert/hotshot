@@ -27,7 +27,7 @@ test('workflow tabs and comparison slider work with mouse and keyboard', async (
   await page.getByRole('tab', { name: 'Compare', exact: true }).click();
   await page.getByRole('slider', { name: 'Comparison swipe position' }).focus();
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.demo-compare')).toHaveAttribute('style', /51%/);
+  await expect(page.locator('.comparison-images')).toHaveAttribute('style', /51%/);
 });
 
 test('search supports deep results, keyboard opening, no matches and safe query text', async ({ page }) => {

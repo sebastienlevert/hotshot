@@ -234,7 +234,7 @@
     });
   });
   document.querySelector('#compare-slider')?.addEventListener('input', event => {
-    document.querySelector('.demo-compare').style.setProperty('--compare-position', `${event.target.value}%`);
+    document.querySelector('.comparison-images').style.setProperty('--compare-position', `${event.target.value}%`);
   });
 
   const tocLinks = [...document.querySelectorAll('.docs-toc a[href^="#"]')];
