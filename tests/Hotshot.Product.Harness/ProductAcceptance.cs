@@ -95,7 +95,7 @@ internal static class ProductAcceptance
             });
             await report.CheckAsync("settings-native-responsive-header", () => ProductMedia.CheckSettingsHeaderAsync(settings));
             await report.CheckAsync("settings-native-plain-language-default-pages", () => CheckSettingsCopyAsync(settings, output));
-            await report.CheckAsync("settings-native-left-aligned-responsive-pages", () => CheckSettingsAlignmentAsync(settings, output));
+            await report.CheckAsync("settings-native-centered-responsive-pages", () => CheckSettingsAlignmentAsync(settings, output));
             await report.CheckAsync("native-full-window-snap-targets", CheckWindowSnapAsync);
             await report.CheckAsync("copilot-native-sign-in-consent-cancellation-and-failure", () =>
                 CheckCopilotSignInAsync(settings, app, accountClients, browserVisits));
@@ -342,7 +342,7 @@ internal static class ProductAcceptance
                 {
                     navigation.IsPaneOpen = paneOpen;
                     await Task.Delay(250);
-                    foreach (var page in new[] { SettingsPage.Gif, SettingsPage.Recording, SettingsPage.Naming })
+                    foreach (var page in new[] { SettingsPage.General, SettingsPage.Capture, SettingsPage.Gif, SettingsPage.Recording, SettingsPage.Naming })
                     {
                         settings.SelectPage(page);
                         await ReadyAsync(settings);
@@ -352,11 +352,13 @@ internal static class ProductAcceptance
                         var panel = scroll.Content as StackPanel ?? throw new InvalidDataException("Settings have no page panel.");
                         var container = VisualTreeHelper.GetParent(scroll) as Grid
                             ?? throw new InvalidDataException("Settings have no padded content grid.");
+                        var host = VisualTreeHelper.GetParent(container) as FrameworkElement
+                            ?? throw new InvalidDataException("Settings have no content-area host.");
                         var scrollOrigin = scroll.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
                         var panelOrigin = panel.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                        var containerOrigin = container.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                        var expectedLeft = containerOrigin.X + container.Padding.Left;
-                        var expectedWidth = Math.Min(920, container.ActualWidth - container.Padding.Left - container.Padding.Right);
+                        var hostOrigin = host.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        var expectedWidth = Math.Min(920, host.ActualWidth - container.Padding.Left - container.Padding.Right);
+                        var expectedLeft = hostOrigin.X + (host.ActualWidth - expectedWidth) / 2;
                         Console.WriteLine($"Settings {page} at {width} DIPs ({theme}, paneOpen={paneOpen}): root={root.ActualWidth:F1}, expected={expectedLeft:F1}/{expectedWidth:F1}, scroll={scrollOrigin.X:F1}/{scroll.ActualWidth:F1}, panel={panelOrigin.X:F1}/{panel.ActualWidth:F1}.");
                         if (Math.Abs(scrollOrigin.X - expectedLeft) > 1 || Math.Abs(panelOrigin.X - expectedLeft) > 1 ||
                             Math.Abs(scroll.ActualWidth - expectedWidth) > 1)
@@ -372,8 +374,8 @@ internal static class ProductAcceptance
                                 Math.Abs(card.ActualWidth - (panel.ActualWidth - panel.Padding.Left - panel.Padding.Right)) > 1)
                                 throw new InvalidDataException("A settings card does not align with or fill the page panel.");
                         }
-                        if (page == SettingsPage.Gif && width == 1920 && paneOpen)
-                            await RenderAsync(settings, Path.Combine(output, $"gif-settings-{theme.ToString().ToLowerInvariant()}.png"),
+                        if (page is SettingsPage.General or SettingsPage.Gif && width == 1920 && paneOpen)
+                            await RenderAsync(settings, Path.Combine(output, $"centered-{page.ToString().ToLowerInvariant()}-{theme.ToString().ToLowerInvariant()}.png"),
                                 preserveAspectRatio: true);
                     }
                 }

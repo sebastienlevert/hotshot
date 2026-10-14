@@ -139,8 +139,11 @@ internal sealed partial class SettingsWindow : Window
                 ShowSearchResults(_searchQuery);
         };
 
-        var content = new Grid { Padding = new Thickness(28, 24, 28, 16), RowSpacing = 12 };
-        content.ColumnDefinitions.Add(new ColumnDefinition { MaxWidth = 920 });
+        var content = new Grid
+        {
+            Padding = new Thickness(28, 24, 28, 16), RowSpacing = 12,
+            MaxWidth = 976, HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

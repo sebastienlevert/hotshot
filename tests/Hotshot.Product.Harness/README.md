@@ -12,11 +12,12 @@ thick green arrow preview beside the controls.
 Window snapping checks use generated windows from this process only: full
 physical-pixel bounds, topmost selection and hidden-window filtering. They do
 not capture the desktop or move the user's pointer.
-GIF, recording and naming settings also verify that headings and cards remain
-left-aligned with the content gutter at compact, normal and 1920-DIP widths in
-both themes, with the shared page viewport capped at 920 DIPs.
+General, screenshot, GIF, recording and naming settings verify that their
+920-DIP column is centered in the content area beside navigation at compact,
+normal and 1920-DIP widths in both themes. Headings and card text stay
+left-aligned within the centered column; compact windows use the full width.
 Normal and wide windows exercise both collapsed and expanded navigation panes;
-the wide GIF-page images preserve their native aspect ratio.
+the wide General/GIF-page images preserve their native aspect ratio.
 Default Settings pages also check that descriptions stay under 30 words,
 technical setup text stays out of the default view, and Copilot permissions
 remain unchanged. `settings-plain-language.png` shows the simplified page.

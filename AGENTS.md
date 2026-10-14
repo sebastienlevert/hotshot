@@ -37,6 +37,7 @@ Only the `dotnet` CLI is required (no Visual Studio). The app is unpackaged (`Wi
 - User data lives in `%AppData%\Hotshot` (settings.json, history.json, thumbnails, originals). `%LocalAppData%\Hotshot` belongs to the Velopack installer.
 - Never block the UI thread on encoding or disk IO; clipboard first, then save.
 - Captures are silent. Tray activation opens/focuses the editor/history workspace without selecting the newest item. Settings use adaptive navigation, grouped cards and automatic validated persistence.
+- Center the capped Settings column in the space beside navigation; keep card text left-aligned and let compact windows fill the available width.
 - Keep user-facing wording brief and plain. Use short labels and one-sentence help; tuck technical setup details into collapsed sections. Keep privacy warnings clear.
 - Stable GitHub Releases supply automatic updates on process-architecture-specific channels. Restart only when capture/recording/conversion/editor/settings are idle; retain user data outside installer directories.
 - Use Conventional Commits. Release Please owns version.txt, the MSBuild version, changelog and release manifest; publish drafts only after both RID assets/feed files are uploaded.
