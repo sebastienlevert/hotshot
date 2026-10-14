@@ -143,7 +143,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
                 return 1;
 
             case Win32.WM_SETCURSOR:
-                Win32.SetCursor(Win32.LoadCursor(0, Win32.IDC_CROSS));
+                SetSelectionCursor();
                 return 1;
 
             case Win32.WM_DPICHANGED:
@@ -324,7 +324,11 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         }
 
         _frame = next;
+        SetSelectionCursor();
     }
+
+    private void SetSelectionCursor() =>
+        Win32.SetCursor(Win32.LoadCursor(0, !_dragging && _hoverWindow is not null ? Win32.IDC_HAND : Win32.IDC_CROSS));
 
     private void UpdateHover(int x, int y)
     {
@@ -379,7 +383,6 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         var monitor = MonitorAt(_cx, _cy);
         var scale = Math.Max(1.0, monitor.Scale);
         var mon = monitor.Bounds.Offset(-Origin.X, -Origin.Y);
-        var border = Math.Max(2, (int)Math.Round(2 * scale));
 
         PixelRect selection;
         if (_dragging)
@@ -395,13 +398,9 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
             selection = mon;
         }
 
-        // Size label
-        var labelText = $"{selection.Width} × {selection.Height}";
-        if (!_dragging && _hoverWindow is { Title.Length: > 0 } hovered)
-        {
-            var title = hovered.Title.Length > 48 ? hovered.Title[..47] + "…" : hovered.Title;
-            labelText = $"{title}  ·  {labelText}";
-        }
+        var feedback = CaptureTargetFeedback.Create(_dragging, _hoverWindow, selection, _options.ShowMagnifier, _options.ShowCrosshair);
+        var border = Math.Max(2, (int)Math.Round((feedback.WindowTarget ? 4 : 2) * scale));
+        var labelText = feedback.Label;
 
         var labelSize = MeasureText(labelText, scale, out _);
         var pad = (int)(8 * scale);
@@ -419,7 +418,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         // Magnifier
         PixelRect magnifier = default, magInfo = default;
         var magText = string.Empty;
-        if (_options.ShowMagnifier)
+        if (feedback.Magnifier)
         {
             var zoom = Math.Max(6, (int)Math.Round(8 * scale));
             var size = MagnifierCells * zoom;
@@ -450,7 +449,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         }
 
         return new Frame(selection, border, label, labelText, magnifier, magInfo, magText, hint, hintText,
-            _cx, _cy, _options.ShowCrosshair, Origin.Width, Origin.Height, scale);
+            _cx, _cy, feedback.Crosshair, Origin.Width, Origin.Height, scale);
     }
 
     private (byte R, byte G, byte B) PixelAt(int x, int y)

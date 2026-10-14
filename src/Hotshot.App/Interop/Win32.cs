@@ -132,6 +132,7 @@ internal static unsafe partial class Win32
 
     public const int IDC_ARROW = 32512;
     public const int IDC_CROSS = 32515;
+    public const int IDC_HAND = 32649;
 
     public const int GWLP_USERDATA = -21;
 

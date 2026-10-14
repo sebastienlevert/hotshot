@@ -103,7 +103,9 @@ The hamburger navigation button and search box both sit inside the Settings titl
 For most captures, use the shortcuts above. Under **Screenshots**, you can add a delay of up to 30 seconds to make time for opening a menu or preparing a window.
 
 **Window captures:** hover over a window to highlight it fully, then click.
-Drag instead to select an area. **Snap to windows** is on by default.
+The bold outline and **Window** label show the target; the magnifier is hidden.
+Start dragging to switch to an area selection and its magnifier.
+**Snap to windows** is on by default.
 **Capture covered windows** captures the whole selected window even if another
 window overlaps it, without moving or focusing it. Windows may show a capture
 border. Hidden, minimized, protected, or changed targets can fail explicitly;
