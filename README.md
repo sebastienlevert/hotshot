@@ -35,7 +35,7 @@ Open the [latest release](https://github.com/sebastienlevert/hotshot/releases/la
 
 Not sure which one you need? Check **Windows Settings > System > About > System type**.
 
-Run the installer and launch Hotshot. Installation is for your Windows user and does not require administrator privileges. The first launch opens Settings; closing that window keeps Hotshot running in the tray.
+Run the installer and launch Hotshot. Installation is for your Windows user and does not require administrator privileges. The first launch opens the editor and history, ready to capture. Closing it keeps Hotshot running in the tray.
 
 ### Core or Full?
 
@@ -61,7 +61,10 @@ For the portable version, extract the **entire ZIP** to a permanent, writable fo
 
 **No window appears after a screenshot. That is intentional.** Capturing, copying, and saving happen without opening the editor or changing its selection.
 
-The first-run guide walks through folder readiness, registered shortcuts, output choices, OneDrive status, privacy, and an optional generated-image agent test. Choices apply on **Finish**; Cancel or a settings handoff discards staged choices. Skipping a check does not invent a successful result or enable a permission. Reopen the guide from **About Hotshot > Quick-start guide**.
+No first-run tour or setup is required. Clipboard copying, file saving and window
+snapping are on; Copilot descriptions and assistant access stay off. Available
+OneDrive is used for settings automatically, without changing your captures folder.
+An optional setup check is available under **About Hotshot > Set up Hotshot**.
 
 If Print Screen opens Snipping Tool instead, see [Troubleshooting](#troubleshooting).
 

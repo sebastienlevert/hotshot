@@ -45,6 +45,9 @@ GitHub authorization or writes real credentials.
 The self-contained harness includes Microsoft's Windows Desktop UI Automation
 client for native-only TextBox patterns; it does not host WPF UI or enable WPF
 XAML compilation. UIA queries stay scoped to this harness's own HWND/process.
+First-launch checks verify a ready workspace with no automatic tour, quiet
+background startup, explicit commands and shortcut-attention handling. Guided
+setup is exercised only as an optional, manually opened settings feature.
 
 Build and execute **on the matching native architecture**, using a task-owned
 output directory (local validation uses the session's C-drive artifact area):

@@ -118,6 +118,20 @@ internal static class ProductAcceptance
             var canvas = Find<CanvasControl>(workspace.Content, "AnnotationCanvas");
             canvas.ForceSoftwareRenderer = Program.SoftwareRenderer;
             workspace.Show();
+            await report.CheckAsync("first-launch-native-workspace-without-an-automatic-tour", async () =>
+            {
+                if (AppController.GetStartupCommand(new CommandLine(false, AppCommand.None), true, false) != AppCommand.History ||
+                    AppController.GetStartupCommand(new CommandLine(true, AppCommand.None), true, true) != AppCommand.None ||
+                    AppController.GetStartupCommand(new CommandLine(false, AppCommand.None), false, false) != AppCommand.None ||
+                    AppController.GetStartupCommand(new CommandLine(false, AppCommand.None), true, true) != AppCommand.Settings ||
+                    AppController.GetStartupCommand(new CommandLine(true, AppCommand.Region), true, true) != AppCommand.Region)
+                    throw new InvalidDataException("Startup must respect explicit commands, quiet background launches and shortcut attention without a tour.");
+                await ReadyAsync(workspace);
+                if (!workspace.AppWindow.IsVisible || workspace.HasUnsavedEdits || workspace.IsBusy ||
+                    settings.IsQuickStartActive || settings.IsQuickStartBusy || settings.QuickStartState is not null)
+                    throw new InvalidDataException("First launch must show a ready workspace without starting guided setup.");
+                Console.WriteLine("PASS first launch: ready workspace, no automatic tour, quiet background startup and explicit commands preserved.");
+            });
             await report.CheckAsync("workspace-native-history-editor-draw-and-generated-export", async () =>
             {
                 await ReadyAsync(workspace);
