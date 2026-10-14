@@ -313,8 +313,9 @@ internal static class ProductAcceptance
                 if (placement == RecordingTimerPlacement.TopRight)
                     await RenderAsync(window, Path.Combine(output, $"recording-timer-{timerSize.ToString().ToLowerInvariant()}.png"), nativeSize: true);
                 window.ShowTimer(TimeSpan.FromSeconds(65), paused: true);
-                if (status.Text != "00:01:05" || status.Opacity != 0.6)
-                    throw new InvalidDataException("Paused timer changed its time or lost its paused feedback.");
+                Console.WriteLine($"Paused timer {timerSize}/{placement}: time={status.Text}, opacity={status.Opacity:R}.");
+                if (status.Text != "00:01:05" || Math.Abs(status.Opacity - 0.6) > 0.000001)
+                    throw new InvalidDataException($"Paused timer changed its time or lost its paused feedback: time={status.Text}, opacity={status.Opacity:R}.");
             }
             var timer = Find<Button>(window.Content, "RecordingTimer");
             if (timer.Flyout is not Flyout { Content: StackPanel actions } ||
