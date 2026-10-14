@@ -9,6 +9,10 @@ The accessibility fixture also hosts real native controls.
 Editor checks cover centered controls with gaps, full RGB/hex/transparency
 selection, custom-color saves, canvas-only editing cursors and a rendered
 thick green arrow preview beside the controls.
+The editor title must display an entire long, unbroken filename, including its
+last character, at 520/700/1120 DIPs in light/dark themes. Filenames wrap above
+the commands rather than sharing their limited width; native character bounds
+and generated images verify that neither the name nor toolbar is clipped.
 Editor feedback checks verify native capture visibility and selectable editor
 and Settings windows while other Hotshot controls stay out of screenshot
 targets. The existing assistant window allowlist is unchanged. These checks

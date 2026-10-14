@@ -106,7 +106,7 @@ internal static class ProductAcceptance
             var before = GeneratedImage(false);
             var after = GeneratedImage(true);
             await report.CheckAsync("derived-capture-source-and-ai-exclusion-policy", () => CheckDerivativePolicyAsync(app, before));
-            var first = await AddImageAsync(app, "fixture-before", before);
+            var first = await AddImageAsync(app, "fixture-before-" + new string('W', 80), before);
             var second = await AddImageAsync(app, "fixture-after", after);
             await File.WriteAllBytesAsync(Path.Combine(paths.OriginalsDirectory, first.Id + ".png"), await ImageCodec.EncodePngAsync(before));
             var document = new AnnotationDocument(before.Width, before.Height);
@@ -165,6 +165,7 @@ internal static class ProductAcceptance
                         throw new InvalidDataException("Native history selection did not follow the requested generated item.");
                     await workspace.SelectAsync(first);
                     if (editorFailures.Count > 0) throw new InvalidOperationException(string.Join("; ", editorFailures));
+                    await CheckWorkspaceTitleAsync(workspace, first.FileName, output);
                     await RenderAsync(workspace, Path.Combine(output, "workspace-native.png"));
                 }
                 finally { editor.Failed -= editorFailures.Add; }
@@ -266,6 +267,58 @@ internal static class ProductAcceptance
                 app.Dispose();
             }
             if (Directory.Exists(profile)) Directory.Delete(profile, recursive: true);
+        }
+    }
+
+    private static async Task CheckWorkspaceTitleAsync(WorkspaceWindow workspace, string filename, string output)
+    {
+        var root = (Grid)workspace.Content;
+        var title = Find<TextBlock>(root, "WorkspaceTitle");
+        var commands = Find<CommandBar>(root, "WorkspaceCommands");
+        NativeProductWindow.AllowPublicationSize(WinRT.Interop.WindowNative.GetWindowHandle(workspace));
+        var initialSize = workspace.AppWindow.Size;
+        var initialTheme = root.RequestedTheme;
+        var initialBackground = root.Background;
+        try
+        {
+            foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+            {
+                root.RequestedTheme = theme;
+                root.Background = new SolidColorBrush(theme == ElementTheme.Dark
+                    ? Windows.UI.Color.FromArgb(255, 32, 32, 32) : Windows.UI.Color.FromArgb(255, 249, 249, 249));
+                foreach (var width in new[] { 520, 700, 1120 })
+                {
+                    var scale = root.XamlRoot.RasterizationScale;
+                    workspace.AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(width * scale), (int)(780 * scale)));
+                    await ReadyAsync(workspace);
+                    var end = title.ContentEnd.GetCharacterRect(Microsoft.UI.Xaml.Documents.LogicalDirection.Backward);
+                    var titleOrigin = title.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                    var commandsOrigin = commands.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                    Console.WriteLine($"Editor filename at {width} DIPs ({theme}): root={root.ActualWidth:F1}, " +
+                        $"title={title.ActualWidth:F1}x{title.ActualHeight:F1}, trimmed={title.IsTextTrimmed}, end={end}, " +
+                        $"toolbar={commandsOrigin.X:F1},{commandsOrigin.Y:F1}/{commands.ActualWidth:F1}.");
+                    if (Math.Abs(root.ActualWidth - width) > 24 || title.Text != filename ||
+                        title.TextWrapping != TextWrapping.Wrap || title.TextTrimming != TextTrimming.None ||
+                        title.MaxLines != 0 || title.IsTextTrimmed || end.Width < 0 || end.Height <= 0 ||
+                        end.Right > title.ActualWidth + 0.5 || end.Bottom > title.ActualHeight + 0.5 ||
+                        title.ActualHeight <= title.FontSize || commandsOrigin.Y < titleOrigin.Y + title.ActualHeight ||
+                        commandsOrigin.X + commands.ActualWidth > root.ActualWidth - root.Padding.Right + 0.5)
+                        throw new InvalidDataException($"The full editor filename or toolbar is clipped at {width} DIPs ({theme}).");
+                    Console.WriteLine($"PASS full editor filename at {width} DIPs ({theme}): " +
+                        $"{filename.Length} characters, title={title.ActualWidth:F1}x{title.ActualHeight:F1}, " +
+                        $"last glyph={end.X:F1},{end.Y:F1}/{end.Width:F1}x{end.Height:F1}, toolbarY={commandsOrigin.Y:F1}.");
+                    if (width is 520 or 1120)
+                        await RenderAsync(workspace, Path.Combine(output, $"editor-full-filename-{width}-{theme.ToString().ToLowerInvariant()}.png"),
+                            preserveAspectRatio: true);
+                }
+            }
+        }
+        finally
+        {
+            root.RequestedTheme = initialTheme;
+            root.Background = initialBackground;
+            workspace.AppWindow.Resize(initialSize);
+            await ReadyAsync(workspace);
         }
     }
 

@@ -46,7 +46,11 @@ internal sealed partial class WorkspaceWindow : Window
     private readonly ComboBox _dateFilter = new() { ItemsSource = new[] { "Any time", "Today", "Last 7 days", "Last 30 days" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly EditorView _editor = new() { Visibility = Visibility.Collapsed };
     private readonly StackPanel _empty = new() { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock _title = new() { Text = "Editor and history", FontSize = 18, MaxWidth = 180, TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly TextBlock _title = new()
+    {
+        Text = "Editor and history", FontSize = 18, TextWrapping = TextWrapping.Wrap,
+        TextTrimming = TextTrimming.None, VerticalAlignment = VerticalAlignment.Center,
+    };
     private readonly InfoBar _error = new() { IsClosable = true, Severity = InfoBarSeverity.Error };
     private readonly AppBarButton _save = new() { Label = "Save", Icon = new SymbolIcon(Symbol.Save), IsEnabled = false };
     private readonly AppBarButton _copy = new() { Label = "Copy", Icon = new SymbolIcon(Symbol.Copy), IsEnabled = false };
@@ -87,10 +91,13 @@ internal sealed partial class WorkspaceWindow : Window
         AutomationProperties.SetAutomationId(_save, "WorkspaceSave");
         AutomationProperties.SetAutomationId(_copy, "WorkspaceCopy");
         AutomationProperties.SetAutomationId(_error, "WorkspaceError");
-        var brand = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetAutomationId(_title, "WorkspaceTitle");
+        var brand = new Grid { ColumnSpacing = 10 };
+        brand.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        brand.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         brand.Children.Add(new Image { Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Logo.png"))), Width = 28, Height = 28 });
+        Grid.SetColumn(_title, 1);
         brand.Children.Add(_title);
-        commands.Content = brand;
         var capture = new AppBarButton { Label = "Capture", Icon = new SymbolIcon(Symbol.Camera) };
         var menu = new MenuFlyout();
         foreach (var (label, command) in new[]
@@ -204,7 +211,8 @@ internal sealed partial class WorkspaceWindow : Window
         var settings = new AppBarButton { Label = "Settings", Icon = new SymbolIcon(Symbol.Setting) };
         settings.Click += (_, _) => _execute(AppCommand.Settings);
         commands.PrimaryCommands.Add(settings);
-        root.Children.Add(commands);
+        var header = new StackPanel { Spacing = 8, Children = { brand, commands } };
+        root.Children.Add(header);
         var notices = new StackPanel { Spacing = 4 };
         notices.Children.Add(_error);
         notices.Children.Add(_progress);
@@ -278,7 +286,6 @@ internal sealed partial class WorkspaceWindow : Window
             var compact = args.NewSize.Width < 700;
             main.ColumnDefinitions[0].MinWidth = compact ? 130 : 170;
             if (main.ColumnDefinitions[0].ActualWidth > 420) main.ColumnDefinitions[0].Width = new GridLength(420);
-            _title.MaxWidth = compact ? 100 : 180;
         };
         UiStyles.ApplyTheme(this, app.Settings.General.Theme);
         _search.TextChanged += (_, _) => { _visibleLimit = 200; RenderHistory(); };
@@ -430,6 +437,7 @@ internal sealed partial class WorkspaceWindow : Window
             _fileAvailable = false;
             _current = item;
             _title.Text = item.FileName;
+            ToolTipService.SetToolTip(_title, item.FileName);
             _editor.Clear();
             _player?.Dispose(); _player = null;
             _editor.Visibility = _video.Visibility = Visibility.Collapsed;

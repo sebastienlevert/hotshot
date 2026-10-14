@@ -121,6 +121,9 @@ stay out of captures.
 
 Click the tray icon and select a filename. The workspace opens with an empty editor until you choose a capture; arrow keys move between filenames and load the selected item directly.
 
+The full filename appears above the editor controls. Long names wrap instead of
+being cut off.
+
 ### Edit and export
 
 Annotate with arrows, shapes, text, ink, highlights, numbered steps, or pixelation. Crop the image, manage layers, and undo/redo edits. Use **Redact** for an opaque black cover over sensitive content.
