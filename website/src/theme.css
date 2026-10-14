@@ -226,7 +226,6 @@ input[type="range"] { accent-color: var(--cp-accent); min-width: 0; width: 100%;
 .product-video, .product-gallery figure { margin: 0 0 24px; }
 .product-video video { display: block; width: 100%; max-height: 72dvh; border: 1px solid var(--cp-border); border-radius: 12px; background: var(--cp-surface-soft); }
 .product-video figcaption, .product-gallery figcaption { margin-top: 12px; color: var(--cp-readable-muted); font-size: .875rem; }
-.video-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 16px; }
 .product-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
 .product-gallery img { display: block; width: 100%; height: auto; border: 1px solid var(--cp-border); border-radius: 10px; }
 .section h2 { font: 800 clamp(2.5rem, 4.5vw, 4rem)/1 var(--cp-display-font); letter-spacing: -.01em; }

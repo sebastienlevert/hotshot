@@ -75,7 +75,14 @@ async function build() {
     .replace('__HOTSHOT_DISPLAY_FONT__', `data:font/woff2;base64,${displayFont.toString('base64')}`);
   const client = await fs.readFile(path.join(root, 'website', 'src', 'client.js'), 'utf8');
   const search = (await fs.readFile(path.join(root, 'website', 'src', 'search.mjs'), 'utf8')).replace('export function', 'function');
-  const assets = { base, logo, version };
+  const media = JSON.parse(await fs.readFile(path.join(root, 'website', 'media', 'device-evidence.json'), 'utf8'));
+  for (const name of ['editor.png', 'settings.png', 'comparison.png']) {
+    const dimensions = media.screenshots?.[name];
+    if (!dimensions || !Number.isInteger(dimensions.width) || !Number.isInteger(dimensions.height) ||
+        dimensions.width < 1 || dimensions.height < 1 || dimensions.width > 16384 || dimensions.height > 16384)
+      throw new Error(`Native media dimensions are missing or invalid: ${name}`);
+  }
+  const assets = { base, logo, version, media };
   const files = new Map();
   const index = [];
   const theme = `(() => {

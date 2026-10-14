@@ -138,7 +138,7 @@ for (const viewport of viewports) {
         });
       }
 
-      test('walkthrough waits for playback instead of downloading on mobile page load', async ({ page }) => {
+      test('walkthrough has direct controls without downloading on mobile page load', async ({ page }) => {
         const videoRequests = [];
         page.on('request', request => {
           if (request.url().endsWith('/workflow.mp4')) videoRequests.push(request.url());
@@ -148,6 +148,9 @@ for (const viewport of viewports) {
         await page.locator('#in-action video').scrollIntoViewIfNeeded();
         await page.waitForTimeout(150);
         await expect(page.locator('video')).toHaveAttribute('preload', 'none');
+        await expect(page.locator('video')).toHaveAttribute('controlslist', 'nodownload');
+        await expect(page.locator('video source')).toHaveAttribute('src', /workflow\.mp4$/);
+        await expect(page.locator('[data-video-play], a[href$="workflow.mp4"]')).toHaveCount(0);
         expect(videoRequests).toEqual([]);
       });
     });

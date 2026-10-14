@@ -135,16 +135,34 @@ test('real product media loads with captions and user-controlled playback', asyn
   await page.goto('');
   const video = page.locator('#in-action video');
   await expect(video).toHaveAttribute('controls', '');
+  await expect(video).toHaveAttribute('controlslist', 'nodownload');
   await expect(video).toHaveAttribute('preload', 'none');
   await expect(video).not.toHaveAttribute('autoplay', /.*/);
+  await expect(video.locator('source')).toHaveAttribute('src', /workflow\.mp4$/);
+  await expect(page.locator('[data-video-play], .video-actions, a[href$="workflow.mp4"]')).toHaveCount(0);
   await expect(video.locator('track')).toHaveAttribute('src', /workflow\.vtt$/);
   await video.scrollIntoViewIfNeeded();
-  await page.getByRole('button', { name: 'Play the 13-second walkthrough' }).click();
+  await video.focus();
+  await page.keyboard.press('Space');
   await expect.poll(() => video.evaluate(element => element.duration)).toBeGreaterThan(10);
+  await expect.poll(() => video.evaluate(element => element.currentTime)).toBeGreaterThan(0);
+  expect(await video.evaluate(element => element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))))
+    .toBe(false);
   await video.evaluate(element => element.pause());
   await expect(page.locator('.product-gallery img')).toHaveCount(2);
   for (const image of await page.locator('.product-gallery img').all()) {
     await image.scrollIntoViewIfNeeded();
     await expect.poll(() => image.evaluate(element => element.complete && element.naturalWidth > 0)).toBeTruthy();
   }
+});
+
+test('walkthrough has native playback controls even without JavaScript', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto(baseURL);
+    await expect(page.locator('video')).toHaveAttribute('controls', '');
+    await expect(page.locator('video source')).toHaveAttribute('src', /workflow\.mp4$/);
+    await expect(page.locator('a[href$="workflow.mp4"], [data-video-play]')).toHaveCount(0);
+  } finally { await context.close(); }
 });

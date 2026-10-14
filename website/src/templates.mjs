@@ -68,7 +68,7 @@ export function searchDialog() {
   </dialog><div class="toast" role="status" aria-live="polite" hidden></div>`;
 }
 
-export function home({ base, version, logo }) {
+export function home({ base, version, logo, media }) {
   const capabilities = [
     ['capture', 'Catch exactly what matters.', 'A region, a window, one monitor, or all of them. Clipboard first. Saved quietly. No preview pop-up.', 'screenshots', 'Screenshot workflows'],
     ['edit', 'Less explaining. More showing.', 'Arrows, text, numbered steps, opaque redaction, and a polished PNG/JPEG export. Keep an editable original.', 'editor', 'Editing & redaction'],
@@ -96,16 +96,15 @@ export function home({ base, version, logo }) {
     <section class="section product-section" id="in-action"><div class="container">
       <div class="product-heading"><h2>Not a mockup.<br>Your next workflow.</h2>
         <p>Actual WinUI windows, captured with Hotshot's native pipeline. The library contains generated demo content only — no personal screenshots, clipboard, microphone, or account data.</p></div>
-      <figure class="product-video"><video controls preload="none" playsinline poster="${base}media/editor.png" aria-label="Real Hotshot editor walkthrough using generated content, thirteen seconds, no audio">
-        <source data-video-src="${base}media/workflow.mp4" type="video/mp4"><track kind="captions" src="${base}media/workflow.vtt" srclang="en" label="English descriptions">
-        Your browser cannot play this video. <a href="${base}media/workflow.mp4">Download the walkthrough</a>.
-      </video><div class="video-actions"><button class="button" data-video-play hidden>Play the 13-second walkthrough ${icon('arrow')}</button>
-        <a href="${base}media/workflow.mp4">Download the walkthrough</a></div>
-      <figcaption>Real filename navigation and editable annotations. 13 seconds, no audio; optional captions describe the action.</figcaption></figure>
+      <figure class="product-video"><video controls controlslist="nodownload" preload="none" playsinline poster="${base}media/editor.png" aria-label="Real Hotshot editor walkthrough using generated content, thirteen seconds, no audio">
+        <source src="${base}media/workflow.mp4" type="video/mp4"><track kind="captions" src="${base}media/workflow.vtt" srclang="en" label="English descriptions">
+        Your browser cannot play this video.
+      </video>
+      <figcaption>Hotshot ${escapeHtml(media.applicationVersion.split('.').slice(0, 3).join('.'))}. Real filename navigation and editable annotations. 13 seconds, no audio.</figcaption></figure>
       <div class="product-gallery">
-        <figure><a href="${base}media/settings.png"><img src="${base}media/settings.png" alt="Real Hotshot Settings showing file-naming patterns, token dropdowns and examples" loading="lazy" decoding="async" width="2178" height="1489"></a><figcaption>Native Settings, not a browser wrapper.</figcaption></figure>
-        <figure><a href="${base}media/comparison.png"><img src="${base}media/comparison.png" alt="Real Hotshot comparison window showing the pixel difference between two generated checkout captures" loading="lazy" decoding="async" width="2178" height="1489"></a><figcaption>Full-resolution visual comparison.</figcaption></figure>
-      </div><p class="small">High-DPI capture of fixture-owned windows. <a href="${base}docs/compatibility/">What was tested, and what was not</a>.</p>
+        <figure><a href="${base}media/settings.png"><img src="${base}media/settings.png" alt="Real Hotshot Settings showing file-naming patterns, token dropdowns and examples" loading="lazy" decoding="async" width="${media.screenshots['settings.png'].width}" height="${media.screenshots['settings.png'].height}"></a><figcaption>Native Settings, not a browser wrapper.</figcaption></figure>
+        <figure><a href="${base}media/comparison.png"><img src="${base}media/comparison.png" alt="Real Hotshot comparison window showing the pixel difference between two generated checkout captures" loading="lazy" decoding="async" width="${media.screenshots['comparison.png'].width}" height="${media.screenshots['comparison.png'].height}"></a><figcaption>Full-resolution visual comparison.</figcaption></figure>
+      </div><p class="small">Native Windows capture of fixture-owned windows. <a href="${base}docs/compatibility/">What was tested, and what was not</a>.</p>
     </div></section>
     <section class="section capability-section" id="features"><div class="container capability-layout">
       <div class="section-heading"><h2>One good shot.<br>A lot less back-and-forth.</h2>

@@ -1,23 +1,82 @@
 {
   "schemaVersion": 1,
-  "collectedAt": "2026-10-12T14:37:42.2610339+00:00",
-  "applicationVersion": "0.1.14.0",
-  "windowsBuild": "10.0.26300.0",
+  "collectedAt": "2026-10-14T15:23:57.6370448+00:00",
+  "applicationVersion": "0.1.19.0",
+  "applicationInformationalVersion": "0.1.19\u002B700433fc7140016d47f3960f969519c4bd675e1f",
+  "sourceCommit": "700433fc7140016d47f3960f969519c4bd675e1f",
+  "windowsBuild": "10.0.26100.0",
   "processArchitecture": "X64",
+  "publicationSizeDips": {
+    "width": 1100,
+    "height": 800
+  },
+  "screenshots": {
+    "editor.png": {
+      "width": 1086,
+      "height": 793
+    },
+    "settings.png": {
+      "width": 1086,
+      "height": 793
+    },
+    "comparison.png": {
+      "width": 1086,
+      "height": 793
+    }
+  },
+  "walkthrough": {
+    "durationSeconds": 13.0407801,
+    "hasAudio": false
+  },
+  "annotationPlacement": {
+    "arrow": {
+      "X": 714.5,
+      "Y": 364.5,
+      "Width": 171,
+      "Height": 161,
+      "Left": 714.5,
+      "Top": 364.5,
+      "Right": 885.5,
+      "Bottom": 525.5,
+      "TopLeft": {},
+      "BottomRight": {},
+      "Center": {},
+      "Size": {},
+      "IsEmpty": false
+    },
+    "text": {
+      "X": 638,
+      "Y": 554,
+      "Width": 367.2,
+      "Height": 48.58,
+      "Left": 638,
+      "Top": 554,
+      "Right": 1005.2,
+      "Bottom": 602.58,
+      "TopLeft": {},
+      "BottomRight": {},
+      "Center": {},
+      "Size": {},
+      "IsEmpty": false
+    },
+    "minimumGap": 20
+  },
   "monitors": [
     {
-      "width": 1080,
-      "height": 2268,
-      "scale": 2,
+      "width": 1024,
+      "height": 768,
+      "scale": 1,
       "primary": true
     }
   ],
   "passed": [
     "real WinUI isolated-profile rendering",
+    "native title-bar navigation and responsive search",
     "WGC screenshots of own native windows",
     "silent native workspace recording",
     "filename selection",
     "annotation sidecar loading",
+    "text below arrow without overlap",
     "native comparison rendering"
   ],
   "notVerified": [

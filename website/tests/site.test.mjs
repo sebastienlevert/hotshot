@@ -86,3 +86,21 @@ test('all internal links, assets, fragments and search URLs resolve under the pr
   const index = JSON.parse(await fs.readFile(path.join(output, 'search.json'), 'utf8'));
   for (const record of index) await check(record.url, 'docs/index.html');
 });
+
+test('native publication media has correct dimensions, placement and direct playback without downloads', async () => {
+  const media = JSON.parse(await fs.readFile(path.join(output, 'media', 'device-evidence.json'), 'utf8'));
+  assert.match(media.sourceCommit, /^[0-9a-f]{40}$/);
+  assert.match(media.applicationInformationalVersion, new RegExp(`\\+${media.sourceCommit}$`));
+  for (const name of ['editor.png', 'settings.png', 'comparison.png']) {
+    const png = await fs.readFile(path.join(output, 'media', name));
+    assert.equal(png.readUInt32BE(16), media.screenshots[name].width, `${name} width`);
+    assert.equal(png.readUInt32BE(20), media.screenshots[name].height, `${name} height`);
+  }
+  assert.ok(media.annotationPlacement.text.Top >= media.annotationPlacement.arrow.Bottom + media.annotationPlacement.minimumGap);
+  assert.ok(media.walkthrough.durationSeconds >= 10);
+  assert.equal(media.walkthrough.hasAudio, false);
+  const html = await fs.readFile(path.join(output, 'index.html'), 'utf8');
+  assert.match(html, /<video[^>]*controls[^>]*controlslist="nodownload"/);
+  assert.match(html, /<source src="[^"]*\/media\/workflow\.mp4"/);
+  assert.doesNotMatch(html, /data-video-src|data-video-play|Download the walkthrough|href="[^"]*workflow\.mp4"/);
+});
