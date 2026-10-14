@@ -164,7 +164,19 @@ public sealed class EditorView : UserControl, IDisposable
             container.Margin = new Thickness(0, 0, 8, 0);
             container.MinHeight = 48;
             container.VerticalAlignment = VerticalAlignment.Center;
-            if (container.Content is FrameworkElement control) control.VerticalAlignment = VerticalAlignment.Center;
+            container.VerticalContentAlignment = VerticalAlignment.Center;
+            if (container.Content is FrameworkElement control)
+            {
+                control.VerticalAlignment = VerticalAlignment.Center;
+                var slot = new Grid { MinHeight = 48 };
+                slot.SetBinding(VisibilityProperty, new Microsoft.UI.Xaml.Data.Binding
+                {
+                    Source = control, Path = new PropertyPath(nameof(Visibility)),
+                    Mode = Microsoft.UI.Xaml.Data.BindingMode.OneWay,
+                });
+                slot.Children.Add(control);
+                container.Content = slot;
+            }
         }
         foreach (var command in commands.PrimaryCommands.Concat(commands.SecondaryCommands).OfType<AppBarButton>())
             AutomationProperties.SetName(command, command.Label);

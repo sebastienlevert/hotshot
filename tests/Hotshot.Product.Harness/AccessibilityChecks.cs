@@ -372,7 +372,10 @@ internal static class AccessibilityChecks
 
     private static T CommandControl<T>(CommandBar commands, string id) where T : FrameworkElement =>
         commands.PrimaryCommands.Concat(commands.SecondaryCommands).OfType<AppBarElementContainer>()
-            .Select(command => command.Content).OfType<T>().Single(control => AutomationProperties.GetAutomationId(control) == id);
+            .Select(command => command.Content is T direct ? direct :
+                command.Content is Panel panel ? panel.Children.OfType<T>().SingleOrDefault() : null)
+            .Single(control => control is not null && AutomationProperties.GetAutomationId(control) == id)
+            ?? throw new InvalidOperationException("Missing editor command: " + id);
 
     private static T Find<T>(DependencyObject root, string id) where T : FrameworkElement
     {
