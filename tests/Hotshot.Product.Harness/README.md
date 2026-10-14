@@ -9,6 +9,10 @@ The accessibility fixture also hosts real native controls.
 Editor checks cover centered controls with gaps, full RGB/hex/transparency
 selection, custom-color saves, canvas-only editing cursors and a rendered
 thick green arrow preview beside the controls.
+Editor feedback checks verify native capture visibility and selectable editor
+and Settings windows while other Hotshot controls stay out of screenshot
+targets. The existing assistant window allowlist is unchanged. These checks
+read only this fixture's window flags; they do not capture desktop pixels.
 Window snapping checks use generated windows from this process only: full
 physical-pixel bounds, topmost selection and hidden-window filtering. They do
 not capture the desktop or move the user's pointer.
@@ -17,6 +21,7 @@ startup, timer-only Mini/Small layouts in all four corners, elapsed/pause
 feedback and retained pause/stop controls without starting a recorder.
 Native settings choices must persist both preferences. The Mini/Small images
 use their actual pixel sizes; layout checks reject clipped timer text.
+The timer's native capture-exclusion flag must also remain set.
 General, screenshot, GIF, recording and naming settings verify that their
 920-DIP column is centered in the content area beside navigation at compact,
 normal and 1920-DIP widths in both themes. Headings and card text stay

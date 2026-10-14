@@ -121,6 +121,23 @@ internal static class ProductAcceptance
             await report.CheckAsync("workspace-native-history-editor-draw-and-generated-export", async () =>
             {
                 await ReadyAsync(workspace);
+                var workspaceHandle = WinRT.Interop.WindowNative.GetWindowHandle(workspace);
+                var settingsHandle = WinRT.Interop.WindowNative.GetWindowHandle(settings);
+                if (NativeProductWindow.CaptureAffinity(workspaceHandle) != Win32.WDA_NONE ||
+                    NativeProductWindow.CaptureAffinity(settingsHandle) != Win32.WDA_NONE)
+                    throw new InvalidDataException("The editor and Settings must remain visible in screenshots.");
+                using var controls = new SnapFixture("Hotshot.EditorCapture.Controls", "Generated capture controls", 20, 20, 160, 80);
+                Win32.ShowWindow(controls.Handle, Win32.SW_SHOW);
+                var ownProcess = (uint)Environment.ProcessId;
+                var feedbackTargets = WindowEnumerator.GetVisibleWindows(ownProcess, settingsHandle, ownProcess, workspaceHandle);
+                if (!feedbackTargets.Any(window => window.Handle == workspaceHandle) ||
+                    !feedbackTargets.Any(window => window.Handle == settingsHandle) ||
+                    feedbackTargets.Any(window => window.Handle != workspaceHandle && window.Handle != settingsHandle))
+                    throw new InvalidDataException("Screenshot snapping must include the editor and Settings but exclude other Hotshot controls.");
+                var settingsOnly = WindowEnumerator.GetVisibleWindows(ownProcess, settingsHandle, ownProcess);
+                if (settingsOnly.Any(window => window.Handle == workspaceHandle))
+                    throw new InvalidDataException("Editor feedback capture must not expand the existing assistant window allowlist.");
+                Console.WriteLine("PASS editor screenshot feedback: native capture visibility, editor/Settings snap targets, other controls excluded and assistant allowlist unchanged.");
                 var editor = Descendants(workspace.Content).OfType<EditorView>().Single();
                 var editorFailures = new List<string>();
                 editor.Failed += editorFailures.Add;
@@ -295,6 +312,8 @@ internal static class ProductAcceptance
                 var actual = window.AppWindow;
                 var status = Find<TextBlock>(window.Content, "RecordingStatus");
                 var clock = Find<Button>(window.Content, "RecordingTimer");
+                if (NativeProductWindow.CaptureAffinity(WinRT.Interop.WindowNative.GetWindowHandle(window)) != Win32.WDA_EXCLUDEFROMCAPTURE)
+                    throw new InvalidDataException("The recording timer must remain excluded from capture.");
                 Console.WriteLine($"Recording timer {timerSize}/{placement}: expected={expected}, " +
                     $"actual={actual.Position.X},{actual.Position.Y}/{actual.Size.Width}x{actual.Size.Height}, " +
                     $"time={status.Text}, root children={((Grid)window.Content).Children.Count}, " +

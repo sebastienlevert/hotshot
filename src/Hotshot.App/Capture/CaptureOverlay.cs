@@ -11,7 +11,7 @@ internal enum OverlayMode
 }
 
 internal sealed record OverlayOptions(OverlayMode Mode, bool SnapToWindows, bool ShowMagnifier, bool ShowCrosshair,
-    nint CapturableWindow = 0);
+    nint CapturableWindow = 0, nint CapturableEditor = 0);
 
 internal abstract record OverlaySelection(PixelRect Rect);
 
@@ -63,7 +63,8 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         _options = options;
         _monitors = Monitors.GetAll();
         _windows = options.SnapToWindows
-            ? WindowEnumerator.GetVisibleWindows((uint)Environment.ProcessId, options.CapturableWindow) : [];
+            ? WindowEnumerator.GetVisibleWindows((uint)Environment.ProcessId, options.CapturableWindow,
+                includeAdditionalWindow: options.CapturableEditor) : [];
         _dim = snapshot.Bitmap.CreateDimmedCopy(118);
         _back = new GdiBitmap(snapshot.Bounds.Width, snapshot.Bounds.Height);
         _accentBrush = Win32.CreateSolidBrush(Accent);

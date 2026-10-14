@@ -113,7 +113,9 @@ Hotshot never silently substitutes a desktop screenshot.
 
 **Scrolling captures:** choose **Scrolling capture** from the tray or workspace. Select the content, scroll it yourself, and add overlapping frames. Exclude fixed headers and keep the capture area in the same position and size. Hotshot rejects ambiguous overlaps rather than stitching a misleading result. This is guided capture, not automatic scrolling.
 
-You can capture Hotshot's own Settings window for feedback. The editor and recording controls are excluded from capture.
+To capture Hotshot's editor or Settings for feedback, leave the window open and
+use your screenshot shortcut. Window snapping works here too. Recording controls
+stay out of captures.
 
 ## Edit, organize, and compare
 

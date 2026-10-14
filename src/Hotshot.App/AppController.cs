@@ -59,7 +59,8 @@ internal sealed partial class AppController : IDisposable
         _pipeline = new OutputPipeline(_app);
         _app.Output = _pipeline;
         _capture = new CaptureCoordinator(_app, _pipeline,
-            () => _settingsWindow is { } settings ? WinRT.Interop.WindowNative.GetWindowHandle(settings) : 0);
+            () => _settingsWindow is { } settings ? WinRT.Interop.WindowNative.GetWindowHandle(settings) : 0,
+            () => _historyWindow is { } editor ? WinRT.Interop.WindowNative.GetWindowHandle(editor) : 0);
         _actions = new CaptureActions(_app);
         _agentServer = new AgentCaptureServer(_app, _capture,
             () => _exiting || IsRecording || _startTask is not null || _stopTask is not null,

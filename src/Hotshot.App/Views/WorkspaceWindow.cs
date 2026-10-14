@@ -357,7 +357,7 @@ internal sealed partial class WorkspaceWindow : Window
             _app.SaveSettings();
         };
         RenderHistory();
-        WindowTools.Configure(this, 1120, 780, app: _app, layoutKey: "workspace");
+        WindowTools.Configure(this, 1120, 780, excludeFromCapture: false, app: _app, layoutKey: "workspace");
     }
 
     public void Show()
