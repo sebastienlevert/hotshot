@@ -96,6 +96,7 @@ internal static class ProductAcceptance
             await report.CheckAsync("settings-native-responsive-header", () => ProductMedia.CheckSettingsHeaderAsync(settings));
             await report.CheckAsync("settings-native-plain-language-default-pages", () => CheckSettingsCopyAsync(settings, output));
             await report.CheckAsync("settings-native-left-aligned-responsive-pages", () => CheckSettingsAlignmentAsync(settings, output));
+            await report.CheckAsync("native-full-window-snap-targets", CheckWindowSnapAsync);
             await report.CheckAsync("copilot-native-sign-in-consent-cancellation-and-failure", () =>
                 CheckCopilotSignInAsync(settings, app, accountClients, browserVisits));
             var scale = ((FrameworkElement)settings.Content).XamlRoot.RasterizationScale;
@@ -248,6 +249,32 @@ internal static class ProductAcceptance
             }
             if (Directory.Exists(profile)) Directory.Delete(profile, recursive: true);
         }
+    }
+
+    private static async Task CheckWindowSnapAsync()
+    {
+        using var back = new SnapFixture("Hotshot.Snap.Back", "Generated background", 80, 120, 720, 480);
+        using var front = new SnapFixture("Hotshot.Snap.Front", "Generated foreground", 180, 220, 360, 240);
+        Win32.ShowWindow(back.Handle, Win32.SW_SHOW);
+        Win32.ShowWindow(front.Handle, Win32.SW_SHOW);
+        Win32.SetWindowPos(front.Handle, Win32.HWND_TOPMOST, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE);
+        await Task.Delay(150);
+        var candidates = WindowEnumerator.GetVisibleWindows(onlyProcessId: (uint)Environment.ProcessId);
+        var bounds = WindowEnumerator.GetBounds(front.Handle) ?? throw new InvalidDataException("The generated window has no native bounds.");
+        var selected = WindowSnapGeometry.AtPoint(candidates, bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+        if (selected?.Handle != front.Handle || selected.Bounds != bounds || bounds.Width < 300 || bounds.Height < 200)
+            throw new InvalidDataException("The pointer did not select the full topmost generated window.");
+        Win32.ShowWindow(front.Handle, 0);
+        candidates = WindowEnumerator.GetVisibleWindows(onlyProcessId: (uint)Environment.ProcessId);
+        if (candidates.Any(window => window.Handle == front.Handle))
+            throw new InvalidDataException("A hidden window must not remain a snap target.");
+        Console.WriteLine($"PASS generated window snap: full {bounds.Width}x{bounds.Height} physical-pixel bounds, native z-order and hidden-target filtering.");
+    }
+
+    private sealed class SnapFixture : NativeWindow
+    {
+        public SnapFixture(string className, string title, int x, int y, int width, int height) =>
+            CreateHandle(className, Win32.WS_EX_TOOLWINDOW, Win32.WS_POPUP, x, y, width, height, title);
     }
 
     private static async Task CheckSettingsCopyAsync(SettingsWindow settings, string output)

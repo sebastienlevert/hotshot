@@ -102,7 +102,12 @@ The hamburger navigation button and search box both sit inside the Settings titl
 
 For most captures, use the shortcuts above. Under **Screenshots**, you can add a delay of up to 30 seconds to make time for opening a menu or preparing a window.
 
-**Window captures:** by default, **Unobscured window screenshots** captures the selected window even if another window overlaps it, without moving or focusing it. Windows may show a capture border. Hidden, minimized, protected, or changed targets can fail explicitly; Hotshot does not silently substitute a desktop screenshot. Turn this setting off if you specifically want the visible-screen version.
+**Window captures:** hover over a window to highlight it fully, then click.
+Drag instead to select an area. **Snap to windows** is on by default.
+**Capture covered windows** captures the whole selected window even if another
+window overlaps it, without moving or focusing it. Windows may show a capture
+border. Hidden, minimized, protected, or changed targets can fail explicitly;
+Hotshot never silently substitutes a desktop screenshot.
 
 **Scrolling captures:** choose **Scrolling capture** from the tray or workspace. Select the content, scroll it yourself, and add overlapping frames. Exclude fixed headers and keep the capture area in the same position and size. Hotshot rejects ambiguous overlaps rather than stitching a misleading result. This is guided capture, not automatic scrolling.
 
