@@ -139,9 +139,9 @@ for (const viewport of viewports) {
       }
 
       test('walkthrough has direct controls without downloading on mobile page load', async ({ page }) => {
-        const videoResponses = [];
-        page.on('response', response => {
-          if (response.url().endsWith('/workflow.mp4')) videoResponses.push(response);
+        const videoRequests = [];
+        page.on('request', request => {
+          if (request.url().endsWith('/workflow.mp4')) videoRequests.push(request);
         });
         await page.goto('');
         await page.evaluate(() => document.fonts.ready);
@@ -151,13 +151,18 @@ for (const viewport of viewports) {
         await expect(page.locator('video')).toHaveAttribute('controlslist', 'nodownload');
         await expect(page.locator('video source')).toHaveAttribute('src', /workflow\.mp4$/);
         await expect(page.locator('[data-video-play], a[href$="workflow.mp4"]')).toHaveCount(0);
-        for (const response of videoResponses) {
-          expect(response.status()).toBe(206);
-          expect(response.request().headers().range).toMatch(/^bytes=/);
+        // WebKit may cancel native metadata probes before exposing a response.
+        let requestedBytes = 0;
+        for (const request of videoRequests) {
+          const range = (await request.allHeaders()).range;
+          expect(range).toMatch(/^bytes=\d+-\d+$/);
+          const [start, end] = range.slice(6).split('-').map(Number);
+          expect(end).toBeGreaterThanOrEqual(start);
+          requestedBytes += end - start + 1;
         }
-        const probedBytes = videoResponses.reduce((total, response) => total + Number(response.headers()['content-length']), 0);
-        expect(probedBytes, 'Native controls may probe metadata, but must not fetch the walkthrough before playback')
+        expect(requestedBytes, 'Native controls may probe metadata, but must not request the walkthrough before playback')
           .toBeLessThanOrEqual(64 * 1024);
+        expect(await page.locator('video').evaluate(element => element.paused && element.currentTime === 0)).toBe(true);
       });
     });
 }
