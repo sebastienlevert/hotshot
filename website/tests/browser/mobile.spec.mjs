@@ -21,6 +21,41 @@ async function expectTouchTargets(locator) {
   }
 }
 
+for (const width of [320, 390, 1280]) {
+  for (const theme of ['light', 'dark']) {
+    test(`workflow search overlay covers sample text at ${width}px in ${theme} theme`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`?scoutTheme=${theme}`);
+      await page.evaluate(() => document.fonts.ready);
+      await page.getByRole('tab', { name: 'Find', exact: true }).click();
+      const panel = page.locator('#demo-panel-2');
+      await panel.scrollIntoViewIfNeeded();
+      await expect(panel.locator('.demo-result strong')).toHaveText(['homepage-review.png', 'settings-update.png']);
+      const coverage = await panel.evaluate(element => {
+        const overlay = element.querySelector('.demo-search');
+        const bounds = overlay.getBoundingClientRect();
+        const points = [...element.querySelectorAll('.sample-art > p, .sample-caption')].flatMap(sample => {
+          const sampleBounds = sample.getBoundingClientRect();
+          const left = Math.max(sampleBounds.left, bounds.left);
+          const top = Math.max(sampleBounds.top, bounds.top);
+          const right = Math.min(sampleBounds.right, bounds.right);
+          const bottom = Math.min(sampleBounds.bottom, bounds.bottom);
+          if (right - left < 4 || bottom - top < 4) return [];
+          return [{ x: (left + right) / 2, y: (top + bottom) / 2 }];
+        });
+        return {
+          tested: points.length,
+          uncovered: points.filter(point => !overlay.contains(document.elementFromPoint(point.x, point.y))),
+        };
+      });
+      await page.locator('.workflow-demo').screenshot({ path: testInfo.outputPath(`workflow-find-${width}-${theme}.png`) });
+      expect(coverage.tested).toBeGreaterThan(0);
+      expect(coverage.uncovered, 'Sample text must stay behind the opaque Find preview').toEqual([]);
+      await expectPageFits(page);
+    });
+  }
+}
+
 for (const viewport of viewports) {
     test.describe(`phone ${viewport.width}x${viewport.height}`, () => {
       test.use({ viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });

@@ -177,7 +177,7 @@ kbd { border: 1px solid var(--cp-border-strong); border-bottom-width: 2px; borde
 .demo-tabs button[aria-selected="true"] { background: var(--cp-brand-orange); color: var(--cp-brand-ink); }
 .demo-stage { padding: 4px 16px 18px; }
 .demo-canvas { position: relative; padding: 20px; background: var(--cp-bg-elevated); border-radius: 12px; min-height: 280px; overflow: hidden; }
-.sample-window { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 8px; overflow: hidden; }
+.sample-window { isolation: isolate; background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 8px; overflow: hidden; }
 .sample-title { display: flex; justify-content: space-between; gap: 10px; padding: 12px; color: var(--cp-readable-muted); font-size: .6875rem; }
 .sample-title strong { color: var(--cp-text); }
 .sample-art { position: relative; min-height: 194px; padding: 24px; background: var(--cp-brand-paper); color: var(--cp-brand-ink); overflow: hidden; }
