@@ -93,7 +93,14 @@ it does not claim physical input delivery. Human acceptance must separately
 cover Narrator names/status speech, Tab/Shift+Tab return after hidden controls
 and asynchronous saves, and live OS contrast/text-scale transitions.
 
-The original publication/media fixture remains available with `--output`
-(optionally `--settings-header-only`); it is **not run by native UI CI**. Unlike
+The publication/media fixture remains available with `--output`
+(optionally `--settings-header-only`); it is **not part of default native UI CI**. Unlike
 acceptance, the full media fixture requires own-window capture and recording.
 All fixture files stay under the supplied output directory.
+
+For publication, dispatch Native WinUI acceptance with `generate_media: true`.
+After normal acceptance, x64 generates current editor/Settings/comparison PNGs
+and a silent walkthrough from this harness's own windows. The evidence records
+the exact source commit, image dimensions and text below the arrow. Windows use
+1100x800 DIPs for readable UI; no user profile, desktop, clipboard or provider is
+used. This opt-in media run requires an interactive desktop just like acceptance.

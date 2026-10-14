@@ -48,13 +48,13 @@ internal static class Program
             Directory.CreateDirectory(OutputDirectory);
             if (UiAcceptance) Report = new AcceptanceReport(OutputDirectory, expectedArchitecture, SoftwareRenderer);
             _ = EnforceTimeoutAsync(timeout);
+            var interactive = NativeProductWindow.IsInteractiveWindowStation();
+            var ownDesktopReceivesInput = NativeProductWindow.OwnDesktopReceivesInput();
+            Report?.SetWindowStation(interactive, ownDesktopReceivesInput);
+            if (!Environment.UserInteractive || !interactive || !ownDesktopReceivesInput)
+                throw new InvalidOperationException("Native UI acceptance and media generation require an interactive visible window station and this process's desktop receiving input. A service/noninteractive/locked runner is unsupported and cannot pass.");
             if (UiAcceptance)
             {
-                var interactive = NativeProductWindow.IsInteractiveWindowStation();
-                var ownDesktopReceivesInput = NativeProductWindow.OwnDesktopReceivesInput();
-                Report!.SetWindowStation(interactive, ownDesktopReceivesInput);
-                if (!Environment.UserInteractive || !interactive || !ownDesktopReceivesInput)
-                    throw new InvalidOperationException("Native UI acceptance requires an interactive visible window station and this process's desktop receiving input. A service/noninteractive/locked runner is unsupported and cannot pass.");
                 if (RuntimeInformation.ProcessArchitecture != RuntimeInformation.OSArchitecture ||
                     expectedArchitecture is not null && !RuntimeInformation.ProcessArchitecture.ToString().Equals(expectedArchitecture, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"Native architecture mismatch: process={RuntimeInformation.ProcessArchitecture}, OS={RuntimeInformation.OSArchitecture}, expected={expectedArchitecture ?? "native"}. Emulated execution is not native acceptance.");
