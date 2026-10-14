@@ -91,9 +91,8 @@ internal sealed class RecordingWindow : Window
         if (AppWindow.Presenter is OverlappedPresenter presenter)
         {
             presenter.SetBorderAndTitleBar(false, false);
-            presenter.PreferredMinimumWidth = 1;
-            presenter.PreferredMinimumHeight = 1;
         }
+        NativeRecordingTimer.AllowCompactSize(WinRT.Interop.WindowNative.GetWindowHandle(this));
         var width = Math.Min(monitor.WorkArea.Width, (int)Math.Round(140 * monitor.Scale));
         var height = Math.Min(monitor.WorkArea.Height, (int)Math.Round(140 * monitor.Scale));
         AppWindow.MoveAndResize(new RectInt32(monitor.WorkArea.X + (monitor.WorkArea.Width - width) / 2,
