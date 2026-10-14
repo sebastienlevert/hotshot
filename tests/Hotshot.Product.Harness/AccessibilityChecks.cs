@@ -239,6 +239,7 @@ internal static class AccessibilityChecks
                 "Native focus navigation reached an unavailable control.");
             Pass("Native FocusManager next-focus traversal");
 
+            await editor.LoadAsync(options);
             tools.FontSize = 14;
             tools.SelectedItem = EditorTool.Arrow;
             commands.IsOpen = false;
