@@ -95,7 +95,7 @@ public sealed class GuidedSetupSession
         try
         {
             if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
-                return "Choose an absolute path to an existing captures folder.";
+                return @"Choose a full folder path, such as C:\Pictures.";
             _ = Path.GetFullPath(path);
             return null;
         }
@@ -182,7 +182,7 @@ public sealed class GuidedSetupSession
         if (folderChanged && ValidateFolderPath(FolderPath) is { } invalid) return invalid;
         if ((folderChanged || SaveToFile && (!_initial.General.SaveToFile ||
                 GetProgress(SetupStep.Folder) != SetupStepProgress.Skipped)) && FolderCheck != SetupCheckResult.Passed)
-            return "Go back to Captures folder and check write access before saving these choices.";
+            return "Go back to Save folder and check it before finishing.";
         return null;
     }
 

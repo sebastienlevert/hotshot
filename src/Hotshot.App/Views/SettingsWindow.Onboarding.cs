@@ -35,7 +35,7 @@ internal sealed partial class SettingsWindow
             var preview = new Image { Source = bitmap, Width = 256, Height = 128 };
             AutomationProperties.SetAutomationId(preview, "AgentSyntheticConnectionImage");
             body.Children.Add(preview);
-            body.Children.Add(UiStyles.Description("The installed stdio companion connected to this native app and returned a generated image. No screen capture, historical files, settings change or model request occurred."));
+            body.Children.Add(UiStyles.Description("Connected using a sample image. No screenshots or private files were used."));
             await new ContentDialog { Title = "Connection test passed", Content = body, CloseButtonText = "Close", XamlRoot = _navigation.XamlRoot }.ShowAsync();
         }
         catch (Exception ex) when (IsSetupOperationError(ex))
@@ -108,7 +108,7 @@ internal sealed partial class SettingsWindow
         {
             _error.Title = "Save your settings before setup";
             if (string.IsNullOrWhiteSpace(_error.Message))
-                _error.Message = "Resolve unapplied settings changes, then reopen setup from About Hotshot.";
+                _error.Message = "Fix any settings errors, then reopen setup.";
             _error.IsOpen = true;
             QuickStartLastError = _error.Message;
             QuickStartState.Cancel();
@@ -211,11 +211,11 @@ internal sealed partial class SettingsWindow
                 return;
             }
             SetBusy(true);
-            description.Text = "Checking write access with a small, removable probe…";
+            description.Text = "Checking this folder…";
             try
             {
                 await CheckQuickStartFolderAsync(path, stop.Token);
-                session.RecordFolderCheck(path, true, "Write access checked. The probe was removed.");
+                session.RecordFolderCheck(path, true, "Ready to save here.");
             }
             catch (OperationCanceledException) when (stop.IsCancellationRequested) { return; }
             catch (Exception ex) when (IsSetupOperationError(ex))
@@ -242,23 +242,21 @@ internal sealed partial class SettingsWindow
             stepBody.Children.Clear();
             description.Text = session.CurrentStep switch
             {
-                SetupStep.Welcome => "Your capture utility, quietly ready in the Windows tray.",
-                SetupStep.Folder => "Choose where saved captures belong on this device.",
-                SetupStep.Shortcuts => "Check the shortcuts registered by this running app.",
-                SetupStep.Output => "Keep your current preferences, or choose how new captures are delivered.",
-                SetupStep.OneDrive => "See where portable preferences live. Accounts and device permissions stay yours.",
-                SetupStep.Privacy => "Keep current choices, or turn optional access off. Setup never grants new permissions.",
-                SetupStep.Connection => "An optional, local connection check using only a generated image.",
-                _ => "Review the checklist. Finish saves only your explicit choices; Cancel discards them.",
+                SetupStep.Welcome => "Capture quietly. Edit when you want.",
+                SetupStep.Folder => "Where should your files go?",
+                SetupStep.Shortcuts => "Choose how to start a capture.",
+                SetupStep.Output => "Copy, save, or both.",
+                SetupStep.OneDrive => "Share preferences, not your captures.",
+                SetupStep.Privacy => "Keep your choices, or turn features off.",
+                SetupStep.Connection => "Optional: check your assistant connection.",
+                _ => "Finish saves your choices.",
             };
             switch (session.CurrentStep)
             {
                 case SetupStep.Welcome:
-                    stepBody.Children.Add(UiStyles.Description("Capture silently. Edit when you want."));
-                    stepBody.Children.Add(UiStyles.Description("Screenshots copy and save without opening a preview or editor. Click Hotshot in the Windows tray to browse filenames, annotate or redact, and export a local flattened copy. The workspace does not automatically select the newest capture."));
-                    stepBody.Children.Add(UiStyles.Description("Use your region shortcut to drag a region or click a window. Space captures the monitor; R + arrows + Enter selects a region with the keyboard. Escape cancels."));
-                    stepBody.Children.Add(UiStyles.Description("In the editor, choose a tool and press Insert on the canvas to add an annotation or crop. Page Up/Down selects annotations; arrows move, Ctrl+arrows resize, and Shift uses 10 pixels. Alt+arrows pans, +/- zooms, Ctrl+1 shows 100%, Ctrl+0 fits, and Escape cancels or clears selection. Mouse wheel and Space-drag also work. Library actions offer reviewed cleanup, local backups, projects and relinking moved files."));
-                    stepBody.Children.Add(UiStyles.Description("Nothing changes until Finish. Skip keeps a step's existing choices. Cancel or opening another settings page discards all pending setup choices. Reopen this flow from About Hotshot → Quick start guide."));
+                    stepBody.Children.Add(UiStyles.Description("Press your shortcut, then drag an area or click a window."));
+                    stepBody.Children.Add(UiStyles.Description("Click Hotshot in the taskbar tray to browse and edit."));
+                    stepBody.Children.Add(UiStyles.Description("Cancel keeps your current settings. Skip keeps a step unchanged."));
                     break;
                 case SetupStep.Folder:
                     var path = new TextBox { Header = "Captures folder", Text = session.FolderPath, TextWrapping = TextWrapping.Wrap };
@@ -292,11 +290,11 @@ internal sealed partial class SettingsWindow
                         }
                     };
                     stepBody.Children.Add(pick);
-                    var check = QuickStartButton("Check write access", "QuickStartCheckFolder");
+                    var check = QuickStartButton("Check folder", "QuickStartCheckFolder");
                     check.Click += async (_, _) => await CheckFolderAsync();
                     stepBody.Children.Add(check);
                     stepBody.Children.Add(folderStatus);
-                    stepBody.Children.Add(UiStyles.Description("The check writes and removes a tiny probe in the existing folder. It does not move captures or change your settings. If the default folder does not exist yet, choose an existing folder, or Skip to keep the current path without claiming it was verified."));
+                    stepBody.Children.Add(UiStyles.Description("Checks that files can be saved here. Your captures won't be moved."));
                     break;
                 case SetupStep.Shortcuts:
                     ObserveShortcuts();
@@ -306,13 +304,13 @@ internal sealed partial class SettingsWindow
                     {
                         var text = _hotkeys.Status.TryGetValue(action, out var status)
                             ? $"{action.DisplayName()}: {status.Hotkey.ToDisplayString()} — {status.Message}"
-                            : $"{action.DisplayName()}: Registration has not been reported.";
+                            : $"{action.DisplayName()}: Not checked yet.";
                         shortcuts.Children.Add(UiStyles.Description(text));
                     }
                     stepBody.Children.Add(shortcuts);
                     if (session.HotkeysPaused) stepBody.Children.Add(UiStyles.Description("Hotkeys are paused in the tray. Setup will not unpause them."));
-                    stepBody.Children.Add(UiStyles.Description("A conflict means Windows or another app already owns that shortcut. Keep it, choose an alternative in Keyboard shortcuts, or review Windows Settings → Accessibility → Keyboard for the Print Screen / Snipping Tool option. Setup never changes Windows shortcuts."));
-                    var retry = QuickStartButton("Retry registration", "QuickStartRefreshShortcuts");
+                    stepBody.Children.Add(UiStyles.Description("Already in use? Choose another shortcut."));
+                    var retry = QuickStartButton("Check again", "QuickStartRefreshShortcuts");
                     retry.Click += (_, _) => { _hotkeys.SetPaused(_hotkeys.IsPaused); Render(); };
                     stepBody.Children.Add(retry);
                     var openShortcuts = QuickStartButton("Open Keyboard shortcuts", "QuickStartOpenShortcuts");
@@ -323,22 +321,20 @@ internal sealed partial class SettingsWindow
                 case SetupStep.Output:
                     var outputNote = QuickStartText("", "QuickStartOutputNote");
                     void UpdateOutputNote() => outputNote.Text = !session.CopyToClipboard && !session.SaveToFile
-                        ? "Both outputs are off. Captures remain available in temporary recent history; no new saved capture file or clipboard image is requested."
-                        : "Captures remain silent. The tray opens the filename-based editor and history when you want them.";
+                        ? "Both are off. Captures stay in temporary history only."
+                        : "Nothing opens after capture. Browse and edit from the taskbar tray.";
                     stepBody.Children.Add(QuickStartToggle("Copy captures to clipboard", "QuickStartCopyToClipboard", session.CopyToClipboard,
                         value => { session.CopyToClipboard = value; UpdateOutputNote(); QuickStartStateChanged?.Invoke(); }));
-                    stepBody.Children.Add(UiStyles.Description("Screenshot images go to the clipboard; recordings and GIFs use files."));
+                    stepBody.Children.Add(UiStyles.Description("Ready to paste after capturing."));
                     stepBody.Children.Add(QuickStartToggle("Save captures to files", "QuickStartSaveToFile", session.SaveToFile,
                         value => { session.SaveToFile = value; UpdateOutputNote(); QuickStartStateChanged?.Invoke(); }));
-                    stepBody.Children.Add(UiStyles.Description("Keep capture files in the captures folder as well as recent history. Setup does not delete existing captures."));
+                    stepBody.Children.Add(UiStyles.Description("Save automatically to your folder."));
                     UpdateOutputNote();
                     stepBody.Children.Add(outputNote);
                     break;
                 case SetupStep.OneDrive:
-                    stepBody.Children.Add(QuickStartText(_app.SettingsSyncStatus + "\nShared file: " + (_app.SharedSettingsFile ?? "None") +
-                        "\nDevice-local cache: " + _app.Paths.SettingsFile, "QuickStartOneDriveStatus"));
-                    stepBody.Children.Add(UiStyles.Description("Only the existing portable whitelist roams: theme, shortcuts, naming, capture/recording options, saved searches and export presets. Paths, layouts, microphone IDs, counters, AI upload/review choices and agent permissions remain on this device. Captures, originals, history and credentials do not roam."));
-                    stepBody.Children.Add(UiStyles.Description("Next and Finish do not select an account, change the settings location, resolve a sync conflict or enable permissions. The native General page offers explicit, reviewed settings-location choices."));
+                    stepBody.Children.Add(QuickStartText(_app.SettingsSyncStatus, "QuickStartOneDriveStatus"));
+                    stepBody.Children.Add(UiStyles.Description("OneDrive shares preferences. Captures, sign-ins and permissions stay on this device."));
                     var oneDrive = QuickStartButton("Open settings across devices", "QuickStartOpenOneDrive");
                     oneDrive.Click += (_, _) => OpenPage(SettingsPage.General);
                     stepBody.Children.Add(oneDrive);
@@ -346,45 +342,45 @@ internal sealed partial class SettingsWindow
                     break;
                 case SetupStep.Privacy:
                     stepBody.Children.Add(QuickStartText(
-                        $"Copilot descriptions: {OnOff(session.InitialAiDescriptions)}; review before upload: {OnOff(session.InitialAiReview)}.\n" +
-                        $"Local text recognition: {OnOff(session.InitialTextRecognition)}.\n" +
-                        $"Agent capture access: {OnOff(session.InitialAgentAccess)}; history permission: {OnOff(session.InitialAgentHistoryAccess)}.",
+                        $"Copilot descriptions: {OnOff(session.InitialAiDescriptions)}; review first: {OnOff(session.InitialAiReview)}.\n" +
+                        $"Read screenshot text: {OnOff(session.InitialTextRecognition)}.\n" +
+                        $"Assistant access: {OnOff(session.InitialAgentAccess)}; saved screenshots: {OnOff(session.InitialAgentHistoryAccess)}.",
                         "QuickStartPrivacyStatus"));
-                    stepBody.Children.Add(UiStyles.Description("Unchecked choices preserve the current device-local configuration. These controls can only turn features off. To opt in or review application restrictions, use the native Screenshots or Coding agents page separately."));
+                    stepBody.Children.Add(UiStyles.Description("Only checked features turn off. Other settings stay unchanged."));
                     AddPrivacyChoice("Turn off automatic Copilot descriptions", "QuickStartTurnOffAiDescriptions", session.InitialAiDescriptions,
                         session.TurnOffAiDescriptions, value => session.TurnOffAiDescriptions = value);
-                    AddPrivacyChoice("Turn off local screenshot text recognition", "QuickStartTurnOffTextRecognition", session.InitialTextRecognition,
+                    AddPrivacyChoice("Turn off reading screenshot text", "QuickStartTurnOffTextRecognition", session.InitialTextRecognition,
                         session.TurnOffTextRecognition, value => session.TurnOffTextRecognition = value);
-                    AddPrivacyChoice("Turn off agent capture access", "QuickStartTurnOffAgentAccess", session.InitialAgentAccess,
+                    AddPrivacyChoice("Turn off assistant access", "QuickStartTurnOffAgentAccess", session.InitialAgentAccess,
                         session.TurnOffAgentAccess, value => session.TurnOffAgentAccess = value);
-                    AddPrivacyChoice("Turn off agent history access", "QuickStartTurnOffAgentHistoryAccess", session.InitialAgentHistoryAccess,
+                    AddPrivacyChoice("Turn off access to saved screenshots", "QuickStartTurnOffAgentHistoryAccess", session.InitialAgentHistoryAccess,
                         session.TurnOffAgentHistoryAccess, value => session.TurnOffAgentHistoryAccess = value);
-                    stepBody.Children.Add(UiStyles.Description("Turning features off affects future requests only. It does not delete history, OCR text, descriptions or existing capture files. Review mode, exclusions, allowed applications, request approval and timed-session choices stay unchanged."));
+                    stepBody.Children.Add(UiStyles.Description("Existing captures, text and descriptions aren't deleted."));
                     var aiPrivacy = QuickStartButton("Review screenshot privacy", "QuickStartOpenAiPrivacy");
                     aiPrivacy.Click += (_, _) => OpenPage(SettingsPage.Capture);
                     stepBody.Children.Add(aiPrivacy);
-                    var agentPrivacy = QuickStartButton("Review coding agent permissions", "QuickStartOpenAgentPrivacy");
+                    var agentPrivacy = QuickStartButton("Review assistant permissions", "QuickStartOpenAgentPrivacy");
                     agentPrivacy.Click += (_, _) => OpenPage(SettingsPage.Agents);
                     stepBody.Children.Add(agentPrivacy);
                     AddHandoffNote();
                     break;
                 case SetupStep.Connection:
-                    stepBody.Children.Add(UiStyles.Description("This test starts the installed local MCP companion, connects to the native app, and requests a generated 256 × 128 image. It does not capture the screen, read historical files, contact an AI provider, sign in or grant agent access. It is not an AI-service or account diagnostic."));
+                    stepBody.Children.Add(UiStyles.Description("Uses a sample image, not your screen. No private files or AI service are contacted."));
                     stepBody.Children.Add(QuickStartText(session.ConnectionCheckMessage, "QuickStartConnectionStatus"));
-                    var test = QuickStartButton("Test with generated image", "QuickStartTestConnection");
+                    var test = QuickStartButton("Test connection", "QuickStartTestConnection");
                     test.IsEnabled = _app.AgentServer is not null && File.Exists(Path.Combine(AppContext.BaseDirectory, "Mcp", "Hotshot.Mcp.exe"));
-                    if (!test.IsEnabled) stepBody.Children.Add(UiStyles.Description("The running native agent server and packaged MCP companion are required. You can Skip this optional test."));
+                    if (!test.IsEnabled) stepBody.Children.Add(UiStyles.Description("Connection unavailable. You can skip this test."));
                     test.Click += async (_, _) =>
                     {
                         if (busy) return;
                         SetBusy(true);
-                        description.Text = "Connecting locally. No screen capture or model request…";
+                        description.Text = "Testing the connection…";
                         BitmapImage? bitmap = null;
                         try
                         {
                             bitmap = await LoadGeneratedConnectionImageAsync(stop.Token);
                             if (session.Outcome != SetupOutcome.InProgress) return;
-                            session.RecordConnectionCheck(true, "Passed: the native app returned the generated image. No capture or model request occurred.");
+                            session.RecordConnectionCheck(true, "Connected. No private content was used.");
                         }
                         catch (OperationCanceledException) when (stop.IsCancellationRequested) { return; }
                         catch (Exception ex) when (IsSetupOperationError(ex))
@@ -410,29 +406,29 @@ internal sealed partial class SettingsWindow
                     ObserveShortcuts();
                     var checklist = new StackPanel { Spacing = 10 };
                     AutomationProperties.SetAutomationId(checklist, "QuickStartChecklist");
-                    checklist.Children.Add(UiStyles.Description("✓ Silent captures; tray opens the filename-based workspace on demand."));
+                    checklist.Children.Add(UiStyles.Description("✓ Quiet captures. Edit from the taskbar tray."));
                     checklist.Children.Add(UiStyles.Description($"{(session.FolderCheck == SetupCheckResult.Passed ? "✓" : "○")} Captures folder: {session.FolderPath}\n{session.FolderCheckMessage}"));
                     checklist.Children.Add(UiStyles.Description(session.ShortcutsChecked
-                        ? $"{(session.ShortcutsNeedingAttention == 0 && session.RegisteredShortcuts > 0 ? "✓" : "○")} Shortcuts: {session.RegisteredShortcuts} active, {session.ShortcutsNeedingAttention} need attention. Unassigned optional shortcuts remain unassigned."
-                        : "○ Shortcut registration has not been reported."));
+                        ? $"{(session.ShortcutsNeedingAttention == 0 && session.RegisteredShortcuts > 0 ? "✓" : "○")} Shortcuts: {session.RegisteredShortcuts} active, {session.ShortcutsNeedingAttention} need attention."
+                        : "○ Shortcuts not checked."));
                     checklist.Children.Add(UiStyles.Description($"✓ Clipboard: {OnOff(session.CopyToClipboard)}; saved files: {OnOff(session.SaveToFile)}."));
-                    checklist.Children.Add(UiStyles.Description("✓ OneDrive settings location unchanged; device-local privacy and access choices do not roam."));
+                    checklist.Children.Add(UiStyles.Description("✓ OneDrive settings unchanged."));
                     var privacyChanges = new[]
                     {
                         (session.TurnOffAiDescriptions, "Copilot descriptions"),
-                        (session.TurnOffTextRecognition, "local text recognition"),
-                        (session.TurnOffAgentAccess, "agent capture access"),
-                        (session.TurnOffAgentHistoryAccess, "agent history access"),
+                        (session.TurnOffTextRecognition, "reading screenshot text"),
+                        (session.TurnOffAgentAccess, "assistant access"),
+                        (session.TurnOffAgentHistoryAccess, "access to saved screenshots"),
                     }.Where(change => change.Item1).Select(change => change.Item2).ToArray();
                     checklist.Children.Add(UiStyles.Description(privacyChanges.Length > 0
-                        ? "✓ Turn off: " + string.Join(", ", privacyChanges) + ". All other privacy choices preserved; no new permission granted."
-                        : "✓ All existing AI, text-recognition, history-access and live agent permission choices preserved."));
-                    checklist.Children.Add(UiStyles.Description($"{(session.ConnectionCheck == SetupCheckResult.Passed ? "✓" : "○")} Generated-image connection test: {session.ConnectionCheckMessage}"));
+                        ? "✓ Turn off: " + string.Join(", ", privacyChanges) + "."
+                        : "✓ Privacy settings unchanged."));
+                    checklist.Children.Add(UiStyles.Description($"{(session.ConnectionCheck == SetupCheckResult.Passed ? "✓" : "○")} Connection: {session.ConnectionCheckMessage}"));
                     if (session.SkippedSteps.Count > 0)
-                        checklist.Children.Add(UiStyles.Description("Skipped setup steps: " + string.Join(", ", session.SkippedSteps.Select(QuickStartStepTitle)) + ". Unchecked items remain unverified."));
+                        checklist.Children.Add(UiStyles.Description("Skipped: " + string.Join(", ", session.SkippedSteps.Select(QuickStartStepTitle)) + ". Not checked."));
                     stepBody.Children.Add(checklist);
-                    stepBody.Children.Add(UiStyles.Description("Finish saves explicit folder/output changes and selected privacy reductions only. It does not capture anything, register new permissions or change your Windows or OneDrive account. Reopen setup any time from About Hotshot → Quick start guide."));
-                    var review = QuickStartButton("Review setup from the beginning", "QuickStartReviewAgain");
+                    stepBody.Children.Add(UiStyles.Description("Nothing new is shared or given access."));
+                    var review = QuickStartButton("Review again", "QuickStartReviewAgain");
                     review.Click += (_, _) => { while (session.Back()) { } Render(); };
                     stepBody.Children.Add(review);
                     break;
@@ -442,7 +438,7 @@ internal sealed partial class SettingsWindow
             QuickStartStateChanged?.Invoke();
         }
 
-        void AddHandoffNote() => stepBody.Children.Add(UiStyles.Description("Opening a settings page ends this setup without saving pending choices. Reopen setup from About Hotshot when you are ready."));
+        void AddHandoffNote() => stepBody.Children.Add(UiStyles.Description("Opening settings leaves this setup without saving."));
 
         void AddPrivacyChoice(string title, string id, bool currentlyEnabled, bool selected, Action<bool> changed)
         {
@@ -483,12 +479,12 @@ internal sealed partial class SettingsWindow
                 if (errors.Count > 0) { ShowError(string.Join(Environment.NewLine, errors)); return; }
                 if (session.HasChanges && !await _app.ApplySettingsAsync(candidate, baseline))
                 {
-                    ShowError("Your choices could not be saved. The last saved configuration is still active. Retry Finish, Cancel to discard these choices, or review the diagnostic log and any OneDrive conflict.");
+                    ShowError("Could not save. Your previous settings are safe. Try again or cancel.");
                     return;
                 }
                 _draft = _app.Settings.Clone();
                 _draftBaseline = _app.Settings.Clone();
-                _status.Text = session.HasChanges ? "Setup choices saved." : "Setup reviewed. Existing settings preserved.";
+                _status.Text = session.HasChanges ? "Setup saved." : "Settings unchanged.";
                 _error.IsOpen = false;
                 QuickStartLastError = null;
                 if (session.Complete(out var completionError))
@@ -574,13 +570,13 @@ internal sealed partial class SettingsWindow
     private static string QuickStartStepTitle(SetupStep step) => step switch
     {
         SetupStep.Welcome => "Welcome",
-        SetupStep.Folder => "Captures folder",
+        SetupStep.Folder => "Save folder",
         SetupStep.Shortcuts => "Keyboard shortcuts",
-        SetupStep.Output => "Clipboard and saved files",
+        SetupStep.Output => "Copy and save",
         SetupStep.OneDrive => "Settings across devices",
-        SetupStep.Privacy => "Privacy on this device",
-        SetupStep.Connection => "Optional connection test",
-        _ => "Ready when you are",
+        SetupStep.Privacy => "Privacy",
+        SetupStep.Connection => "Connection",
+        _ => "Ready",
     };
 
     private static async Task CheckQuickStartFolderAsync(string path, CancellationToken token)
@@ -588,7 +584,7 @@ internal sealed partial class SettingsWindow
         await Task.Run(async () =>
         {
             token.ThrowIfCancellationRequested();
-            if (!Directory.Exists(path)) throw new DirectoryNotFoundException("Choose an existing folder, or Skip to keep the current unverified path. Setup will not create or move your captures folder.");
+            if (!Directory.Exists(path)) throw new DirectoryNotFoundException("Choose an existing folder, or skip to keep your current folder.");
             var probe = Path.Combine(path, ".hotshot-setup-" + Guid.NewGuid().ToString("N") + ".probe");
             var created = false;
             try

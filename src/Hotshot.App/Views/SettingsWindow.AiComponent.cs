@@ -29,9 +29,9 @@ internal sealed partial class SettingsWindow
             _aiComponent.StatusChanged += AiComponentStatusChanged;
         }
         _componentStatus = UiStyles.Description(_aiComponent.Status);
-        _componentInstall = new Button { Content = "Install optional Copilot component" };
-        _componentRemove = new Button { Content = "Remove optional Copilot component" };
-        _componentCancel = new Button { Content = "Cancel download", IsEnabled = false };
+        _componentInstall = new Button { Content = "Install Copilot" };
+        _componentRemove = new Button { Content = "Remove" };
+        _componentCancel = new Button { Content = "Cancel", IsEnabled = false };
         _componentProgress = new ProgressBar { Minimum = 0, Maximum = 100, Visibility = Visibility.Collapsed };
         AutomationProperties.SetAutomationId(_componentInstall, "InstallCopilotComponent");
         AutomationProperties.SetAutomationId(_componentRemove, "RemoveCopilotComponent");
@@ -40,13 +40,10 @@ internal sealed partial class SettingsWindow
         actions.Children.Add(_componentInstall);
         actions.Children.Add(_componentRemove);
         actions.Children.Add(_componentCancel);
-        Card(panel, "Optional Copilot component", _componentStatus, actions);
+        Card(panel, "Copilot setup", _componentStatus, actions);
         panel.Children.Add(_componentProgress);
-        Note(panel, "Core omits Copilot; Full includes it. Installing explicitly downloads a version-pinned component over HTTPS from official Hotshot GitHub Releases " +
-            "(up to 256 MiB downloaded / 512 MiB installed; exact bytes appear during download), checks SHA256, and tests local stdio startup. " +
-            "This test does not sign in, query accounts/models, create sessions, or upload images. Screenshot descriptions still require a signed-in GitHub Copilot account " +
-            "and can consume your plan's quota. Installation never enables descriptions, changes review/exclusion rules, or grants agent access. " +
-            "Your selected external runtime always takes priority. Managed components and their local receipts are separate from OneDrive settings and survive app updates.");
+        if (!_aiComponent.HasBundledRuntime)
+            Note(panel, "Downloads up to 256 MB. Installing doesn't sign in or send screenshots.");
         _componentInstall.Click += async (_, _) => await ChangeAiComponentAsync(install: true);
         _componentRemove.Click += async (_, _) => await ChangeAiComponentAsync(install: false);
         _componentCancel.Click += (_, _) => _componentCancellation?.Cancel();
@@ -63,7 +60,8 @@ internal sealed partial class SettingsWindow
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Text.Json.JsonException or UnauthorizedAccessException)
         {
-            if (!_closed && _componentStatus is not null) _componentStatus.Text = $"Component unavailable: {ex.Message}";
+            Log.Error("Could not check Copilot setup", ex);
+            if (!_closed && _componentStatus is not null) _componentStatus.Text = "Could not check Copilot setup. Try again.";
         }
         finally { if (!_closed) RefreshAiComponentActions(); }
     }
@@ -72,9 +70,21 @@ internal sealed partial class SettingsWindow
     {
         if (_aiComponent is null) return;
         var busy = _componentCancellation is not null || _aiComponent.IsBusy || _app.Descriptions?.IsBusy == true || IsCopilotAccountBusy;
-        if (_componentInstall is not null) _componentInstall.IsEnabled = !busy && !_aiComponent.HasBundledRuntime;
-        if (_componentRemove is not null) _componentRemove.IsEnabled = !busy && _aiComponent.HasManagedComponent;
-        if (_componentCancel is not null) _componentCancel.IsEnabled = _componentCancellation is not null;
+        if (_componentInstall is not null)
+        {
+            _componentInstall.IsEnabled = !busy && !_aiComponent.HasBundledRuntime;
+            _componentInstall.Visibility = _aiComponent.HasBundledRuntime ? Visibility.Collapsed : Visibility.Visible;
+        }
+        if (_componentRemove is not null)
+        {
+            _componentRemove.IsEnabled = !busy && _aiComponent.HasManagedComponent;
+            _componentRemove.Visibility = _aiComponent.HasManagedComponent ? Visibility.Visible : Visibility.Collapsed;
+        }
+        if (_componentCancel is not null)
+        {
+            _componentCancel.IsEnabled = _componentCancellation is not null;
+            _componentCancel.Visibility = _componentCancellation is not null ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     private void AiComponentStatusChanged() => _app.Post(() =>
@@ -99,7 +109,7 @@ internal sealed partial class SettingsWindow
         {
             if (_closed) return;
             if (_componentStatus is not null) _componentStatus.Text = value.TotalBytes > 0
-                ? $"{value.Stage}: {value.Bytes:N0} / {value.TotalBytes:N0} bytes ({value.Percent}%)." : value.Stage;
+                ? $"{value.Stage}: {value.Percent}%" : value.Stage;
             if (_componentProgress is not null)
             {
                 _componentProgress.IsIndeterminate = value.TotalBytes == 0;
@@ -116,13 +126,13 @@ internal sealed partial class SettingsWindow
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
-            if (!_closed && _componentStatus is not null) _componentStatus.Text = "Installation cancelled; no partial component is selected. Permissions are unchanged.";
+            if (!_closed && _componentStatus is not null) _componentStatus.Text = "Installation cancelled.";
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or HttpRequestException or
             System.Text.Json.JsonException or UnauthorizedAccessException or TimeoutException or OperationCanceledException or AggregateException)
         {
             Log.Error("Optional Copilot component operation failed", ex);
-            if (!_closed && _componentStatus is not null) _componentStatus.Text = $"Component operation failed: {ex.Message}";
+            if (!_closed && _componentStatus is not null) _componentStatus.Text = "Could not change Copilot setup. Check the log for details.";
         }
         finally
         {

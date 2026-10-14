@@ -4,10 +4,10 @@ Hotshot exposes native Windows screenshot tools through a bundled **stdio MCP se
 
 ## Enable and connect
 
-Install a Hotshot release with coding-agent support and start the tray app. Open **Settings > Coding agents**:
+Install Hotshot and start it. Open **Settings > AI assistants**:
 
-- **Agent access** is off by default. Enabling it authorizes local agents running as your Windows user to enumerate targets and request screenshots without another Hotshot prompt. Your coding client's approval policy still applies. Returned images may be sent to that client's model provider.
-- **Allow history access** is separately off by default. Enable it only if agents should search/read previous captures and their OCR/AI text.
+- **Allow assistant access** is off by default. It lets local assistants take screenshots. Your assistant's approval policy still applies; it may send images to its AI service.
+- **Allow saved screenshots** is separately off by default. Enable it only if assistants should read or search previous captures and their text or descriptions.
 - Select **GitHub Copilot CLI, Claude Code, VS Code, Cursor or Codex** and copy the generated MCP configuration. Merge it into the indicated configuration file; do not replace existing server entries. Hotshot never edits agent configurations automatically.
 
 The copied configuration uses an absolute executable path, including spaces. Installed releases resolve through the stable `current\Mcp\Hotshot.Mcp.exe` path for x64 or ARM64. Portable builds use their own application directory. Restart the MCP connection after an app update if the coding client retains the old server process.

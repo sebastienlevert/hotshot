@@ -94,7 +94,7 @@ public sealed class GuidedSetupTests
         var session = new GuidedSetupSession(Settings()) { FolderPath = "relative" };
         Assert.True(session.RecordFolderCheck(session.FolderPath, true, "Writable"));
         Assert.Equal(SetupCheckResult.Failed, session.FolderCheck);
-        Assert.Contains("absolute path", session.FolderCheckMessage);
+        Assert.Contains("full folder path", session.FolderCheckMessage);
     }
 
     [Theory]

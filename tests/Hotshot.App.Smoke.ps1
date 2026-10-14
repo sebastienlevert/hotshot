@@ -211,12 +211,12 @@ function Workspace-Control([IntPtr]$Hwnd, [string]$Name) {
                 [System.Windows.Automation.AutomationElement]::AutomationIdProperty, 'MoreButton'))
         Click $more
         $group = switch ($Name) {
-            { $_ -in 'Pin image', 'Compare selected screenshots' } { 'Image tools'; break }
-            { $_ -in 'Analyze selected screenshot', 'Cancel AI analysis', 'View AI processing' } { 'AI processing'; break }
-            { $_ -in 'Extract video frame', 'Trim recording', 'Recover interrupted recording', 'Dismiss recording recovery notice' } { 'Recording tools'; break }
+            { $_ -in 'Pin image', 'Compare selected screenshots' } { 'Image'; break }
+            { $_ -in 'Describe screenshot', 'Cancel description', 'View description progress' } { 'Copilot'; break }
+            { $_ -in 'Extract video frame', 'Trim recording', 'Recover interrupted recording', 'Dismiss recovery notice' } { 'Video'; break }
             { $_ -in 'Rename capture', 'Organize selected', 'Delete selected', 'Export selected files', 'Save this search', 'Delete saved search',
-                'Storage and privacy', 'Back up library locally', 'Restore library backup', 'Relink missing capture',
-                'Set project baseline', 'Compare with project baseline', 'Create local evidence bundle' } { 'Library actions'; break }
+                'Storage and privacy', 'Back up library', 'Restore library backup', 'Find missing file',
+                'Set project baseline', 'Compare with project baseline', 'Package screenshots' } { 'Library'; break }
         }
         if ($group) { Click (Wait-For { App-Control $group } "workspace group $group") }
         $control = Wait-For { App-Control $Name } "workspace command $Name"
@@ -488,10 +488,10 @@ try {
             $after = Wait-For { Element $workspace 'Capture capture-96-after.png' ([System.Windows.Automation.ControlType]::ListItem) } 'after capture row'
             $after.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).AddToSelection()
             Workspace-Action $workspace 'Compare selected screenshots'
-            $comparison = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot visual comparison') } 'native visual comparison'
+            $comparison = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot screenshot comparison') } 'native visual comparison'
             Wait-For {
                 $summary = Element-ById $comparison 'ComparisonSummary'
-                $summary -and $summary.Current.Name.Contains('1 changed / 6,912 compared pixels (0.01%)')
+                $summary -and $summary.Current.Name.Contains('0.01% changed')
             } 'native measured visual diff' | Out-Null
             Click (Element-ById $comparison 'ComparisonActualPixels')
             Wait-For { (Element-ById $comparison 'ComparisonZoomStatus').Current.Name -eq '100%' } 'comparison physical-pixel zoom' | Out-Null
@@ -501,17 +501,17 @@ try {
             (Wait-For { Element-ById $comparison 'ComparisonSwipe' } 'comparison swipe slider after mode selection').GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern).SetValue(25)
             $ignored = Element-ById $comparison 'ComparisonIgnoredRegions'
             if (-not $ignored) {
-                $expander = Element $comparison 'Tolerance, alignment and ignored regions'
+                $expander = Element $comparison 'Advanced'
                 $expander.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
                 $ignored = Wait-For { Element-ById $comparison 'ComparisonIgnoredRegions' } 'ignored comparison regions'
             }
             $ignored.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue('10,10,1,1')
-            Wait-For { (Element-ById $comparison 'ComparisonSummary').Current.Name.Contains('0 changed / 6,911 compared pixels') } 'ignored pixel excluded from comparison denominator' | Out-Null
+            Wait-For { (Element-ById $comparison 'ComparisonDetails').Current.Name.Contains('0 changed / 6,911 compared pixels') } 'ignored pixel excluded from comparison denominator' | Out-Null
             [HotshotSmokeNative]::PostMessage($comparison, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
             foreach ($label in 'Rename capture', 'Organize selected', 'Delete selected', 'Export selected files', 'Save this search',
-                'View AI processing', 'Extract video frame', 'Trim recording', 'Recover interrupted recording',
-                'Storage and privacy', 'Back up library locally', 'Restore library backup', 'Relink missing capture',
-                'Set project baseline', 'Compare with project baseline', 'Create local evidence bundle') {
+                'View description progress', 'Extract video frame', 'Trim recording', 'Recover interrupted recording',
+                'Storage and privacy', 'Back up library', 'Restore library backup', 'Find missing file',
+                'Set project baseline', 'Compare with project baseline', 'Package screenshots') {
                 Workspace-Control $workspace $label | Out-Null
                 [HotshotSmokeNative]::SetForegroundWindow($workspace) | Out-Null
                 [HotshotSmokeNative]::keybd_event(0x1b, 0, 0, [UIntPtr]::Zero)
@@ -572,8 +572,8 @@ try {
             Wait-For { @((Read-AppJson $settingsFile).library.baselines).Count -eq 1 } 'project baseline stored in settings' | Out-Null
             Wait-For { $control = Element $workspace 'Save'; $control -and $control.Current.IsEnabled } 'baseline tools idle' | Out-Null
             Workspace-Action $workspace 'Compare with project baseline'
-            $baselineWindow = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot visual comparison') } 'project baseline comparison'
-            Wait-For { $summary = Element-ById $baselineWindow 'ComparisonSummary'; $summary -and $summary.Current.Name.Contains('0 changed / 6,912 compared pixels') } 'baseline compares saved evidence' | Out-Null
+            $baselineWindow = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot screenshot comparison') } 'project baseline comparison'
+            Wait-For { $summary = Element-ById $baselineWindow 'ComparisonSummary'; $summary -and $summary.Current.Name.Contains('0.00% changed') } 'baseline compares saved evidence' | Out-Null
             [HotshotSmokeNative]::PostMessage($baselineWindow, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
             Write-Host 'PASS native project assignment, favorite baseline persistence and baseline comparison.'
             Write-Host 'PASS native physical-pixel zoom, pin window, multi-selection, exact visual diff and workbench command accessibility.'
@@ -662,10 +662,10 @@ try {
         Select-SettingsPage $settings 'Agents'
         $saved = Read-AppJson $settingsFile
         if ($saved.agents.enabled -or $saved.agents.allowHistoryAccess) { throw 'Agent permissions must default to off.' }
-        $access = Toggle-Control $settings 'Agent access'
+        $access = Toggle-Control $settings 'Allow assistant access'
         $access.Toggle()
         Wait-For { (Read-AppJson $settingsFile).agents.enabled } 'native agent access persistence' | Out-Null
-        $historyAccess = Toggle-Control $settings 'Allow history access'
+        $historyAccess = Toggle-Control $settings 'Allow saved screenshots'
         $historyAccess.Toggle()
         Wait-For { (Read-AppJson $settingsFile).agents.allowHistoryAccess } 'separate native history permission' | Out-Null
         $historyAccess.Toggle()
@@ -678,6 +678,8 @@ try {
         foreach ($name in 'GitHub Copilot CLI', 'Claude Code', 'VS Code', 'Cursor', 'Codex') {
             $picker.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
             (Wait-For { App-Control $name } "$name connection option").GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+            $manual = Element $settings 'Manual setup'
+            $manual.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
             $scroll = Wait-For { Element-ById $settings 'SettingsContentScroll' } 'settings content after picker closes'
             $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 50)
             $preview = Wait-For { Element-ById $settings 'AgentMcpConfiguration' } "$name configuration preview"
@@ -692,7 +694,7 @@ try {
         }
         Assert-EmbeddedSettingsSearch $settings
         Select-SettingsPage $settings 'Capture'
-        $review = Toggle-Control $settings 'Review before cloud analysis'
+        $review = Toggle-Control $settings 'Review before sending'
         $review.Toggle()
         Wait-For { (Read-AppJson $settingsFile).general.reviewBeforeAiUpload } 'review policy persistence without contacting Copilot' | Out-Null
         $review.Toggle()
@@ -701,7 +703,7 @@ try {
         if (Test-Path -LiteralPath (Join-Path (Split-Path $Exe -Parent) 'Mcp\Hotshot.Mcp.exe')) {
             $scroll = Element-ById $settings 'SettingsContentScroll'
             $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 55)
-            Click (Wait-For { Element $settings 'Test connection with generated image' ([System.Windows.Automation.ControlType]::Button) } 'synthetic native connection test')
+            Click (Wait-For { Element $settings 'Test connection' ([System.Windows.Automation.ControlType]::Button) } 'synthetic native connection test')
             Wait-For { Element-ById $settings 'AgentSyntheticConnectionImage' } 'generated connection image without capture/model request' 30 | Out-Null
             [HotshotSmokeNative]::SetForegroundWindow($settings) | Out-Null
             [HotshotSmokeNative]::keybd_event(0x1b, 0, 0, [UIntPtr]::Zero)
@@ -711,14 +713,14 @@ try {
         }
         $scroll = Element-ById $settings 'SettingsContentScroll'
         $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 0)
-        $access = Toggle-Control $settings 'Agent access'
+        $access = Toggle-Control $settings 'Allow assistant access'
         $access.Toggle()
         Wait-For { (Read-AppJson $settingsFile).agents.enabled } 'test agent access' | Out-Null
-        $timed = Toggle-Control $settings 'Timed session access only'
+        $timed = Toggle-Control $settings 'Temporary access only'
         $timed.Toggle()
         Wait-For { (Read-AppJson $settingsFile).agents.sessionAccessOnly } 'session policy persistence' | Out-Null
-        Click (Element $settings 'Grant timed agent session' ([System.Windows.Automation.ControlType]::Button))
-        $approval = Toggle-Control $settings 'Approve each agent request'
+        Click (Element $settings 'Allow temporary access' ([System.Windows.Automation.ControlType]::Button))
+        $approval = Toggle-Control $settings 'Ask each time'
         $approval.Toggle()
         Wait-For { (Read-AppJson $settingsFile).agents.approveRequests } 'request approval policy persistence' | Out-Null
         foreach ($decision in 'AgentDeny', 'AgentAllowOnce') {
@@ -736,14 +738,14 @@ try {
             if ($decision -eq 'AgentDeny' -and $reply.errorCode -ne 'approval_denied') { throw 'Native denial was bypassed.' }
             if ($decision -eq 'AgentAllowOnce' -and -not $reply.success) { throw 'Native one-time approval did not allow the read-only request.' }
         }
-        Click (Element $settings 'Revoke timed session' ([System.Windows.Automation.ControlType]::Button))
+        Click (Element $settings 'End access' ([System.Windows.Automation.ControlType]::Button))
         $approval.Toggle(); $timed.Toggle(); $access.Toggle()
         Wait-For { $saved = Read-AppJson $settingsFile; -not $saved.agents.enabled -and -not $saved.agents.sessionAccessOnly -and -not $saved.agents.approveRequests } 'agent test permissions disabled again' | Out-Null
         Write-Host 'PASS native timed-session grant/revoke and deny/allow-once consent for a read-only local client.'
         Select-SettingsPage $settings 'About'
         $scroll = Element-ById $settings 'SettingsContentScroll'
         $scroll.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, 100)
-        Click (Wait-For { Element $settings 'Show diagnostics' ([System.Windows.Automation.ControlType]::Button) } 'diagnostics command')
+        Click (Wait-For { Element $settings 'Show details' ([System.Windows.Automation.ControlType]::Button) } 'diagnostics command')
         $report = Wait-For { Element-ById $settings 'DiagnosticsReport' } 'native diagnostic report'
         Wait-For {
             $report = Element-ById $settings 'DiagnosticsReport'

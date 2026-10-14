@@ -125,7 +125,7 @@ internal sealed partial class AppController : IDisposable
         }
         else if (!commandLine.Background)
         {
-            Notify("Hotshot is running", $"Press {DisplayHotkey(HotkeyAction.RegionScreenshot)} to capture. Hotshot lives in the tray.");
+            Notify("Hotshot is ready", $"Press {DisplayHotkey(HotkeyAction.RegionScreenshot)} to capture.");
         }
 
         ReportHotkeyConflicts();
@@ -135,7 +135,7 @@ internal sealed partial class AppController : IDisposable
         Program.MarkReady();
         Log.Info($"Resident ready in {Program.StartupMilliseconds} ms.");
         if (File.Exists(RecordingJournal))
-            Notify("Recording recovery", "An interrupted recording needs review. Use Recording tools in the workspace to recover a playable file or dismiss its notice.", isError: true);
+            Notify("Recover your recording", "A recording was interrupted. Open Video in the editor to recover it.", isError: true);
         foreach (var item in _app.History.Items.Where(item => item.DescriptionPending && !item.IsVideo))
         {
             if (_app.Settings.General.DescribeScreenshots) Launch(() => _descriptions.EnqueueAsync(item), "Screenshot description failed");
@@ -347,7 +347,7 @@ internal sealed partial class AppController : IDisposable
         }
 
         var names = string.Join(", ", conflicts.Select(c => c.Hotkey.ToDisplayString()));
-        Notify("Some shortcuts are taken", $"{names} is used by another app (ShareX, Snagit…). Click to change it.",
+        Notify("Shortcut already in use", $"{names} is used by another app. Click to change it.",
             isError: true, onClick: () => ShowSettings(SettingsPage.Hotkeys));
     }
 }

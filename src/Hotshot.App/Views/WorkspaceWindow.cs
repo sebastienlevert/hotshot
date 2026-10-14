@@ -62,7 +62,7 @@ internal sealed partial class WorkspaceWindow : Window
     private EditorSavedEventArgs? _lastSave;
     private Task? _operation;
     private CancellationTokenSource? _operationCancellation;
-    private readonly Button _cancelOperation = new() { Content = "Cancel operation", Visibility = Visibility.Collapsed };
+    private readonly Button _cancelOperation = new() { Content = "Cancel", Visibility = Visibility.Collapsed };
     private ColumnDefinition? _historyColumn;
     private bool _rendering;
     private bool _closed;
@@ -139,12 +139,12 @@ internal sealed partial class WorkspaceWindow : Window
         AddCommand("Export selected files", Symbol.SaveLocal, ExportSelectedAsync);
         AddCommand("Save this search", Symbol.Find, SaveSearchAsync);
         AddCommand("Storage and privacy", Symbol.Folder, StoragePrivacyAsync);
-        AddCommand("Back up library locally", Symbol.SaveLocal, BackupLibraryAsync);
+        AddCommand("Back up library", Symbol.SaveLocal, BackupLibraryAsync);
         AddCommand("Restore library backup", Symbol.OpenFile, RestoreLibraryAsync);
-        AddCommand("Relink missing capture", Symbol.Link, RelinkAsync);
+        AddCommand("Find missing file", Symbol.Link, RelinkAsync);
         AddCommand("Set project baseline", Symbol.Pin, SetBaselineAsync);
         AddCommand("Compare with project baseline", Symbol.Switch, CompareBaselineAsync);
-        AddCommand("Create local evidence bundle", Symbol.Document, EvidenceBundleAsync);
+        AddCommand("Package screenshots", Symbol.Document, EvidenceBundleAsync);
         AddCommand("Delete saved search", Symbol.Clear, async () =>
         {
             if (_savedSearches.SelectedItem is not SavedCaptureSearch search) throw new InvalidOperationException("Choose a saved search in Filters first.");
@@ -153,8 +153,8 @@ internal sealed partial class WorkspaceWindow : Window
             await _app.SaveAsync();
             RenderHistory();
         });
-        AddCommand("Analyze selected screenshot", Symbol.Document, AnalyzeCurrentAsync);
-        AddCommand("View AI processing", Symbol.Document, async () =>
+        AddCommand("Describe screenshot", Symbol.Document, AnalyzeCurrentAsync);
+        AddCommand("View description progress", Symbol.Document, async () =>
         {
             var queued = _app.Descriptions?.QueuedCaptureIds.ToHashSet(StringComparer.Ordinal) ?? [];
             var body = new StackPanel { Spacing = 10 };
@@ -163,7 +163,7 @@ internal sealed partial class WorkspaceWindow : Window
             {
                 var row = new StackPanel { Spacing = 4 };
                 row.Children.Add(new TextBlock { Text = item.FileName, TextWrapping = TextWrapping.Wrap });
-                row.Children.Add(UiStyles.Description(item.DescriptionNeedsReview ? "Held for review - save redactions, then use Analyze selected screenshot."
+                row.Children.Add(UiStyles.Description(item.DescriptionNeedsReview ? "Review and save edits, then choose Describe screenshot."
                     : item.DescriptionError ?? (item.Id == _app.Descriptions?.ActiveCaptureId ? "Analyzing" : "Queued")));
                 if (queued.Contains(item.Id))
                 {
@@ -173,10 +173,10 @@ internal sealed partial class WorkspaceWindow : Window
                 }
                 body.Children.Add(row);
             }
-            await new ContentDialog { Title = "AI processing", Content = new ScrollViewer { Content = body, MaxHeight = 500 },
+            await new ContentDialog { Title = "Screenshot descriptions", Content = new ScrollViewer { Content = body, MaxHeight = 500 },
                 CloseButtonText = "Close", XamlRoot = ((FrameworkElement)Content).XamlRoot }.ShowAsync();
         });
-        AddCommand("Cancel AI analysis", Symbol.Cancel, () =>
+        AddCommand("Cancel description", Symbol.Cancel, () =>
         {
             if (_current is { } item) _app.Descriptions?.Cancel(item.Id);
             return Task.CompletedTask;
@@ -195,10 +195,10 @@ internal sealed partial class WorkspaceWindow : Window
                 recovered.Path, CaptureKind.Recording, recovered.Width, recovered.Height, recovered.Duration, false, copyToClipboard: false);
             if (result is not null) await Task.Run(() => Hotshot.Recording.RecordingRecovery.Complete(journal));
         });
-        AddCommand("Dismiss recording recovery notice", Symbol.Clear, async () =>
+        AddCommand("Dismiss recovery notice", Symbol.Clear, async () =>
         {
             if (await DialogAsync("Dismiss recovery notice?", UiStyles.Description(
-                "This archives the recovery journal and lets new recordings start. The interrupted MP4 is preserved unchanged."), "Dismiss") == ContentDialogResult.Primary)
+                "Clears the notice so you can record again. Your recording won't be deleted."), "Dismiss") == ContentDialogResult.Primary)
                 await Task.Run(() => Hotshot.Recording.RecordingRecovery.Dismiss(Path.Combine(_app.Paths.DataDirectory, "pending-recording.json")));
         });
         var settings = new AppBarButton { Label = "Settings", Icon = new SymbolIcon(Symbol.Setting) };
@@ -411,7 +411,7 @@ internal sealed partial class WorkspaceWindow : Window
         if (!_editor.IsDirty) return true;
         var dialog = new ContentDialog
         {
-            Title = "Save your changes?", Content = "This screenshot has unsaved annotations or a crop.",
+            Title = "Save your changes?", Content = "You have unsaved edits.",
             PrimaryButtonText = "Save", SecondaryButtonText = "Discard", CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary, XamlRoot = ((FrameworkElement)Content).XamlRoot,
         };
@@ -434,8 +434,8 @@ internal sealed partial class WorkspaceWindow : Window
             _player?.Dispose(); _player = null;
             _editor.Visibility = _video.Visibility = Visibility.Collapsed;
             _empty.Children.Clear();
-            _empty.Children.Add(new TextBlock { Text = "Capture file is unavailable", FontSize = 22 });
-            _empty.Children.Add(UiStyles.Description("The library record was retained. The file may have been moved or deleted; Show in folder can help locate it."));
+            _empty.Children.Add(new TextBlock { Text = "File not found", FontSize = 22 });
+            _empty.Children.Add(UiStyles.Description("It may have moved. Choose Find missing file to locate it."));
             _empty.Visibility = Visibility.Visible;
             UpdateActions();
             return;
@@ -588,13 +588,13 @@ internal sealed partial class WorkspaceWindow : Window
         var radius = new NumberBox { Header = "Rounded corners (pixels)", Minimum = 0, Maximum = 400, Value = last.CornerRadius };
         var background = new ComboBox { Header = "Background", ItemsSource = Enum.GetValues<ExportBackground>(), SelectedIndex = last.Background };
         var shadow = new CheckBox { Content = "Drop shadow", IsChecked = last.Shadow };
-        var presets = new ComboBox { Header = "Named export preset", ItemsSource = _app.Settings.Export.Presets, DisplayMemberPath = "Name" };
-        var presetName = new TextBox { Header = "Save or replace preset name (optional)", MaxLength = 80 };
+        var presets = new ComboBox { Header = "Saved style", ItemsSource = _app.Settings.Export.Presets, DisplayMemberPath = "Name" };
+        var presetName = new TextBox { Header = "Save style as (optional)", MaxLength = 80 };
         AutomationProperties.SetAutomationId(presets, "ExportPresets");
         AutomationProperties.SetAutomationId(presetName, "ExportPresetName");
         AutomationProperties.SetAutomationId(width, "ExportWidth");
         AutomationProperties.SetAutomationId(padding, "ExportPadding");
-        var removePreset = new Button { Content = "Delete selected preset" };
+        var removePreset = new Button { Content = "Delete style" };
         removePreset.Click += async (_, _) =>
         {
             if (presets.SelectedItem is not ExportPreset selected) return;
@@ -616,13 +616,13 @@ internal sealed partial class WorkspaceWindow : Window
         body.Children.Insert(0, presets);
         body.Children.Add(presetName);
         body.Children.Add(removePreset);
-        body.Children.Add(UiStyles.Description("Exports a separate flattened copy. Originals and editable annotations are unchanged; AI/OCR metadata is not included."));
+        body.Children.Add(UiStyles.Description("Saves a separate edited copy, without extracted text or descriptions. Your original is kept."));
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
         body.Children.Add(error);
         var dialog = new ContentDialog
         {
             Title = "Export image", Content = new ScrollViewer { Content = body, MaxHeight = 500 },
-            PrimaryButtonText = "Choose destination", CloseButtonText = "Cancel", XamlRoot = ((FrameworkElement)Content).XamlRoot,
+            PrimaryButtonText = "Choose file", CloseButtonText = "Cancel", XamlRoot = ((FrameworkElement)Content).XamlRoot,
         };
         ImageExportOptions? options = null;
         dialog.PrimaryButtonClick += (_, args) =>
@@ -858,7 +858,7 @@ internal sealed partial class WorkspaceWindow : Window
         var items = SelectedCaptures();
         if (items.Length == 0 || !await ConfirmDiscardAsync()) return;
         if (await DialogAsync($"Delete {items.Length} captures?", UiStyles.Description(
-            "Saved files go to the Recycle Bin. Temporary captures are removed. Private editable originals are retained."), "Delete") != ContentDialogResult.Primary) return;
+            "Saved files go to the Recycle Bin. Temporary items are deleted. Originals are kept."), "Delete") != ContentDialogResult.Primary) return;
         var failed = false;
         foreach (var item in items)
         {
@@ -885,7 +885,7 @@ internal sealed partial class WorkspaceWindow : Window
         var items = SelectedCaptures();
         if (items.Length == 0) return;
         if (_editor.IsDirty) throw new InvalidOperationException("Save your edits before exporting selected files.");
-        var folder = await new FolderPicker(AppWindow.Id) { Title = "Export selected flattened capture files" }.PickSingleFolderAsync();
+        var folder = await new FolderPicker(AppWindow.Id) { Title = "Choose an export folder" }.PickSingleFolderAsync();
         if (folder is null) return;
         await Task.Run(async () =>
         {
@@ -932,12 +932,12 @@ internal sealed partial class WorkspaceWindow : Window
     {
         if (_current is not { IsVideo: false } item) throw new InvalidOperationException("Select a screenshot first.");
         if (!_app.Settings.General.DescribeScreenshots) throw new InvalidOperationException("Enable Copilot descriptions in Settings first.");
-        if (CaptureAnalysisPolicy.IsExcluded(_app.Settings.General, item.AppName)) throw new InvalidOperationException("This application is excluded from cloud analysis.");
-        if (_editor.IsDirty) throw new InvalidOperationException("Save your edits and redactions before approving cloud analysis.");
+        if (CaptureAnalysisPolicy.IsExcluded(_app.Settings.General, item.AppName)) throw new InvalidOperationException("This app is excluded from Copilot.");
+        if (_editor.IsDirty) throw new InvalidOperationException("Save your edits before sending to Copilot.");
         var sourceWarning = CaptureAnalysisPolicy.HasKnownSource(item.AppName) ? "" :
-            "The original source application is unknown, so its app exclusion cannot be verified. ";
+            "The source app is unknown, so exclusions can't be checked. ";
         if (await DialogAsync("Send this screenshot to Copilot?", UiStyles.Description(
-            sourceWarning + "The current saved pixels will be sent to your signed-in Copilot account. Review and save redactions first. This consumes model quota."), "Analyze") != ContentDialogResult.Primary) return;
+            sourceWarning + "Sends the saved image to GitHub Copilot and uses your plan. Hide private details and save first."), "Send") != ContentDialogResult.Primary) return;
         item.DescriptionNeedsReview = false;
         await Task.Run(() => _app.History.Update(item));
         if (_app.Descriptions is { } descriptions) _ = descriptions.EnqueueAsync(item, approved: true);
@@ -947,10 +947,10 @@ internal sealed partial class WorkspaceWindow : Window
     {
         var group = label switch
         {
-            "Pin image" or "Compare selected screenshots" => "Image tools",
-            "Analyze selected screenshot" or "Cancel AI analysis" or "View AI processing" => "AI processing",
-            "Extract video frame" or "Trim recording" or "Recover interrupted recording" or "Dismiss recording recovery notice" => "Recording tools",
-            _ => "Library actions",
+            "Pin image" or "Compare selected screenshots" => "Image",
+            "Describe screenshot" or "Cancel description" or "View description progress" => "Copilot",
+            "Extract video frame" or "Trim recording" or "Recover interrupted recording" or "Dismiss recovery notice" => "Video",
+            _ => "Library",
         };
         if (!_commandGroups.TryGetValue(group, out var flyout))
         {
@@ -963,8 +963,8 @@ internal sealed partial class WorkspaceWindow : Window
         {
             item.IsEnabled = label switch
             {
-                "Pin image" or "Analyze selected screenshot" => _current is { IsVideo: false } && _editor.HasImage,
-                "Cancel AI analysis" => _current is not null && _app.Descriptions?.QueuedCaptureIds.Contains(_current.Id) == true,
+                "Pin image" or "Describe screenshot" => _current is { IsVideo: false } && _editor.HasImage,
+                "Cancel description" => _current is not null && _app.Descriptions?.QueuedCaptureIds.Contains(_current.Id) == true,
                 "Compare selected screenshots" => SelectedCaptures().Length == 2 && SelectedCaptures().All(capture => !capture.IsVideo),
                 "Extract video frame" => _current is { IsVideo: true } && _fileAvailable,
                 "Trim recording" => _current is { Kind: CaptureKind.Recording } && _fileAvailable,
@@ -974,8 +974,8 @@ internal sealed partial class WorkspaceWindow : Window
                 "Delete saved search" => _savedSearches.SelectedItem is SavedCaptureSearch,
                 "Set project baseline" => _current is { IsVideo: false, Project.Length: > 0 } && _fileAvailable,
                 "Compare with project baseline" => _current is { IsVideo: false, Project.Length: > 0 } && _fileAvailable,
-                "Relink missing capture" => _current is not null && !_fileAvailable,
-                "Create local evidence bundle" => SelectedCaptures().Length is > 0 and <= 20 && SelectedCaptures().All(capture => !capture.IsVideo),
+                "Find missing file" => _current is not null && !_fileAvailable,
+                "Package screenshots" => SelectedCaptures().Length is > 0 and <= 20 && SelectedCaptures().All(capture => !capture.IsVideo),
                 _ => true,
             };
         };

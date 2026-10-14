@@ -22,7 +22,7 @@ A zero pixel difference is not a functional test. A nonzero difference may be in
 
 ## Verify a UI change with a coding agent
 
-Open **Settings > Coding agents**. Connect your client with the generated configuration or plugin. Enable live agent access explicitly; optionally require a timed grant and **Allow once / Deny**. Keep history access off unless this task needs saved captures.
+Open **Settings > AI assistants**. Connect your client with the generated configuration or plugin. Enable **Allow assistant access** explicitly; optionally require temporary access and **Allow once / Don't allow**. Keep saved-screenshot access off unless this task needs it.
 
 Start with a generated transport check:
 
@@ -53,7 +53,7 @@ Capture honors Hotshot's save, clipboard, delay, cursor, and configured analysis
 
 ## Have an agent compare before and after
 
-Explicitly enable **Allow history access** before saved-image reads. Capture before and after using the workflow above and retain the capture IDs, not filesystem paths.
+Explicitly enable **Allow saved screenshots** before saved-image reads. Capture before and after using the workflow above and retain the capture IDs, not filesystem paths.
 
 ```json
 {"tool":"hotshot_compare_captures","arguments":{"beforeId":"<before capture ID>","afterId":"<after capture ID>","tolerance":8,"maxImageSize":1600}}

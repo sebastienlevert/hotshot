@@ -102,7 +102,12 @@ The hamburger navigation button and search box both sit inside the Settings titl
 
 For most captures, use the shortcuts above. Under **Screenshots**, you can add a delay of up to 30 seconds to make time for opening a menu or preparing a window.
 
-**Window captures:** by default, **Unobscured window screenshots** captures the selected window even if another window overlaps it, without moving or focusing it. Windows may show a capture border. Hidden, minimized, protected, or changed targets can fail explicitly; Hotshot does not silently substitute a desktop screenshot. Turn this setting off if you specifically want the visible-screen version.
+**Window captures:** hover over a window to highlight it fully, then click.
+Drag instead to select an area. **Snap to windows** is on by default.
+**Capture covered windows** captures the whole selected window even if another
+window overlaps it, without moving or focusing it. Windows may show a capture
+border. Hidden, minimized, protected, or changed targets can fail explicitly;
+Hotshot never silently substitutes a desktop screenshot.
 
 **Scrolling captures:** choose **Scrolling capture** from the tray or workspace. Select the content, scroll it yourself, and add overlapping frames. Exclude fixed headers and keep the capture area in the same position and size. Hotshot rejects ambiguous overlaps rather than stitching a misleading result. This is guided capture, not automatic scrolling.
 
@@ -124,6 +129,10 @@ Annotate with arrows, shapes, text, ink, highlights, numbered steps, or pixelati
 | **Import image** | Adds an existing PNG/JPEG/BMP without changing the clipboard. |
 
 Export remembers your last style. Save named presets to reuse a look; up to 50 presets are supported. Flattened exports omit AI/OCR text metadata.
+
+Choose any color, including transparency. The preview beside the controls shows
+your tool, color and thickness before you draw. Editing pointers change with
+the tool; the normal pointer returns outside the canvas.
 
 > [!WARNING]
 > **Redacting the visible image does not erase its private original or editable sidecar.** Saved redactions remove old AI/OCR text metadata, but originals can still contain sensitive content. Share only the flattened exported image, not the application-data folder or a backup containing originals. Pixelation is not the same as opaque redaction.
@@ -159,7 +168,7 @@ Saved captures stay searchable beyond the recent-history limit by default. Histo
 
 Ctrl-select two same-size screenshots and choose **Compare selected screenshots**. Switch between before/after/diff views, use synchronized zoom and a swipe slider, and adjust tolerance, alignment, or ignored rectangles. Set project baselines for repeat comparisons. Export local JSON/PNG reports when you need evidence of a change.
 
-Open **Library actions** for reviewed storage cleanup, local ZIP backup/restore, missing-file relinking, batch export, and deletion to the Recycle Bin. Including private originals in backups is opt-in. Restores add a new subfolder rather than replacing your existing library. Cleanup that removes originals also removes their editable history.
+Open **Library** to clean up storage, back up or restore files, locate missing files, and export or delete items. Originals are optional in backups. Restores keep existing files unchanged. Deleting originals permanently removes their editable history.
 
 ## Record video and make GIFs
 
@@ -232,19 +241,19 @@ Open **Settings > Screenshots > Copilot account > Sign in with GitHub** and comp
 
 Sign-in uses the runtime's GitHub browser authorization with PKCE and Windows secure credential storage. Hotshot does not request a pasted token, embed an OAuth secret, or put credentials in settings, OneDrive or logs. Pending sign-in is cancellable, times out after five minutes, and is stopped when Settings closes. Plaintext token storage is refused.
 
-Then explicitly enable **Describe screenshots with Copilot** to generate searchable summaries and descriptions. This is **off by default**, requires a GitHub Copilot subscription and an image-capable model, and uses your account's quota. Signing in does not enable uploads, change review/exclusion rules or grant coding-agent access. Account checks and sign-in send no screenshot or model prompt.
+Turn on **Copilot descriptions** for searchable summaries. This is **off by default**, requires a GitHub Copilot plan and an image-capable model, and uses your plan. Signing in alone sends no screenshots and grants no access.
 
 Descriptions are added after saving, without delaying the clipboard. PNG files also receive Unicode **Title** and **Description** metadata. Windows Explorer may not display those PNG fields even though metadata-aware tools can read them. Recordings and GIFs are not sent for descriptions.
 
-For more control, enable **Review before cloud analysis**, review/redact and save the screenshot, then choose **Analyze selected screenshot**. **Exclude applications from AI** uses process names and the capture's recorded application; it does not detect sensitive content in other windows on a monitor capture. Use **View AI processing** to inspect, cancel, or retry work.
+Turn on **Review before sending**, hide private details and save, then choose **Describe screenshot**. **Exclude apps** uses app filenames, such as `password-manager.exe`. Whole-screen captures may still include excluded apps. **View description progress** lets you review or cancel work.
 
-Want searchable text without cloud AI? Enable **Screenshots > Recognize screenshot text locally**, or choose **Extract text** for a selected image. Windows OCR language support is required.
+For searchable text without sending images, turn on **Screenshots > Read text in screenshots**, or choose **Extract text**. Windows needs the matching text-recognition language installed.
 
 ### Let a coding agent use Hotshot
 
-Open **Settings > Coding agents** to connect Copilot CLI, Claude Code, VS Code, Cursor, or Codex through the bundled local MCP server. Copy the generated configuration into your client's configuration, or use the repository's plugins and skills.
+Open **Settings > AI assistants** to connect Copilot CLI, Claude Code, VS Code, Cursor, or Codex. Copy the connection settings into your assistant, or use Hotshot's plugins and skills. **Manual setup** shows the connection details.
 
-**Agent access** and **Allow history access** are separate, off-by-default permissions. You can restrict target apps/capture modes, require a timed grant, or approve each content request with **Allow once / Deny**. Test the connection with a generated image without reading your screen or library.
+**Allow assistant access** and **Allow saved screenshots** are separate and off by default. Limit access to specific apps, make access temporary, or **Ask each time** with **Allow once / Don't allow**. **Test connection** uses a sample image, not your screen.
 
 Agents can request screenshots, read permitted captures, use OCR, and compare images. They cannot change settings, execute shell commands, control mouse/keyboard input, or record video through Hotshot.
 
@@ -286,12 +295,12 @@ Updates keep your profile outside the installer directory. Use the workspace's b
 | A capture is not copied or saved | Check the clipboard/file switches under General and your capture-folder permissions. An MP4/GIF clipboard item is a file. |
 | A window capture fails | Restore/show the window and select it again. Protected targets cannot be captured. For visible-screen capture, explicitly disable **Unobscured window screenshots**. |
 | OCR finds no text | Check Windows OCR language support and whether the image contains readable text. |
-| Copilot descriptions fail | Check your Copilot sign-in/model availability and **View AI processing**. The saved screenshot remains available. |
+| Copilot descriptions fail | Check your sign-in and Copilot plan, then **View description progress**. Your screenshot is safe. |
 | A coding agent cannot connect | Keep Hotshot running in the same Windows session; check permissions, timed grants, and the copied executable path. Reconnect the client's MCP server after an update. |
 | OneDrive settings do not change on another PC | Check both OneDrive clients, the shared path, and sync/conflict status. Resolve pending edits and use **Reload shared preferences** when idle. |
 | An update is ready but not applied | Finish current work and leave the editor/Settings inactive or closed. Hotshot will not interrupt active work to restart. |
 
-For a bug report, include your Hotshot version, Windows build, architecture, steps to reproduce, and expected/actual behavior. **About Hotshot > Show diagnostics** provides local diagnostic information; review and redact paths or private details before attaching it. Never attach private originals, a whole app-data folder, or credentials.
+For a bug report, include your Hotshot and Windows versions, what you did, and what went wrong. **About Hotshot > Show details** provides troubleshooting information. Remove private details before sharing it. Never attach originals, your whole app-data folder, or sign-in information.
 
 Use the [worked workflows](docs/recipes.md) for complete redacted bug-report, comparison, and coding-agent recipes. The [support guide](SUPPORT.md) explains safe diagnostics and reporting; suspected vulnerabilities belong in [private security reporting](SECURITY.md), not a public issue.
 The [compatibility matrix](docs/compatibility.md) separates supported targets from actual device evidence. Physical ARM64, mixed-scale displays, HDR fidelity, and Narrator acceptance are not implied by a cross-build or synthetic check.

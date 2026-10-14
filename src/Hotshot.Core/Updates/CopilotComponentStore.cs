@@ -60,7 +60,7 @@ public sealed class CopilotComponentStore
         try
         {
             RequireIdle();
-            progress?.Report(new("Reading version-pinned component manifest"));
+            progress?.Report(new("Preparing download"));
             var json = await downloader.ReadManifestAsync(_appVersion,
                 CopilotComponentManifest.AssetName(_appVersion, _runtime, "json"), cancellationToken);
             var manifest = JsonSerializer.Deserialize<CopilotComponentManifest>(json, ComponentJson.Options)
@@ -96,7 +96,7 @@ public sealed class CopilotComponentStore
                 createdDirectory = final;
             }
 
-            progress?.Report(new("Testing isolated stdio startup (no account, model or image access)"));
+            progress?.Report(new("Checking installation"));
             await healthTest(Path.Combine(final, "copilot-runtime.exe"), cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             RequireIdle();
@@ -109,7 +109,7 @@ public sealed class CopilotComponentStore
             SafeComponentPaths.EnsureNotLinked(ReceiptPath);
             File.Move(receipt, ReceiptPath, overwrite: true);
             committed = true;
-            progress?.Report(new("Installed; screenshot analysis and agent permissions are unchanged", manifest.ArchiveBytes, manifest.ArchiveBytes));
+            progress?.Report(new("Installed", manifest.ArchiveBytes, manifest.ArchiveBytes));
         }
         finally
         {

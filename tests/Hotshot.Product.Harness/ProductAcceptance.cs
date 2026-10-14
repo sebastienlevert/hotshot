@@ -94,6 +94,9 @@ internal static class ProductAcceptance
                 await RenderAsync(settings, Path.Combine(output, "settings-native.png"));
             });
             await report.CheckAsync("settings-native-responsive-header", () => ProductMedia.CheckSettingsHeaderAsync(settings));
+            await report.CheckAsync("settings-native-plain-language-default-pages", () => CheckSettingsCopyAsync(settings, output));
+            await report.CheckAsync("settings-native-left-aligned-responsive-pages", () => CheckSettingsAlignmentAsync(settings, output));
+            await report.CheckAsync("native-full-window-snap-targets", CheckWindowSnapAsync);
             await report.CheckAsync("copilot-native-sign-in-consent-cancellation-and-failure", () =>
                 CheckCopilotSignInAsync(settings, app, accountClients, browserVisits));
             var scale = ((FrameworkElement)settings.Content).XamlRoot.RasterizationScale;
@@ -246,6 +249,140 @@ internal static class ProductAcceptance
             }
             if (Directory.Exists(profile)) Directory.Delete(profile, recursive: true);
         }
+    }
+
+    private static async Task CheckWindowSnapAsync()
+    {
+        using var back = new SnapFixture("Hotshot.Snap.Back", "Generated background", 80, 120, 720, 480);
+        using var front = new SnapFixture("Hotshot.Snap.Front", "Generated foreground", 180, 220, 360, 240);
+        Win32.ShowWindow(back.Handle, Win32.SW_SHOW);
+        Win32.ShowWindow(front.Handle, Win32.SW_SHOW);
+        Win32.SetWindowPos(front.Handle, Win32.HWND_TOPMOST, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE);
+        await Task.Delay(150);
+        var candidates = WindowEnumerator.GetVisibleWindows(onlyProcessId: (uint)Environment.ProcessId);
+        var bounds = WindowEnumerator.GetBounds(front.Handle) ?? throw new InvalidDataException("The generated window has no native bounds.");
+        var selected = WindowSnapGeometry.AtPoint(candidates, bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+        if (selected?.Handle != front.Handle || selected.Bounds != bounds || bounds.Width < 300 || bounds.Height < 200)
+            throw new InvalidDataException("The pointer did not select the full topmost generated window.");
+        Win32.ShowWindow(front.Handle, 0);
+        candidates = WindowEnumerator.GetVisibleWindows(onlyProcessId: (uint)Environment.ProcessId);
+        if (candidates.Any(window => window.Handle == front.Handle))
+            throw new InvalidDataException("A hidden window must not remain a snap target.");
+        Console.WriteLine($"PASS generated window snap: full {bounds.Width}x{bounds.Height} physical-pixel bounds, native z-order and hidden-target filtering.");
+    }
+
+    private sealed class SnapFixture : NativeWindow
+    {
+        public SnapFixture(string className, string title, int x, int y, int width, int height) =>
+            CreateHandle(className, Win32.WS_EX_TOOLWINDOW, Win32.WS_POPUP, x, y, width, height, title);
+    }
+
+    private static async Task CheckSettingsCopyAsync(SettingsWindow settings, string output)
+    {
+        var root = (FrameworkElement)settings.Content;
+        var scale = root.XamlRoot.RasterizationScale;
+        settings.AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(1100 * scale), (int)(960 * scale)));
+        foreach (var page in Enum.GetValues<SettingsPage>())
+        {
+            settings.SelectPage(page);
+            await ReadyAsync(settings);
+            var scroll = Find<ScrollViewer>(root, "SettingsContentScroll");
+            var content = scroll.Content as DependencyObject ?? throw new InvalidDataException("The settings page has no native content.");
+            foreach (var text in Descendants(content).OfType<TextBlock>())
+            {
+                if (!IsDefaultVisible(text)) continue;
+                if (text.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length > 30)
+                    throw new InvalidDataException($"A default {page} description exceeds 30 words: {text.Text}");
+                foreach (var jargon in new[] { "PKCE", "SHA256", "stdio", "SDK", "runtime" })
+                    if (text.Text.Contains(jargon, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException($"Technical setup text is visible by default on {page}: {text.Text}");
+            }
+            if (page == SettingsPage.Capture)
+            {
+                var advanced = Descendants(content).OfType<Expander>().Single(expander => Equals(expander.Header, "Advanced"));
+                if (advanced.IsExpanded) throw new InvalidDataException("Custom Copilot setup must be collapsed by default.");
+                var descriptions = Descendants(root).OfType<ToggleSwitch>()
+                    .Single(toggle => AutomationProperties.GetName(toggle) == "Copilot descriptions");
+                var review = Descendants(root).OfType<ToggleSwitch>()
+                    .Single(toggle => AutomationProperties.GetName(toggle) == "Review before sending");
+                if (descriptions.IsOn || review.IsOn != new AppSettings().General.ReviewBeforeAiUpload)
+                    throw new InvalidDataException("Changing wording must not change screenshot permissions.");
+                await RenderAsync(settings, Path.Combine(output, "settings-plain-language.png"), preserveAspectRatio: true);
+            }
+        }
+        settings.SelectPage(SettingsPage.Naming);
+        await ReadyAsync(settings);
+
+        static bool IsDefaultVisible(DependencyObject element)
+        {
+            for (DependencyObject? current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+                if (current is FrameworkElement { Visibility: Visibility.Collapsed } || current is Expander { IsExpanded: false })
+                    return false;
+            return true;
+        }
+    }
+
+    private static async Task CheckSettingsAlignmentAsync(SettingsWindow settings, string output)
+    {
+        var root = (Grid)settings.Content;
+        var navigation = root.Children.OfType<NavigationView>().Single();
+        var previousTheme = root.RequestedTheme;
+        var previousBackground = root.Background;
+        foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+        {
+            root.RequestedTheme = theme;
+            root.Background = new SolidColorBrush(theme == ElementTheme.Dark
+                ? Windows.UI.Color.FromArgb(255, 32, 32, 32) : Windows.UI.Color.FromArgb(255, 249, 249, 249));
+            foreach (var width in new[] { 520, 1100, 1920 })
+            {
+                settings.AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(width * root.XamlRoot.RasterizationScale),
+                    (int)(900 * root.XamlRoot.RasterizationScale)));
+                await UntilAsync(() => root.ActualWidth >= width - 24, "The fixture did not reach the requested settings width.");
+                foreach (var paneOpen in width == 520 ? new[] { false } : new[] { false, true })
+                {
+                    navigation.IsPaneOpen = paneOpen;
+                    await Task.Delay(250);
+                    foreach (var page in new[] { SettingsPage.Gif, SettingsPage.Recording, SettingsPage.Naming })
+                    {
+                        settings.SelectPage(page);
+                        await ReadyAsync(settings);
+                        if (Math.Abs(root.ActualWidth - width) > 24 || navigation.IsPaneOpen != paneOpen)
+                            throw new InvalidDataException($"The fixture did not reach the requested {width}-DIP width and pane state.");
+                        var scroll = Find<ScrollViewer>(settings.Content, "SettingsContentScroll");
+                        var panel = scroll.Content as StackPanel ?? throw new InvalidDataException("Settings have no page panel.");
+                        var container = VisualTreeHelper.GetParent(scroll) as Grid
+                            ?? throw new InvalidDataException("Settings have no padded content grid.");
+                        var scrollOrigin = scroll.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        var panelOrigin = panel.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        var containerOrigin = container.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        var expectedLeft = containerOrigin.X + container.Padding.Left;
+                        var expectedWidth = Math.Min(920, container.ActualWidth - container.Padding.Left - container.Padding.Right);
+                        Console.WriteLine($"Settings {page} at {width} DIPs ({theme}, paneOpen={paneOpen}): root={root.ActualWidth:F1}, expected={expectedLeft:F1}/{expectedWidth:F1}, scroll={scrollOrigin.X:F1}/{scroll.ActualWidth:F1}, panel={panelOrigin.X:F1}/{panel.ActualWidth:F1}.");
+                        if (Math.Abs(scrollOrigin.X - expectedLeft) > 1 || Math.Abs(panelOrigin.X - expectedLeft) > 1 ||
+                            Math.Abs(scroll.ActualWidth - expectedWidth) > 1)
+                            throw new InvalidDataException($"{page} at {width} DIPs ({theme}, paneOpen={paneOpen}) is horizontally shifted: expected {expectedLeft:F1}/{expectedWidth:F1}, scroll {scrollOrigin.X:F1}/{scroll.ActualWidth:F1}, panel {panelOrigin.X:F1}.");
+                        var heading = panel.Children.OfType<TextBlock>().First();
+                        var headingOrigin = heading.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        if (Math.Abs(headingOrigin.X - expectedLeft) > 1)
+                            throw new InvalidDataException("The settings heading does not align with the page's cards.");
+                        foreach (var card in panel.Children.OfType<CommunityToolkit.WinUI.Controls.SettingsCard>())
+                        {
+                            var cardOrigin = card.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                            if (Math.Abs(cardOrigin.X - expectedLeft) > 1 ||
+                                Math.Abs(card.ActualWidth - (panel.ActualWidth - panel.Padding.Left - panel.Padding.Right)) > 1)
+                                throw new InvalidDataException("A settings card does not align with or fill the page panel.");
+                        }
+                        if (page == SettingsPage.Gif && width == 1920 && paneOpen)
+                            await RenderAsync(settings, Path.Combine(output, $"gif-settings-{theme.ToString().ToLowerInvariant()}.png"),
+                                preserveAspectRatio: true);
+                    }
+                }
+            }
+        }
+        root.RequestedTheme = previousTheme;
+        root.Background = previousBackground;
+        settings.SelectPage(SettingsPage.Naming);
+        await ReadyAsync(settings);
     }
 
     private static async Task CheckCopilotSignInAsync(SettingsWindow settings, AppServices app,
@@ -456,10 +593,12 @@ internal static class ProductAcceptance
         await Task.Delay(150);
     }
 
-    private static async Task RenderAsync(Window window, string path)
+    private static async Task RenderAsync(Window window, string path, bool preserveAspectRatio = false)
     {
+        var root = (FrameworkElement)window.Content;
+        var height = preserveAspectRatio ? (int)Math.Round(960 * root.ActualHeight / root.ActualWidth) : 720;
         var bitmap = new RenderTargetBitmap();
-        await bitmap.RenderAsync((FrameworkElement)window.Content, 960, 720);
+        await bitmap.RenderAsync(root, 960, height);
         if (bitmap.PixelWidth < 100 || bitmap.PixelHeight < 100)
             throw new InvalidDataException("Native XAML rendering returned an empty surface.");
         var pixels = (await bitmap.GetPixelsAsync()).ToArray();

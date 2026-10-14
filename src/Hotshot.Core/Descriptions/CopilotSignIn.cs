@@ -13,10 +13,10 @@ public sealed record CopilotSignInStart(string FlowId, CopilotSignInStep Step);
 public enum CopilotSignInError { AuthorizationFailed, AccountNotVerified, SecureStorageUnavailable, RuntimeUnsupported }
 public sealed class CopilotSignInException(CopilotSignInError error) : InvalidOperationException(error switch
 {
-    CopilotSignInError.AccountNotVerified => "GitHub authorization completed, but the selected account could not be verified.",
-    CopilotSignInError.SecureStorageUnavailable => "Windows secure credential storage is unavailable. Hotshot refuses to save a GitHub token in plaintext.",
-    CopilotSignInError.RuntimeUnsupported => "This Copilot runtime does not support GitHub browser sign-in. Use the app-managed component.",
-    _ => "GitHub sign-in was declined, failed or expired. Retry sign-in.",
+    CopilotSignInError.AccountNotVerified => "Could not verify your GitHub account. Try signing in again.",
+    CopilotSignInError.SecureStorageUnavailable => "Windows cannot save your sign-in securely. Hotshot will not save it.",
+    CopilotSignInError.RuntimeUnsupported => "This Copilot installation cannot sign in. Use Hotshot's Copilot.",
+    _ => "GitHub sign-in did not finish. Try again.",
 })
 {
 }
@@ -61,11 +61,11 @@ public static class CopilotSignIn
                 {
                     case CopilotSignInStepKind.OpenBrowser:
                         var url = AuthorizationUri(step.Url);
-                        progress?.Report("Complete GitHub authorization in your browser. Screenshot permissions are unchanged.");
+                        progress?.Report("Finish sign-in in your browser.");
                         await openBrowser(url, deadline.Token);
                         break;
                     case CopilotSignInStepKind.Awaiting:
-                        progress?.Report("Waiting for GitHub authorization. You can cancel this sign-in.");
+                        progress?.Report("Waiting for sign-in...");
                         await Task.Delay(TimeSpan.FromMilliseconds(250), deadline.Token);
                         break;
                     case CopilotSignInStepKind.SelectAccount:

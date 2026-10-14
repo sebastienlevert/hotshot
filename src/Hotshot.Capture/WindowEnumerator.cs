@@ -9,13 +9,14 @@ public static unsafe class WindowEnumerator
 {
     private static readonly HashSet<string> IgnoredClasses = new(StringComparer.Ordinal)
     {
-        "Progman", "WorkerW", "Windows.UI.Core.CoreWindow", "ForegroundStaging", "MultitaskingViewFrame",
+        "Progman", "WorkerW", "ForegroundStaging", "MultitaskingViewFrame",
         "XamlExplorerHostIslandWindow", "Shell_InputSwitchTopLevelWindow",
     };
 
     /// <summary>Visible, non-cloaked top-level windows in z-order (topmost first).</summary>
-    public static IReadOnlyList<WindowInfo> GetVisibleWindows(uint? excludeProcessId = null, nint includeWindow = 0)
+    public static IReadOnlyList<WindowInfo> GetVisibleWindows(uint? excludeProcessId = null, nint includeWindow = 0, uint? onlyProcessId = null)
     {
+        using var awareness = new DpiAwarenessScope();
         var handles = new List<nint>(256);
         var gc = GCHandle.Alloc(handles);
         try
@@ -42,19 +43,14 @@ public static unsafe class WindowEnumerator
             }
 
             Native.GetWindowThreadProcessId(hwnd, out var pid);
-            if (excludeProcessId == pid && hwnd != includeWindow)
+            if (excludeProcessId == pid && hwnd != includeWindow || onlyProcessId is { } included && pid != included)
             {
                 continue;
             }
 
             var className = Native.GetWindowClass(hwnd);
-            if (IgnoredClasses.Contains(className))
-            {
-                continue;
-            }
-
             var title = Native.GetWindowTitle(hwnd);
-            if ((exStyle & Native.WS_EX_TOOLWINDOW) != 0 && title.Length == 0)
+            if (!IsSelectableClass(className, title) || title.Length == 0 && (exStyle & Native.WS_EX_TOOLWINDOW) != 0)
             {
                 continue;
             }
@@ -71,9 +67,13 @@ public static unsafe class WindowEnumerator
         return result;
     }
 
+    internal static bool IsSelectableClass(string className, string title) =>
+        !IgnoredClasses.Contains(className) && (className != "Windows.UI.Core.CoreWindow" || title.Length > 0);
+
     /// <summary>Visible window bounds (DWM extended frame, without the invisible resize border).</summary>
     public static PixelRect? GetBounds(nint hwnd)
     {
+        using var awareness = new DpiAwarenessScope();
         RECT rect;
         if (Native.DwmGetWindowAttribute(hwnd, Native.DWMWA_EXTENDED_FRAME_BOUNDS, &rect, sizeof(RECT)) != 0
             && !Native.GetWindowRect(hwnd, out rect))

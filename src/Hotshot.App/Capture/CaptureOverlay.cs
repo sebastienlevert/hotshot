@@ -53,6 +53,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
     private int _anchorX;
     private int _anchorY;
     private WindowInfo? _hoverWindow;
+    private WindowInfo? _pressedWindow;
     private Frame _frame;
     private CancellationTokenRegistration _cancellation;
 
@@ -154,6 +155,8 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
                 return 0;
 
             case Win32.WM_LBUTTONDOWN:
+                UpdateHover(Win32.LoWord(lParam), Win32.HiWord(lParam));
+                _pressedWindow = _hoverWindow;
                 _mouseDown = true;
                 _anchorX = Win32.LoWord(lParam);
                 _anchorY = Win32.HiWord(lParam);
@@ -201,7 +204,8 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
 
     private void OnMouseMove(int x, int y)
     {
-        if (_mouseDown && !_dragging && (Math.Abs(x - _anchorX) > 3 || Math.Abs(y - _anchorY) > 3))
+        if (_mouseDown && !_dragging && WindowSnapGeometry.IsDrag(_anchorX, _anchorY, x, y,
+                MonitorAt(_anchorX, _anchorY).Scale))
         {
             _dragging = true;
         }
@@ -236,6 +240,11 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
             return;
         }
 
+        if (_pressedWindow is { } window)
+        {
+            CompleteWindow(window);
+            return;
+        }
         CompleteWithHover(x, y);
     }
 
@@ -244,15 +253,18 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         UpdateHover(x, y);
         if (_hoverWindow is { } window)
         {
-            var rect = window.Bounds.Intersect(Origin);
-            if (!rect.IsEmpty)
-            {
-                Complete(new WindowSelection(window, rect));
-                return;
-            }
+            CompleteWindow(window);
+            return;
         }
 
         Complete(new MonitorSelection(MonitorAt(x, y)));
+    }
+
+    private void CompleteWindow(WindowInfo window)
+    {
+        var rect = window.Bounds.Intersect(Origin);
+        if (rect.IsEmpty) throw new InvalidOperationException("The selected window is no longer on screen.");
+        Complete(new WindowSelection(window, rect));
     }
 
     private void OnKeyDown(int vk)
@@ -324,15 +336,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
             return;
         }
 
-        int sx = x + Origin.X, sy = y + Origin.Y;
-        foreach (var window in _windows)
-        {
-            if (window.Bounds.Contains(sx, sy))
-            {
-                _hoverWindow = window;
-                return;
-            }
-        }
+        _hoverWindow = _mouseDown ? _pressedWindow : WindowSnapGeometry.AtPoint(_windows, x + Origin.X, y + Origin.Y);
     }
 
     private PixelRect DragRect() =>
@@ -436,9 +440,9 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         var hintText = string.Empty;
         if (!_mouseDown)
         {
-            hintText = _options.Mode == OverlayMode.Recording
-                ? "Record: drag or R + arrows + Enter  ·  click a window  ·  Space = screen  ·  Esc = cancel"
-                : "Drag or R + arrows + Enter  ·  click a window  ·  Space = screen  ·  Esc = cancel";
+            hintText = _hoverWindow is not null
+                ? "Click = whole window  ·  drag = area  ·  Space = screen  ·  Esc = cancel"
+                : "Drag = area  ·  Space = screen  ·  Esc = cancel";
             var hintSize = MeasureText(hintText, scale, out _);
             var hw = hintSize.Width + pad * 3;
             var hh = hintSize.Height + (int)(12 * scale);

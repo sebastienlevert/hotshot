@@ -26,7 +26,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
     public Func<AgentRequest, AgentClient, CancellationToken, Task<bool>>? ApprovalHandler { get; set; }
     public IReadOnlyList<AgentActivity> Activity => _activity.ToArray();
     public bool IsBusy => Volatile.Read(ref _requests) > 0;
-    public string Status { get; private set; } = "Agent access is off.";
+    public string Status { get; private set; } = "Assistant access is off.";
     public event Action? StatusChanged;
 
     public void Start(string? pipeName = null)
@@ -46,19 +46,19 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
     {
         if (!app.Settings.Agents.Enabled) _sessionExpires = null;
         Status = HasAccess
-            ? (app.Settings.Agents.SessionAccessOnly ? $"Native agent access expires at {_sessionExpires:t}." :
-                "Ready for local coding agents. Capture tools use your current Hotshot settings.")
+            ? (app.Settings.Agents.SessionAccessOnly ? $"Access expires at {_sessionExpires:t}." :
+                "Ready for assistants.")
             : app.Settings.Agents.Enabled && app.Settings.Agents.SessionAccessOnly
-                ? "Session access is not granted or expired. Grant a timed session to allow requests."
-            : "Agent access is off. Connected agents can only read the enabled/disabled status.";
+                ? "Allow temporary access to continue."
+            : "Assistant access is off.";
         StatusChanged?.Invoke();
     }
 
     public void GrantSession()
     {
-        if (!app.Settings.Agents.Enabled) throw new InvalidOperationException("Enable agent access before granting a session.");
+        if (!app.Settings.Agents.Enabled) throw new InvalidOperationException("Turn on assistant access first.");
         _sessionExpires = DateTimeOffset.Now.AddMinutes(app.Settings.Agents.SessionMinutes);
-        Status = $"Access granted until {_sessionExpires:t} for this Hotshot run.";
+        Status = $"Access allowed until {_sessionExpires:t}.";
         StatusChanged?.Invoke();
     }
     public void RevokeSession() { _sessionExpires = null; RefreshStatus(); }
@@ -228,7 +228,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
             return new AgentResponse { Success = true, Status = status, Clients = settings.Agents.Enabled ? Clients.ToArray() : null };
         }
         if (!HasAccess)
-            return AgentResponse.Failure("access_disabled", "Enable Hotshot Settings > Coding agents > Agent access before using capture tools.");
+            return AgentResponse.Failure("access_disabled", "Turn on Settings > AI assistants > Allow assistant access.");
         if (request.Operation == "activity")
             return new AgentResponse { Success = true, Activity = _activity.Reverse().Skip(request.Offset).Take(request.Limit).ToArray() };
         if (isUnavailable() || capture.IsBusy) return AgentResponse.Failure("app_busy", "Hotshot is exiting, recording, or processing another capture. Retry when idle.");
@@ -244,7 +244,7 @@ internal sealed class AgentCaptureServer(AppServices app, CaptureCoordinator cap
         if (request.Operation is "search_history" or "get_capture" or "get_capture_region" or "compare_captures" or "read_capture_text")
         {
             if (!settings.Agents.AllowHistoryAccess)
-                return AgentResponse.Failure("history_disabled", "Enable Coding agents > Allow history access to expose previous capture files and descriptions.");
+                return AgentResponse.Failure("history_disabled", "Turn on AI assistants > Allow saved screenshots.");
             if (request.Operation == "search_history")
                 return new AgentResponse { Success = true, Captures = app.History.Search(request.Query, int.MaxValue)
                     .Where(item => AgentAccessPolicy.AllowsApp(settings.Agents, item.AppName)).Skip(request.Offset).Take(request.Limit).Select(Metadata).ToArray() };

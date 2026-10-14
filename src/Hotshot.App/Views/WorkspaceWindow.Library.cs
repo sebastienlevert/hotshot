@@ -18,11 +18,11 @@ internal sealed partial class WorkspaceWindow
     {
         if (!await ConfirmDiscardAsync()) return;
         var groups = await Task.Run(() => LibraryMaintenance.Inspect(_app.Paths, _app.History.Items), OperationToken);
-        var all = new CheckBox { Content = "Also delete all private editable originals and annotation sidecars", IsChecked = false };
+        var all = new CheckBox { Content = "Also delete originals and editable annotations", IsChecked = false };
         var body = new StackPanel { Spacing = 10 };
         foreach (var group in groups) body.Children.Add(new TextBlock { Text = $"{group.Name}: {group.Files:N0} files / {group.Bytes / 1048576d:F1} MB", TextWrapping = TextWrapping.Wrap });
         body.Children.Add(all);
-        body.Children.Add(UiStyles.Description("Cleanup never deletes saved capture files. Removing originals is permanent and removes editable annotation history; saved flattened redactions remain. Nothing is deleted until you review a second confirmation."));
+        body.Children.Add(UiStyles.Description("Saved captures stay safe. Deleting originals permanently removes editable history. You'll confirm before anything is deleted."));
         if (await DialogAsync("Storage and privacy", body, "Preview cleanup") != ContentDialogResult.Primary) return;
         var includeAll = all.IsChecked == true;
         var reviewed = await Task.Run(() => LibraryMaintenance.PreviewCleanup(_app.Paths, _app.History.Items, includeAll), OperationToken);
@@ -43,11 +43,11 @@ internal sealed partial class WorkspaceWindow
     private async Task BackupLibraryAsync()
     {
         if (_editor.IsDirty) throw new InvalidOperationException("Save your edits before backing up the library.");
-        var originals = new CheckBox { Content = "Include private originals and editable annotation sidecars", IsChecked = false };
+        var originals = new CheckBox { Content = "Include originals and editable annotations", IsChecked = false };
         var body = new StackPanel { Spacing = 10 };
         body.Children.Add(originals);
-        body.Children.Add(UiStyles.Description("Creates a local ZIP of existing captures and library metadata. Originals may contain information hidden by saved redactions. No settings, credentials or uploads are included."));
-        if (await DialogAsync("Local library backup", body, "Choose destination") != ContentDialogResult.Primary) return;
+        body.Children.Add(UiStyles.Description("Save a backup on this device. Originals may reveal details you've hidden. No sign-ins or settings are included."));
+        if (await DialogAsync("Back up library", body, "Choose folder") != ContentDialogResult.Primary) return;
         var picker = new FileSavePicker(AppWindow.Id) { SuggestedFileName = "Hotshot-library-" + DateTime.Now.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) };
         picker.FileTypeChoices.Add("Hotshot library backup", [".zip"]);
         var chosen = await picker.PickSaveFileAsync();
@@ -61,14 +61,14 @@ internal sealed partial class WorkspaceWindow
     private async Task RestoreLibraryAsync()
     {
         if (!await ConfirmDiscardAsync()) return;
-        var chosen = await new FileOpenPicker(AppWindow.Id) { Title = "Choose a local Hotshot library backup", FileTypeFilter = { ".zip" } }.PickSingleFileAsync();
+        var chosen = await new FileOpenPicker(AppWindow.Id) { Title = "Choose a Hotshot backup", FileTypeFilter = { ".zip" } }.PickSingleFileAsync();
         if (chosen is null) return;
         var preview = await Task.Run(() => LibraryMaintenance.PreviewRestore(chosen.Path), OperationToken);
-        var originals = new CheckBox { Content = "Restore included private originals and annotations", IsChecked = false, IsEnabled = preview.IncludesOriginals };
+        var originals = new CheckBox { Content = "Restore originals and editable annotations", IsChecked = false, IsEnabled = preview.IncludesOriginals };
         var body = new StackPanel { Spacing = 10 };
-        body.Children.Add(UiStyles.Description($"{preview.Captures:N0} captures / {preview.Bytes / 1048576d:F1} MB. Import into a new folder under your capture folder; existing files and IDs are never overwritten. Imported captures will not be submitted for automatic AI analysis."));
+        body.Children.Add(UiStyles.Description($"{preview.Captures:N0} items / {preview.Bytes / 1048576d:F1} MB. Restores to a new folder. Existing files stay unchanged; nothing is sent to Copilot."));
         body.Children.Add(originals);
-        if (await DialogAsync("Review library restore", body, "Restore") != ContentDialogResult.Primary) return;
+        if (await DialogAsync("Restore backup?", body, "Restore") != ContentDialogResult.Primary) return;
         var include = originals.IsChecked == true;
         await Task.Run(() => LibraryMaintenance.RestoreAsync(chosen.Path, _app.Settings.General.SaveFolder, _app.History, _app.Paths, include, OperationToken), OperationToken);
         RenderHistory();
@@ -77,7 +77,7 @@ internal sealed partial class WorkspaceWindow
     private async Task RelinkAsync()
     {
         if (_current is not { } item) return;
-        if (File.Exists(item.Path)) throw new InvalidOperationException("This capture file still exists. Relink is intended for moved/missing files.");
+        if (File.Exists(item.Path)) throw new InvalidOperationException("This file isn't missing. Choose a missing file to locate.");
         var picker = new FileOpenPicker(AppWindow.Id) { Title = "Locate this moved capture" };
         picker.FileTypeFilter.Add(Path.GetExtension(item.Path));
         var chosen = await picker.PickSingleFileAsync();
@@ -130,8 +130,8 @@ internal sealed partial class WorkspaceWindow
         if (items.Length is < 1 or > 20 || items.Any(item => item.IsVideo))
             throw new InvalidOperationException("Select 1-20 screenshots for a local evidence bundle.");
         if (_editor.IsDirty) throw new InvalidOperationException("Save redactions and edits before bundling saved evidence.");
-        if (await DialogAsync("Create local evidence bundle?", UiStyles.Description(
-            "Writes flattened screenshots and a minimal manifest (dimensions, timestamps, project). No originals, annotations, AI/OCR text, absolute paths, credentials or uploads."), "Choose destination") != ContentDialogResult.Primary) return;
+        if (await DialogAsync("Package screenshots?", UiStyles.Description(
+            "Saves a ZIP with edited screenshots and basic file details. No originals, extracted text, descriptions or sign-ins. Nothing is uploaded."), "Choose folder") != ContentDialogResult.Primary) return;
         var picker = new FileSavePicker(AppWindow.Id) { SuggestedFileName = "Hotshot-evidence-" + DateTime.Now.ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture) };
         picker.FileTypeChoices.Add("Local ZIP bundle", [".zip"]);
         var chosen = await picker.PickSaveFileAsync();
