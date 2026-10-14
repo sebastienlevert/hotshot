@@ -35,8 +35,25 @@ http.createServer(async (request, response) => {
       if (['ENOENT', 'EISDIR'].includes(error.code)) { await fail(404); return; }
       throw error;
     }
-    response.writeHead(200, { 'Content-Type': mime[path.extname(file)] ?? 'application/octet-stream',
-      'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' });
+    const headers = { 'Content-Type': mime[path.extname(file)] ?? 'application/octet-stream',
+      'Content-Length': bytes.length, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-cache' };
+    if (path.extname(file) === '.mp4') {
+      headers['Accept-Ranges'] = 'bytes';
+      if (request.method === 'GET' && request.headers.range) {
+        const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range);
+        const suffix = range?.[1] === '' ? Number(range[2]) : null;
+        const start = suffix !== null ? Math.max(0, bytes.length - suffix) : Number(range?.[1]);
+        const end = suffix !== null || range?.[2] === '' ? bytes.length - 1 : Math.min(Number(range?.[2]), bytes.length - 1);
+        if (!range || range[1] === '' && range[2] === '' || suffix !== null && (!Number.isSafeInteger(suffix) || suffix <= 0) ||
+            !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= bytes.length || end < start) {
+          response.writeHead(416, { ...headers, 'Content-Length': 0, 'Content-Range': `bytes */${bytes.length}` });
+          response.end(); return;
+        }
+        response.writeHead(206, { ...headers, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${bytes.length}` });
+        response.end(bytes.subarray(start, end + 1)); return;
+      }
+    }
+    response.writeHead(200, headers);
     response.end(request.method === 'HEAD' ? '' : bytes);
   } catch (error) {
     console.error('Site preview request failed:', error);

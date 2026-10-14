@@ -139,9 +139,9 @@ for (const viewport of viewports) {
       }
 
       test('walkthrough has direct controls without downloading on mobile page load', async ({ page }) => {
-        const videoRequests = [];
-        page.on('request', request => {
-          if (request.url().endsWith('/workflow.mp4')) videoRequests.push(request.url());
+        const videoResponses = [];
+        page.on('response', response => {
+          if (response.url().endsWith('/workflow.mp4')) videoResponses.push(response);
         });
         await page.goto('');
         await page.evaluate(() => document.fonts.ready);
@@ -151,7 +151,13 @@ for (const viewport of viewports) {
         await expect(page.locator('video')).toHaveAttribute('controlslist', 'nodownload');
         await expect(page.locator('video source')).toHaveAttribute('src', /workflow\.mp4$/);
         await expect(page.locator('[data-video-play], a[href$="workflow.mp4"]')).toHaveCount(0);
-        expect(videoRequests).toEqual([]);
+        for (const response of videoResponses) {
+          expect(response.status()).toBe(206);
+          expect(response.request().headers().range).toMatch(/^bytes=/);
+        }
+        const probedBytes = videoResponses.reduce((total, response) => total + Number(response.headers()['content-length']), 0);
+        expect(probedBytes, 'Native controls may probe metadata, but must not fetch the walkthrough before playback')
+          .toBeLessThanOrEqual(64 * 1024);
       });
     });
 }

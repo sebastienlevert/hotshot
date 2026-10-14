@@ -166,3 +166,16 @@ test('walkthrough has native playback controls even without JavaScript', async (
     await expect(page.locator('a[href$="workflow.mp4"], [data-video-play]')).toHaveCount(0);
   } finally { await context.close(); }
 });
+
+test('walkthrough byte ranges support metadata probes and seeking without a full download', async ({ request }) => {
+  const probe = await request.get('media/workflow.mp4', { headers: { Range: 'bytes=0-1' } });
+  expect(probe.status()).toBe(206);
+  expect((await probe.body()).length).toBe(2);
+  expect(probe.headers()['content-range']).toMatch(/^bytes 0-1\/\d+$/);
+  const tail = await request.get('media/workflow.mp4', { headers: { Range: 'bytes=-16' } });
+  expect(tail.status()).toBe(206);
+  expect((await tail.body()).length).toBe(16);
+  const invalid = await request.get('media/workflow.mp4', { headers: { Range: 'bytes=999999999-1000000000' } });
+  expect(invalid.status()).toBe(416);
+  expect((await invalid.body()).length).toBe(0);
+});
