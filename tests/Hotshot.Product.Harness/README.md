@@ -12,6 +12,11 @@ thick green arrow preview beside the controls.
 Window snapping checks use generated windows from this process only: full
 physical-pixel bounds, topmost selection and hidden-window filtering. They do
 not capture the desktop or move the user's pointer.
+The recording timer fixture checks countdown through zero, hiding before
+startup, timer-only Mini/Small layouts in all four corners, elapsed/pause
+feedback and retained pause/stop controls without starting a recorder.
+Native settings choices must persist both preferences. The Mini/Small images
+use their actual pixel sizes; layout checks reject clipped timer text.
 General, screenshot, GIF, recording and naming settings verify that their
 920-DIP column is centered in the content area beside navigation at compact,
 normal and 1920-DIP widths in both themes. Headings and card text stay

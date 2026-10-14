@@ -1090,13 +1090,18 @@ try {
     Command '--record'
     Select-Region
     $recording = Wait-For { [HotshotSmokeNative]::FindWindow([NullString]::Value, 'Hotshot recording') } 'recording controls'
-    $pause = Wait-For { $button = Element $recording 'Pause'; if ($button -and $button.Current.IsEnabled) { $button } } 'recorder ready'
+    $clock = Wait-For {
+        $status = Element-ById $recording 'RecordingStatus'
+        if ($status -and $status.Current.Name -match '^\d{2,}:\d{2}:\d{2}$') { Element-ById $recording 'RecordingTimer' }
+    } 'compact recorder timer'
+    Click $clock
+    $pause = Wait-For { $button = App-Control 'Pause'; if ($button -and $button.Current.IsEnabled) { $button } } 'recorder ready'
     Start-Sleep -Seconds 1
     Click $pause
     Start-Sleep -Milliseconds 300
-    Click (Element $recording 'Resume')
+    Click (Wait-For { App-Control 'Resume' } 'resume recording')
     Start-Sleep -Seconds 1
-    Click (Element $recording 'Stop and save')
+    Click (Wait-For { App-Control 'Stop and save' } 'stop recording')
     Wait-For { (Read-CaptureHistory).Count -eq 4 } 'MP4 recording output' | Out-Null
     Write-Host 'PASS region recording with pause/resume and MP4 output'
 

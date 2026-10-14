@@ -97,6 +97,7 @@ internal static class ProductAcceptance
             await report.CheckAsync("settings-native-plain-language-default-pages", () => CheckSettingsCopyAsync(settings, output));
             await report.CheckAsync("settings-native-centered-responsive-pages", () => CheckSettingsAlignmentAsync(settings, output));
             await report.CheckAsync("native-full-window-snap-targets", CheckWindowSnapAsync);
+            await report.CheckAsync("recording-countdown-zero-and-compact-timer", () => CheckRecordingTimerAsync(app, settings, paths.SettingsFile, output));
             await report.CheckAsync("copilot-native-sign-in-consent-cancellation-and-failure", () =>
                 CheckCopilotSignInAsync(settings, app, accountClients, browserVisits));
             var scale = ((FrameworkElement)settings.Content).XamlRoot.RasterizationScale;
@@ -248,6 +249,86 @@ internal static class ProductAcceptance
                 app.Dispose();
             }
             if (Directory.Exists(profile)) Directory.Delete(profile, recursive: true);
+        }
+    }
+
+    private static async Task CheckRecordingTimerAsync(AppServices app, SettingsWindow settings, string settingsFile, string output)
+    {
+        var size = app.Settings.Recording.TimerSize;
+        var corner = app.Settings.Recording.TimerPlacement;
+        settings.SelectPage(SettingsPage.Recording);
+        await ReadyAsync(settings);
+        var sizeChoice = Descendants(settings.Content).OfType<ComboBox>()
+            .Single(control => AutomationProperties.GetName(control) == "Timer size");
+        var cornerChoice = Descendants(settings.Content).OfType<ComboBox>()
+            .Single(control => AutomationProperties.GetName(control) == "Timer corner");
+        var stopCount = 0;
+        var monitor = Monitors.GetAll().First(display => display.IsPrimary);
+        var window = new RecordingWindow(app, () => { stopCount++; return Task.CompletedTask; }, monitor);
+        try
+        {
+            var countdown = window.CountdownAsync(1, CancellationToken.None);
+            await Task.Delay(100);
+            if (window.CountdownValue != 1 || !window.AppWindow.IsVisible)
+                throw new InvalidDataException("The native countdown did not show its starting value.");
+            await UntilAsync(() => window.CountdownValue == 0, "The native countdown never reached zero.");
+            if (!window.AppWindow.IsVisible || Find<TextBlock>(window.Content, "RecordingStatus").Text != "0")
+                throw new InvalidDataException("Zero must be visible before the countdown leaves the screen.");
+            await countdown;
+            if (window.CountdownValue != 0 || window.AppWindow.IsVisible)
+                throw new InvalidDataException("The native countdown must reach zero and leave the screen.");
+            foreach (var timerSize in Enum.GetValues<RecordingTimerSize>())
+            foreach (var placement in Enum.GetValues<RecordingTimerPlacement>())
+            {
+                sizeChoice.SelectedItem = sizeChoice.Items.Cast<ComboBoxItem>().Single(item => Equals(item.Tag, timerSize));
+                cornerChoice.SelectedItem = cornerChoice.Items.Cast<ComboBoxItem>().Single(item => Equals(item.Tag, placement));
+                await settings.SavePendingAsync();
+                var persisted = new SettingsStore(settingsFile).Load().Recording;
+                if (app.Settings.Recording.TimerSize != timerSize || app.Settings.Recording.TimerPlacement != placement ||
+                    persisted.TimerSize != timerSize || persisted.TimerPlacement != placement ||
+                    !Equals(((ComboBoxItem)cornerChoice.SelectedItem).Content, RecordingTimerLayout.PlacementName(placement)))
+                    throw new InvalidDataException("Native timer choices did not preserve their friendly labels and saved values.");
+                window.ShowTimer(TimeSpan.FromSeconds(65), paused: false);
+                await ReadyAsync(window, minimumWidth: 64, minimumHeight: 16);
+                var expected = RecordingTimerLayout.Place(monitor.WorkArea.X, monitor.WorkArea.Y,
+                    monitor.WorkArea.Width, monitor.WorkArea.Height, monitor.Scale, timerSize, placement);
+                var actual = window.AppWindow;
+                var status = Find<TextBlock>(window.Content, "RecordingStatus");
+                var clock = Find<Button>(window.Content, "RecordingTimer");
+                if (status.Text != "00:01:05" || actual.Size.Width != expected.Width || actual.Size.Height != expected.Height ||
+                    actual.Position.X != expected.X || actual.Position.Y != expected.Y ||
+                    ((Grid)window.Content).Children.Count != 1 || actual.Presenter is not Microsoft.UI.Windowing.OverlappedPresenter { IsAlwaysOnTop: true, IsResizable: false })
+                    throw new InvalidDataException($"Native {timerSize}/{placement} timer has incorrect text, bounds or visible controls.");
+                if (status.ActualWidth <= 0 || status.ActualHeight <= 0 ||
+                    status.DesiredSize.Width > clock.ActualWidth - clock.Padding.Left - clock.Padding.Right ||
+                    status.DesiredSize.Height > clock.ActualHeight - clock.Padding.Top - clock.Padding.Bottom)
+                    throw new InvalidDataException($"Native {timerSize} timer clips its elapsed time.");
+                Console.WriteLine($"Recording timer {timerSize}/{placement}: {actual.Position.X},{actual.Position.Y} " +
+                    $"{actual.Size.Width}x{actual.Size.Height}; time={status.Text}, text={status.ActualWidth:F1}x{status.ActualHeight:F1} DIPs.");
+                if (placement == RecordingTimerPlacement.TopRight)
+                    await RenderAsync(window, Path.Combine(output, $"recording-timer-{timerSize.ToString().ToLowerInvariant()}.png"), nativeSize: true);
+                window.ShowTimer(TimeSpan.FromSeconds(65), paused: true);
+                if (status.Text != "00:01:05" || status.Opacity != 0.6)
+                    throw new InvalidDataException("Paused timer changed its time or lost its paused feedback.");
+            }
+            var timer = Find<Button>(window.Content, "RecordingTimer");
+            if (timer.Flyout is not Flyout { Content: StackPanel actions } ||
+                actions.Children.OfType<StackPanel>().Single().Children.OfType<Button>().Count() != 2)
+                throw new InvalidDataException("Pause and stop must remain available from the compact timer.");
+            var opened = false;
+            timer.Flyout.Opened += (_, _) => opened = true;
+            Invoke(timer);
+            await UntilAsync(() => opened && actions.IsLoaded, "Clicking the timer did not open the native recording controls.");
+            window.HideForSaving();
+            if (window.AppWindow.IsVisible || stopCount != 0)
+                throw new InvalidDataException("Hiding the compact timer should not stop or mutate a recording.");
+        }
+        finally
+        {
+            sizeChoice.SelectedItem = sizeChoice.Items.Cast<ComboBoxItem>().Single(item => Equals(item.Tag, size));
+            cornerChoice.SelectedItem = cornerChoice.Items.Cast<ComboBoxItem>().Single(item => Equals(item.Tag, corner));
+            await settings.SavePendingAsync();
+            window.Close();
         }
     }
 
@@ -583,11 +664,12 @@ internal static class ProductAcceptance
         return new CapturedImage(width, height, pixels);
     }
 
-    private static async Task ReadyAsync(Window window)
+    private static async Task ReadyAsync(Window window, double minimumWidth = 100, double minimumHeight = 100)
     {
         window.SystemBackdrop = null;
         window.Activate();
-        await UntilAsync(() => window.Content is FrameworkElement { IsLoaded: true, ActualWidth: > 100, ActualHeight: > 100, XamlRoot: not null },
+        await UntilAsync(() => window.Content is FrameworkElement { IsLoaded: true, XamlRoot: not null } root &&
+            root.ActualWidth > minimumWidth && root.ActualHeight > minimumHeight,
             "The native WinUI window did not load/measure. An interactive desktop and native renderer are required.");
         if (window.Content is Panel { Background: null } panel)
             panel.Background = new SolidColorBrush(panel.ActualTheme == ElementTheme.Dark
@@ -595,13 +677,15 @@ internal static class ProductAcceptance
         await Task.Delay(150);
     }
 
-    private static async Task RenderAsync(Window window, string path, bool preserveAspectRatio = false)
+    private static async Task RenderAsync(Window window, string path, bool preserveAspectRatio = false, bool nativeSize = false)
     {
         var root = (FrameworkElement)window.Content;
-        var height = preserveAspectRatio ? (int)Math.Round(960 * root.ActualHeight / root.ActualWidth) : 720;
+        var width = nativeSize ? (int)Math.Ceiling(root.ActualWidth * root.XamlRoot.RasterizationScale) : 960;
+        var height = nativeSize ? (int)Math.Ceiling(root.ActualHeight * root.XamlRoot.RasterizationScale)
+            : preserveAspectRatio ? (int)Math.Round(960 * root.ActualHeight / root.ActualWidth) : 720;
         var bitmap = new RenderTargetBitmap();
-        await bitmap.RenderAsync(root, 960, height);
-        if (bitmap.PixelWidth < 100 || bitmap.PixelHeight < 100)
+        await bitmap.RenderAsync(root, width, height);
+        if (bitmap.PixelWidth < (nativeSize ? 1 : 100) || bitmap.PixelHeight < (nativeSize ? 1 : 100))
             throw new InvalidDataException("Native XAML rendering returned an empty surface.");
         var pixels = (await bitmap.GetPixelsAsync()).ToArray();
         if (pixels.Length != checked(bitmap.PixelWidth * bitmap.PixelHeight * 4) ||

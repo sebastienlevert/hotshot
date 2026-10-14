@@ -61,6 +61,8 @@ public sealed class AppSettings
         if (string.IsNullOrWhiteSpace(Naming.RecordingPattern)) Naming.RecordingPattern = FileNameTemplate.DefaultPattern;
         Recording.FramesPerSecond = Recording.FramesPerSecond is 15 or 24 or 30 or 60 ? Recording.FramesPerSecond : 30;
         Recording.CountdownSeconds = Math.Clamp(Recording.CountdownSeconds, 0, 10);
+        if (!Enum.IsDefined(Recording.TimerSize)) Recording.TimerSize = RecordingTimerSize.Mini;
+        if (!Enum.IsDefined(Recording.TimerPlacement)) Recording.TimerPlacement = RecordingTimerPlacement.TopRight;
         Capture.DelaySeconds = Math.Clamp(Capture.DelaySeconds, 0, 30);
         Agents.SessionMinutes = Math.Clamp(Agents.SessionMinutes, 5, 240);
         if (!double.IsFinite(Layout.HistoryWidth)) Layout.HistoryWidth = 220;
@@ -76,6 +78,8 @@ public sealed class AppSettings
     public IReadOnlyList<string> Validate()
     {
         var errors = new List<string>();
+        if (!Enum.IsDefined(Recording.TimerSize) || !Enum.IsDefined(Recording.TimerPlacement))
+            errors.Add("Choose a recording timer size and corner.");
         if (!string.IsNullOrWhiteSpace(General.CopilotRuntimePath) && !Path.IsPathFullyQualified(General.CopilotRuntimePath))
             errors.Add("Choose an absolute path for an optional SDK-compatible Copilot runtime.");
         if (Export.Presets.Count > 50 || Export.Presets.Any(preset => string.IsNullOrWhiteSpace(preset.Name) || preset.Name.Length > 80))
@@ -298,6 +302,12 @@ public enum RecordingQuality
     Maximum,
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<RecordingTimerSize>))]
+public enum RecordingTimerSize { Mini, Small }
+
+[JsonConverter(typeof(JsonStringEnumConverter<RecordingTimerPlacement>))]
+public enum RecordingTimerPlacement { TopRight, TopLeft, BottomRight, BottomLeft }
+
 public sealed class RecordingSettings
 {
     public int FramesPerSecond { get; set; } = 30;
@@ -307,6 +317,8 @@ public sealed class RecordingSettings
     public string? MicrophoneDeviceId { get; set; }
     public bool IncludeCursor { get; set; } = true;
     public int CountdownSeconds { get; set; } = 3;
+    public RecordingTimerSize TimerSize { get; set; } = RecordingTimerSize.Mini;
+    public RecordingTimerPlacement TimerPlacement { get; set; } = RecordingTimerPlacement.TopRight;
     public bool ShowStartBar { get; set; } = true;
     public bool AlsoCreateGif { get; set; }
 }

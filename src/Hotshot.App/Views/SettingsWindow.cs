@@ -298,6 +298,8 @@ internal sealed partial class SettingsWindow : Window
         yield return new(SettingsPage.Recording, "Quality", "bitrate video file size");
         yield return new(SettingsPage.Recording, "Include cursor", "mouse pointer video");
         yield return new(SettingsPage.Recording, "Countdown", "start seconds delay video");
+        yield return new(SettingsPage.Recording, "Timer size", "mini small recording time controls");
+        yield return new(SettingsPage.Recording, "Timer corner", "placement position top right left bottom recording");
         yield return new(SettingsPage.Recording, "Record system audio", "sound playback speakers");
         yield return new(SettingsPage.Recording, "Record microphone", "audio voice input");
         yield return new(SettingsPage.Recording, "Also create a GIF", "convert animation mp4");
@@ -490,6 +492,12 @@ internal sealed partial class SettingsWindow : Window
                 Choice(panel, "Quality", "Higher quality increases file size.", Enum.GetValues<RecordingQuality>(), _draft.Recording.Quality, v => _draft.Recording.Quality = v);
                 Toggle(panel, "Include cursor", "Show the pointer in the recording.", _draft.Recording.IncludeCursor, v => _draft.Recording.IncludeCursor = v);
                 Number(panel, "Countdown", "Seconds before recording begins.", _draft.Recording.CountdownSeconds, 0, 10, v => _draft.Recording.CountdownSeconds = v);
+                Section(panel, "Recording timer");
+                Choice(panel, "Timer size", "Only the time stays on screen.",
+                    Enum.GetValues<RecordingTimerSize>(), _draft.Recording.TimerSize, value => _draft.Recording.TimerSize = value);
+                Choice(panel, "Timer corner", "On the screen you're recording.",
+                    Enum.GetValues<RecordingTimerPlacement>(), _draft.Recording.TimerPlacement,
+                    value => _draft.Recording.TimerPlacement = value, RecordingTimerLayout.PlacementName);
                 Section(panel, "Audio");
                 Toggle(panel, "Record system audio", "Include audio played by Windows and apps.", _draft.Recording.CaptureSystemAudio, v => _draft.Recording.CaptureSystemAudio = v);
                 Toggle(panel, "Record microphone", "Include your voice.", _draft.Recording.CaptureMicrophone, v => _draft.Recording.CaptureMicrophone = v);
@@ -926,11 +934,18 @@ internal sealed partial class SettingsWindow : Window
         Card(panel, title, UiStyles.Description(description), input);
     }
 
-    private void Choice<T>(StackPanel panel, string title, string description, T[] choices, T current, Action<T> changed)
+    private void Choice<T>(StackPanel panel, string title, string description, T[] choices, T current, Action<T> changed,
+        Func<T, string>? label = null)
     {
-        var input = new ComboBox { ItemsSource = choices, SelectedItem = current, MinWidth = 112 };
+        var input = new ComboBox { MinWidth = 112 };
+        foreach (var choice in choices)
+            input.Items.Add(new ComboBoxItem { Content = label is null ? choice?.ToString() : label(choice), Tag = choice });
+        input.SelectedIndex = Array.IndexOf(choices, current);
         AutomationProperties.SetName(input, title);
-        input.SelectionChanged += (_, _) => { if (input.SelectedItem is T value) { changed(value); Changed(); } };
+        input.SelectionChanged += (_, _) =>
+        {
+            if (input.SelectedItem is ComboBoxItem { Tag: T value }) { changed(value); Changed(); }
+        };
         Card(panel, title, UiStyles.Description(description), input);
     }
 

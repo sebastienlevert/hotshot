@@ -97,15 +97,8 @@ internal sealed partial class AppController
 
             var settings = _app.Settings.Recording;
             _recordingAsGif = asGif || settings.AlsoCreateGif;
-            _recordingWindow = new RecordingWindow(_app, StopRecordingAsync);
-            _recordingWindow.Activate();
-            for (var seconds = settings.CountdownSeconds; seconds > 0; seconds--)
-            {
-                _recordingWindow.SetStatus($"Recording starts in {seconds}...");
-                await Task.Delay(1000, token);
-            }
-
-            _recordingWindow.SetStatus("Starting recorder...");
+            _recordingWindow = new RecordingWindow(_app, StopRecordingAsync, monitor);
+            await _recordingWindow.CountdownAsync(settings.CountdownSeconds, token);
             var source = CaptureSource.Now(appName, title, monitor.Index);
             _recordingSource = source;
             var (path, temporary) = _pipeline.ReservePath(CaptureKind.Recording, source, selection.Rect.Width, selection.Rect.Height);
@@ -220,7 +213,7 @@ internal sealed partial class AppController
     {
         try
         {
-            _recordingWindow?.SetStatus("Saving recording...");
+            _recordingWindow?.HideForSaving();
             var result = await recorder.StopAsync();
             var item = await _pipeline.AddVideoAsync(result.Path, CaptureKind.Recording, result.Width, result.Height,
                 result.Duration, _recordingTemporary, source: _recordingSource);

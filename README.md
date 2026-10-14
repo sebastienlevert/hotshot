@@ -175,10 +175,13 @@ Open **Library** to clean up storage, back up or restore files, locate missing f
 ## Record video and make GIFs
 
 1. Press **Ctrl+Shift+Print Screen** or use the tray recording command to choose a window or a region on one monitor.
-2. Use the recording controls to pause/resume, mute microphone/system audio, and watch audio levels.
-3. Stop with the shortcut or recording controls. Hotshot saves an H.264 MP4. Closing the recording controls also stops and saves.
+2. The countdown reaches zero and disappears. A tiny timer stays in a corner; click it to pause/resume, mute audio, or stop.
+3. Stop with the shortcut or choose **Stop and save** from the timer. Hotshot saves an MP4.
 
 Turn both audio options off under **Screen recording** for a silent video. Closing the recorded target ends the recording, even while paused. Recording regions cannot span monitors.
+
+Under **Screen recording > Recording timer**, choose **Mini** or **Small** and
+any corner. The default is **Mini, top right** on the screen being recorded.
 
 Select a video in the workspace to play it, extract a frame, or trim it to a **separate MP4** using the start/end sliders. If recording was interrupted, the recovery action can recover a finalized, playable MP4; unreadable or unfinalized data is preserved and reported rather than claimed recovered.
 

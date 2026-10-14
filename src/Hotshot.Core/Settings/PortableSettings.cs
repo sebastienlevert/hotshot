@@ -23,6 +23,8 @@ public sealed class PortableRecordingSettings
     public bool CaptureMicrophone { get; set; }
     public bool IncludeCursor { get; set; } = true;
     public int CountdownSeconds { get; set; } = 3;
+    public RecordingTimerSize TimerSize { get; set; } = RecordingTimerSize.Mini;
+    public RecordingTimerPlacement TimerPlacement { get; set; } = RecordingTimerPlacement.TopRight;
     public bool ShowStartBar { get; set; } = true;
     public bool AlsoCreateGif { get; set; }
 }
@@ -62,6 +64,7 @@ public sealed class PortableSettings
                 FramesPerSecond = clone.Recording.FramesPerSecond, Quality = clone.Recording.Quality,
                 CaptureSystemAudio = clone.Recording.CaptureSystemAudio, CaptureMicrophone = clone.Recording.CaptureMicrophone,
                 IncludeCursor = clone.Recording.IncludeCursor, CountdownSeconds = clone.Recording.CountdownSeconds,
+                TimerSize = clone.Recording.TimerSize, TimerPlacement = clone.Recording.TimerPlacement,
                 ShowStartBar = clone.Recording.ShowStartBar, AlsoCreateGif = clone.Recording.AlsoCreateGif,
             },
             Library = new() { KeepSavedCaptures = clone.Library.KeepSavedCaptures, SavedSearches = clone.Library.SavedSearches },
@@ -87,6 +90,8 @@ public sealed class PortableSettings
         result.Recording.CaptureMicrophone = Recording.CaptureMicrophone;
         result.Recording.IncludeCursor = Recording.IncludeCursor;
         result.Recording.CountdownSeconds = Recording.CountdownSeconds;
+        result.Recording.TimerSize = Recording.TimerSize;
+        result.Recording.TimerPlacement = Recording.TimerPlacement;
         result.Recording.ShowStartBar = Recording.ShowStartBar;
         result.Recording.AlsoCreateGif = Recording.AlsoCreateGif;
         result.Library.KeepSavedCaptures = Library.KeepSavedCaptures;
