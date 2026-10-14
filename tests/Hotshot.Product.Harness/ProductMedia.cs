@@ -89,7 +89,7 @@ internal static class ProductMedia
                 label.GetVisualBounds().Right > annotation.ImageWidth || label.GetVisualBounds().Bottom > annotation.ImageHeight)
                 throw new InvalidDataException("Publication annotation text must fit below the arrow without overlap.");
             annotation.Add(arrow);
-            annotation.Add(new RectangleAnnotation { Rect = new RectF(625, 312, 410, 118), Color = RgbaColor.Red, StrokeWidth = 4 });
+            annotation.Add(new RectangleAnnotation { Rect = new RectF(640, 325, 190, 80), Color = RgbaColor.Red, StrokeWidth = 4 });
             annotation.Add(label);
             await File.WriteAllTextAsync(Path.Combine(app.Paths.OriginalsDirectory, first.Id + ".json"), annotation.ToJson());
 
@@ -128,6 +128,7 @@ internal static class ProductMedia
             await CheckSettingsHeaderAsync(settings);
             PrepareWindow(settings);
             settings.SelectPage(SettingsPage.Naming);
+            ((Grid)settings.Content).Children.OfType<NavigationView>().Single().IsPaneOpen = true;
             await Task.Delay(300);
             var settingsImage = await ScreenshotAsync(settings, Path.Combine(output, "settings.png"));
             await CheckSetupAsync(settings, app);
