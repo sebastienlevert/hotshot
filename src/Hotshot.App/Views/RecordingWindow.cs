@@ -88,7 +88,12 @@ internal sealed class RecordingWindow : Window
         _timer.Tick += (_, _) => Update();
         Closed += async (_, _) => { _timer.Stop(); await stop(); };
         WindowTools.Configure(this, 140, 140, compact: true);
-        if (AppWindow.Presenter is OverlappedPresenter presenter) presenter.SetBorderAndTitleBar(false, false);
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.SetBorderAndTitleBar(false, false);
+            presenter.PreferredMinimumWidth = 1;
+            presenter.PreferredMinimumHeight = 1;
+        }
         var width = Math.Min(monitor.WorkArea.Width, (int)Math.Round(140 * monitor.Scale));
         var height = Math.Min(monitor.WorkArea.Height, (int)Math.Round(140 * monitor.Scale));
         AppWindow.MoveAndResize(new RectInt32(monitor.WorkArea.X + (monitor.WorkArea.Width - width) / 2,

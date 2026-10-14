@@ -295,6 +295,11 @@ internal static class ProductAcceptance
                 var actual = window.AppWindow;
                 var status = Find<TextBlock>(window.Content, "RecordingStatus");
                 var clock = Find<Button>(window.Content, "RecordingTimer");
+                Console.WriteLine($"Recording timer {timerSize}/{placement}: expected={expected}, " +
+                    $"actual={actual.Position.X},{actual.Position.Y}/{actual.Size.Width}x{actual.Size.Height}, " +
+                    $"time={status.Text}, root children={((Grid)window.Content).Children.Count}, " +
+                    $"topmost={(actual.Presenter as Microsoft.UI.Windowing.OverlappedPresenter)?.IsAlwaysOnTop}, " +
+                    $"resizable={(actual.Presenter as Microsoft.UI.Windowing.OverlappedPresenter)?.IsResizable}.");
                 if (status.Text != "00:01:05" || actual.Size.Width != expected.Width || actual.Size.Height != expected.Height ||
                     actual.Position.X != expected.X || actual.Position.Y != expected.Y ||
                     ((Grid)window.Content).Children.Count != 1 || actual.Presenter is not Microsoft.UI.Windowing.OverlappedPresenter { IsAlwaysOnTop: true, IsResizable: false })
