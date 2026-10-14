@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.19](https://github.com/sebastienlevert/hotshot/compare/v0.1.18...v0.1.19) (2026-10-14)
+
+
+### Features
+
+* **editor:** add clear editing cursors and live style preview ([e093f33](https://github.com/sebastienlevert/hotshot/commit/e093f33a2aed60806a6f69924ed7ef6c80a2031b))
+
+
+### Bug Fixes
+
+* **capture:** snap screenshot selection to complete app windows ([535726e](https://github.com/sebastienlevert/hotshot/commit/535726e63a4dd1f1b9f27acd8ac7b79e7a82dbc6))
+* **editor:** center toolbar content within full-height slots ([802a752](https://github.com/sebastienlevert/hotshot/commit/802a7523c1f13df6f0b35777f91013fc5faa957f))
+* **settings:** align GIF pages with the navigation gutter ([ff6e92e](https://github.com/sebastienlevert/hotshot/commit/ff6e92e60707805297b55f9637c7c40862fc4b82))
+* **ui:** make Hotshot wording concise and approachable ([0931f36](https://github.com/sebastienlevert/hotshot/commit/0931f364ff150894ab1c0d309368c5540de97ac5))
+
 ## [0.1.18](https://github.com/sebastienlevert/hotshot/compare/v0.1.17...v0.1.18) (2026-10-13)
 
 
