@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.1.20](https://github.com/sebastienlevert/hotshot/compare/v0.1.19...v0.1.20) (2026-10-19)
+
+
+### Features
+
+* **capture:** allow screenshots of the Hotshot editor. ([69b41c2](https://github.com/sebastienlevert/hotshot/commit/69b41c258193cc4caf19f39484e66a6f2b41e21b))
+* **recording:** add compact configurable timer ([28c2474](https://github.com/sebastienlevert/hotshot/commit/28c2474b09b6997532f4e4b091343419514d189a))
+* **website:** refresh native media and enable direct playback ([5b58323](https://github.com/sebastienlevert/hotshot/commit/5b583231e982a00e43469e8a04a71dbf7bf3f17a))
+* **website:** show a bold before-and-after comparison ([27fc6e2](https://github.com/sebastienlevert/hotshot/commit/27fc6e2ba0d9053d3456a38b8ed21d85fbbc630b))
+
+
+### Bug Fixes
+
+* **capture:** distinguish window targets from area selection ([c5af52f](https://github.com/sebastienlevert/hotshot/commit/c5af52fd80e6cdb85f2f4340d886f613dca3534c))
+* **capture:** honor Escape and prefer OneDrive capture defaults ([519e4be](https://github.com/sebastienlevert/hotshot/commit/519e4bef2c0942cd19bf220c2e20e035f1efc477))
+* **editor:** show full filenames above the toolbar. ([b14a576](https://github.com/sebastienlevert/hotshot/commit/b14a576e02e083565d90ced0b4f2380a3485fd9a))
+* **media:** keep callouts clear and show Settings navigation. ([700433f](https://github.com/sebastienlevert/hotshot/commit/700433fc7140016d47f3960f969519c4bd675e1f))
+* polish capture, recording, and desktop workflows ([b1b1bf9](https://github.com/sebastienlevert/hotshot/commit/b1b1bf938cc08b73eed229316e029ab767137408))
+* **recording:** allow compact native timer sizing ([49b6fcf](https://github.com/sebastienlevert/hotshot/commit/49b6fcfd2a8964a21fe7ba1baea10845959a14f5))
+* **recording:** remove normal-window timer minimums ([72cdc83](https://github.com/sebastienlevert/hotshot/commit/72cdc83570d0d4394081891273547212f42f0abb))
+* **settings:** center the content column beside navigation ([c4ab9b7](https://github.com/sebastienlevert/hotshot/commit/c4ab9b7134669ab693be0acf19d7db1146b5111f))
+* **startup:** replace the first-run tour with ready defaults. ([9497314](https://github.com/sebastienlevert/hotshot/commit/949731400a1627ac6083e3ad8627186dbc9cbe0f))
+* **website:** contain preview artwork below overlays ([9354b6b](https://github.com/sebastienlevert/hotshot/commit/9354b6b93062d3e12cdcdd48fea25ce7539ab80a))
+* **website:** support native video metadata byte ranges ([3cc5691](https://github.com/sebastienlevert/hotshot/commit/3cc569117b8171efa697958ed937b1902434296e))
+
 ## [0.1.19](https://github.com/sebastienlevert/hotshot/compare/v0.1.18...v0.1.19) (2026-10-14)
 
 
