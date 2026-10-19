@@ -29,9 +29,11 @@ internal sealed class AppServices : IDisposable
         Dispatcher = dispatcher;
         paths.EnsureCreated();
         var testLocal = Environment.GetEnvironmentVariable("HOTSHOT_SETTINGS_SYNC_MODE") == "local";
+        var userProfile = paths.DataDirectory.Equals(AppPaths.Default.DataDirectory, StringComparison.OrdinalIgnoreCase);
         Func<string?> discovery = sharedSettingsRoot is not null ? () => sharedSettingsRoot :
-            paths.DataDirectory.Equals(AppPaths.Default.DataDirectory, StringComparison.OrdinalIgnoreCase) ? OneDriveFolders.GetDefault : () => null;
-        _settingsStore = new RoamingSettingsStore(paths.SettingsFile, discovery, forceLocal: testLocal);
+            userProfile ? OneDriveFolders.GetDefault : () => null;
+        _settingsStore = new RoamingSettingsStore(paths.SettingsFile, discovery, forceLocal: testLocal,
+            defaultSaveFolder: userProfile ? OneDriveFolders.GetDefaultCaptureFolder() : null);
         _settingsStore.StatusChanged += () => Post(() => SettingsSyncStatusChanged?.Invoke());
         _settingsStore.Failed += message => Post(() => { Log.Warn(message); Failed?.Invoke(message); });
         Settings = _settingsStore.Load();

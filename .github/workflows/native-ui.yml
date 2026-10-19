@@ -21,6 +21,11 @@ on:
       - 'Hotshot.slnx'
       - '.github/workflows/native-ui.yml'
   workflow_dispatch:
+    inputs:
+      generate_media:
+        description: Generate website media from fixture-owned native windows (x64)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -90,6 +95,30 @@ jobs:
             -Executable "$env:NATIVE_UI_ROOT\build\bin\Hotshot.Product.Harness\release_${{ matrix.runtime }}\Hotshot.Product.Harness.exe" `
             -OutputDirectory "$env:NATIVE_UI_ROOT\evidence" `
             -ExpectedArchitecture '${{ matrix.architecture }}' -TimeoutSeconds 180 -SoftwareRenderer
+      - name: Generate current native publication screenshots and walkthrough
+        id: media
+        if: github.event_name == 'workflow_dispatch' && inputs.generate_media && matrix.platform == 'x64'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $output = "$env:NATIVE_UI_ROOT\media"
+          New-Item -ItemType Directory -Force $output | Out-Null
+          $executable = "$env:NATIVE_UI_ROOT\build\bin\Hotshot.Product.Harness\release_${{ matrix.runtime }}\Hotshot.Product.Harness.exe"
+          $process = Start-Process -FilePath $executable -ArgumentList @('--output', $output, '--timeout-seconds', '180') `
+            -PassThru -RedirectStandardOutput "$output\stdout.log" -RedirectStandardError "$output\stderr.log"
+          try {
+            if (-not $process.WaitForExit(210000)) { throw 'Native publication media generation timed out.' }
+            if ($process.ExitCode -ne 0) { throw "Native publication media failed with exit code $($process.ExitCode)." }
+            foreach ($name in 'editor.png', 'settings.png', 'comparison.png', 'workflow.mp4', 'device-evidence.json') {
+              if ((Get-Item -LiteralPath "$output\$name").Length -eq 0) { throw "Native media output is empty: $name" }
+            }
+            $evidence = Get-Content "$output\device-evidence.json" -Raw | ConvertFrom-Json
+            if ($evidence.sourceCommit -ne '${{ github.sha }}' -or $evidence.walkthrough.hasAudio -or $evidence.walkthrough.durationSeconds -lt 10) {
+              throw 'Publication source identity or silent walkthrough requirements did not match.'
+            }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
       - name: Record workflow outcomes even when prerequisites fail
         if: always()
         shell: pwsh
@@ -102,6 +131,7 @@ jobs:
             environmentOutcome = '${{ steps.environment.outcome }}'
             buildOutcome = '${{ steps.build.outcome }}'
             nativeAcceptanceOutcome = '${{ steps.acceptance.outcome }}'
+            publicationMediaOutcome = '${{ steps.media.outcome }}'
             expectedArchitecture = '${{ matrix.architecture }}'
             runnerProcessArchitecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
             runnerOsArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
@@ -122,3 +152,7 @@ jobs:
             ${{ env.NATIVE_UI_ROOT }}\evidence\*.json
             ${{ env.NATIVE_UI_ROOT }}\evidence\*.log
             ${{ env.NATIVE_UI_ROOT }}\evidence\*.png
+            ${{ env.NATIVE_UI_ROOT }}\media\*.json
+            ${{ env.NATIVE_UI_ROOT }}\media\*.log
+            ${{ env.NATIVE_UI_ROOT }}\media\*.png
+            ${{ env.NATIVE_UI_ROOT }}\media\*.mp4

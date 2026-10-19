@@ -56,6 +56,43 @@ public sealed class SettingsAndHistoryTests : IDisposable
     }
 
     [Fact]
+    public void NewProfileUsesPreferredCaptureFolderWithoutMovingExistingChoices()
+    {
+        var preferred = Path.Combine(_dir, "OneDrive-work", "Pictures", "Hotshot");
+        var store = new SettingsStore(Path.Combine(_dir, "settings.json"), preferred);
+        var settings = store.Load();
+        Assert.Equal(preferred, settings.General.SaveFolder);
+        Assert.False(Directory.Exists(preferred));
+        Assert.False(settings.General.DescribeScreenshots);
+        Assert.False(settings.Agents.Enabled);
+        var chosen = Path.Combine(_dir, "chosen-folder");
+        settings.General.SaveFolder = chosen;
+        store.Save(settings);
+        Assert.Equal(chosen, store.Load().General.SaveFolder);
+        File.WriteAllText(store.FilePath, "{ invalid");
+        Assert.Equal(preferred, store.Load().General.SaveFolder);
+        Assert.True(File.Exists(store.FilePath + ".corrupt"));
+    }
+
+    [Fact]
+    public void PreferredCaptureFolderStaysDeviceLocalWhenPreferencesRoam()
+    {
+        var root = Path.Combine(_dir, "cloud");
+        Directory.CreateDirectory(root);
+        var work = Path.Combine(_dir, "work", "Pictures", "Hotshot");
+        var personal = Path.Combine(_dir, "personal", "Pictures", "Hotshot");
+        var first = new RoamingSettingsStore(Path.Combine(_dir, "a", "settings.json"), () => root, defaultSaveFolder: work);
+        var second = new RoamingSettingsStore(Path.Combine(_dir, "b", "settings.json"), () => root, defaultSaveFolder: personal);
+        Assert.Equal(work, first.Load().General.SaveFolder);
+        Assert.Equal(personal, second.Load().General.SaveFolder);
+        Assert.DoesNotContain("saveFolder", File.ReadAllText(first.SharedFilePath!), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RelativePreferredCaptureFolderIsRejected() =>
+        Assert.Throws<ArgumentException>(() => new SettingsStore(Path.Combine(_dir, "settings.json"), @"relative\Hotshot"));
+
+    [Fact]
     public void SettingsMissingSectionsAreFilled()
     {
         var s = SettingsStore.Deserialize("{\"version\":1,\"general\":{\"saveFolder\":\"\"}}");

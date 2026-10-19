@@ -68,7 +68,7 @@ export function searchDialog() {
   </dialog><div class="toast" role="status" aria-live="polite" hidden></div>`;
 }
 
-export function home({ base, version, logo }) {
+export function home({ base, version, logo, media }) {
   const capabilities = [
     ['capture', 'Catch exactly what matters.', 'A region, a window, one monitor, or all of them. Clipboard first. Saved quietly. No preview pop-up.', 'screenshots', 'Screenshot workflows'],
     ['edit', 'Less explaining. More showing.', 'Arrows, text, numbered steps, opaque redaction, and a polished PNG/JPEG export. Keep an editable original.', 'editor', 'Editing & redaction'],
@@ -96,16 +96,15 @@ export function home({ base, version, logo }) {
     <section class="section product-section" id="in-action"><div class="container">
       <div class="product-heading"><h2>Not a mockup.<br>Your next workflow.</h2>
         <p>Actual WinUI windows, captured with Hotshot's native pipeline. The library contains generated demo content only — no personal screenshots, clipboard, microphone, or account data.</p></div>
-      <figure class="product-video"><video controls preload="none" playsinline poster="${base}media/editor.png" aria-label="Real Hotshot editor walkthrough using generated content, thirteen seconds, no audio">
-        <source data-video-src="${base}media/workflow.mp4" type="video/mp4"><track kind="captions" src="${base}media/workflow.vtt" srclang="en" label="English descriptions">
-        Your browser cannot play this video. <a href="${base}media/workflow.mp4">Download the walkthrough</a>.
-      </video><div class="video-actions"><button class="button" data-video-play hidden>Play the 13-second walkthrough ${icon('arrow')}</button>
-        <a href="${base}media/workflow.mp4">Download the walkthrough</a></div>
-      <figcaption>Real filename navigation and editable annotations. 13 seconds, no audio; optional captions describe the action.</figcaption></figure>
+      <figure class="product-video"><video controls controlslist="nodownload" preload="none" playsinline poster="${base}media/editor.png" aria-label="Real Hotshot editor walkthrough using generated content, thirteen seconds, no audio">
+        <source src="${base}media/workflow.mp4" type="video/mp4"><track kind="captions" src="${base}media/workflow.vtt" srclang="en" label="English descriptions">
+        Your browser cannot play this video.
+      </video>
+      <figcaption>Hotshot ${escapeHtml(media.applicationVersion.split('.').slice(0, 3).join('.'))}. Real filename navigation and editable annotations. 13 seconds, no audio.</figcaption></figure>
       <div class="product-gallery">
-        <figure><a href="${base}media/settings.png"><img src="${base}media/settings.png" alt="Real Hotshot Settings showing file-naming patterns, token dropdowns and examples" loading="lazy" decoding="async" width="2178" height="1489"></a><figcaption>Native Settings, not a browser wrapper.</figcaption></figure>
-        <figure><a href="${base}media/comparison.png"><img src="${base}media/comparison.png" alt="Real Hotshot comparison window showing the pixel difference between two generated checkout captures" loading="lazy" decoding="async" width="2178" height="1489"></a><figcaption>Full-resolution visual comparison.</figcaption></figure>
-      </div><p class="small">High-DPI capture of fixture-owned windows. <a href="${base}docs/compatibility/">What was tested, and what was not</a>.</p>
+        <figure><a href="${base}media/settings.png"><img src="${base}media/settings.png" alt="Real Hotshot Settings showing file-naming patterns, token dropdowns and examples" loading="lazy" decoding="async" width="${media.screenshots['settings.png'].width}" height="${media.screenshots['settings.png'].height}"></a><figcaption>Native Settings, not a browser wrapper.</figcaption></figure>
+        <figure><a href="${base}media/comparison.png"><img src="${base}media/comparison.png" alt="Real Hotshot comparison window showing the pixel difference between two generated checkout captures" loading="lazy" decoding="async" width="${media.screenshots['comparison.png'].width}" height="${media.screenshots['comparison.png'].height}"></a><figcaption>Full-resolution visual comparison.</figcaption></figure>
+      </div><p class="small">Native Windows capture of fixture-owned windows. <a href="${base}docs/compatibility/">What was tested, and what was not</a>.</p>
     </div></section>
     <section class="section capability-section" id="features"><div class="container capability-layout">
       <div class="section-heading"><h2>One good shot.<br>A lot less back-and-forth.</h2>
@@ -158,7 +157,7 @@ export function home({ base, version, logo }) {
       <details><summary>Will a window pop up after every screenshot?</summary><p>No. Captures are silent. They are copied and saved according to your settings. Open the workspace from the tray only when you want it.</p></details>
       <details><summary>Do I need Copilot or another account?</summary><p>Not for capture, recording, editing, comparison, or local OCR. Optional Copilot descriptions require a signed-in account and use model quota.</p></details>
       <details><summary>Can I skip the installer?</summary><p>Yes. Extract the complete managed-portable ZIP into a permanent writable folder. Keep the files together. Installers and managed-portable releases support automatic updates.</p></details>
-      <details><summary>Does OneDrive upload my screenshots?</summary><p>Hotshot settings sync shares portable preferences, not captures or history. A capture folder backed up by another service can still be uploaded independently.</p></details>
+      <details><summary>Does OneDrive upload my screenshots?</summary><p>New installs save captures inside work/school OneDrive, or personal OneDrive if available. OneDrive can upload those files. Existing folder choices stay unchanged; history and private originals remain local.</p></details>
       <details><summary>What if Print Screen opens Snipping Tool?</summary><p>Disable Windows' screen-snipping shortcut for Print Screen, or choose another shortcut in Hotshot. <a href="${base}docs/troubleshooting/">Get troubleshooting help</a>.</p></details>
       <details><summary>Does Hotshot upload captures or scroll automatically?</summary><p>No. Hotshot keeps capture workflows local and uses guided scrolling. Public capture sharing, upload services, and fully automated scrolling are not included. <a href="${base}docs/troubleshooting/#current-boundaries">Current limits</a>.</p></details>
     </div></div></section>
@@ -175,6 +174,15 @@ function downloadCard(architecture, title, description) {
     <p class="full-alternative">Want the Copilot runtime bundled? <a href="${repository}/releases/latest/download/${file}-Setup.exe">Full installer</a> · <a href="${repository}/releases/latest/download/${file}-Portable.zip">Full portable</a>. Existing Full installs stay on Full updates.</p></article>`;
 }
 
+function sampleWindow(updated = false, comparison = false) {
+  return `<div class="sample-window${updated ? ' sample-updated' : ''}"><div class="sample-title"><strong>Homepage review.png</strong><span>Example content</span></div>
+    <div class="sample-art"><p>Good ideas.<br>${updated ? 'Big impact.' : 'Clearly captured.'}</p>
+      <div class="sample-orbit" aria-hidden="true"><span></span></div>
+      <span class="sample-caption">${updated ? 'Same idea. Impossible to ignore.' : 'One detail worth pointing out.'}</span></div>
+    ${comparison ? `<span class="compare-badge ${updated ? 'compare-after' : 'compare-before'}" aria-hidden="true">${updated ? 'After' : 'Before'}</span>` : ''}
+  </div>`;
+}
+
 function workflowDemo(logo) {
   const labels = ['Capture', 'Annotate', 'Find', 'Compare'];
   return `<div class="workflow-demo">
@@ -183,20 +191,20 @@ function workflowDemo(logo) {
       `<button role="tab" id="demo-tab-${index}" aria-controls="demo-panel-${index}" aria-selected="${index === 0}" tabindex="${index === 0 ? 0 : -1}" data-demo-tab="${index}">${label}</button>`).join('')}</div>
     <div class="demo-stage">${labels.map((label, index) => `<div role="tabpanel" id="demo-panel-${index}" aria-labelledby="demo-tab-${index}"${index ? ' hidden' : ''}>
       <div class="demo-canvas">
-        <div class="sample-window"><div class="sample-title"><strong>Homepage review.png</strong><span>Example content</span></div>
-          <div class="sample-art"><p>Good ideas.<br>Clearly captured.</p><div class="sample-orbit" aria-hidden="true"><span></span></div><span class="sample-caption">One detail worth pointing out.</span></div>
-        </div>
+        ${index === 3 ? `<div class="comparison-images" role="img" aria-label="Before: a cream layout with round artwork. After: a bold dark layout with an orange headline and tilted artwork.">
+          ${sampleWindow(false, true)}<div class="demo-compare">${sampleWindow(true, true)}</div>
+          <div class="compare-divider" aria-hidden="true"><span>${icon('compare')}</span></div>
+        </div>` : sampleWindow()}
         ${index === 0 ? '<div class="capture-outline"><span class="capture-crosshair" aria-hidden="true"></span></div>' : ''}
         ${index === 1 ? '<div class="demo-annotation">Make the point here</div>' : ''}
         ${index === 2 ? `<div class="demo-search"><div class="demo-query">project:website tag:review</div><div class="demo-result">${icon('capture')}<div><strong>homepage-review.png</strong><small>Website · review · today</small></div></div><div class="demo-result">${icon('capture')}<div><strong>settings-update.png</strong><small>Website · review · yesterday</small></div></div></div>` : ''}
-        ${index === 3 ? '<div class="demo-compare"></div>' : ''}
       </div>
       ${index === 3 ? '<div class="compare-controls"><label for="compare-slider">Before</label><input id="compare-slider" aria-label="Comparison swipe position" type="range" min="0" max="100" value="50"><span>After</span></div>' : ''}
       <div class="demo-note">${icon(index === 3 ? 'compare' : 'check')}<span>${[
         'Copied. Saved. Nothing to dismiss.',
         'Open the workspace when you want to make a point.',
         'One filename. One capture. Right there in the editor.',
-        'Swipe through the change. Inspect it at full resolution.',
+        'Same idea. Two very different looks.',
       ][index]}</span></div>
     </div>`).join('')}</div></div>`;
 }

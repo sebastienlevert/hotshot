@@ -197,25 +197,14 @@
   });
 
   const tabs = [...document.querySelectorAll('[data-demo-tab]')];
-  document.querySelectorAll('[data-video-play]').forEach(button => {
-    const video = button.closest('.product-video')?.querySelector('video');
-    if (!video) return;
-    button.hidden = false;
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      try {
-        const source = video.querySelector('[data-video-src]');
-        if (!source.hasAttribute('src')) {
-          source.src = source.dataset.videoSrc;
-          video.load();
-        }
-        await video.play();
-        button.hidden = true;
-      } catch (error) {
-        console.error('Hotshot walkthrough playback failed:', error);
-        notify('This browser could not play the walkthrough. Use the download link to watch it in a video player.');
-      } finally { button.disabled = false; }
-    });
+  document.querySelectorAll('.product-video video').forEach(video => {
+    video.addEventListener('contextmenu', event => event.preventDefault());
+    const failed = () => {
+      console.error('Hotshot walkthrough playback failed:', video.error);
+      notify('The walkthrough could not play. Refresh the page or try another browser.');
+    };
+    video.addEventListener('error', failed);
+    video.querySelector('source')?.addEventListener('error', failed);
   });
   function selectDemo(index) {
     tabs.forEach((tab, position) => {
@@ -234,7 +223,7 @@
     });
   });
   document.querySelector('#compare-slider')?.addEventListener('input', event => {
-    document.querySelector('.demo-compare').style.setProperty('--compare-position', `${event.target.value}%`);
+    document.querySelector('.comparison-images').style.setProperty('--compare-position', `${event.target.value}%`);
   });
 
   const tocLinks = [...document.querySelectorAll('.docs-toc a[href^="#"]')];

@@ -11,6 +11,7 @@ using Hotshot.Editor;
 using Hotshot.Editor.Model;
 using Hotshot.Interop;
 using Hotshot.Shell;
+using Hotshot.Settings;
 using Hotshot.Views;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Dispatching;
@@ -95,8 +96,22 @@ internal static class ProductAcceptance
             });
             await report.CheckAsync("settings-native-responsive-header", () => ProductMedia.CheckSettingsHeaderAsync(settings));
             await report.CheckAsync("settings-native-plain-language-default-pages", () => CheckSettingsCopyAsync(settings, output));
-            await report.CheckAsync("settings-native-left-aligned-responsive-pages", () => CheckSettingsAlignmentAsync(settings, output));
+            await report.CheckAsync("settings-native-centered-responsive-pages", () => CheckSettingsAlignmentAsync(settings, output));
+            await report.CheckAsync("onedrive-capture-default-prefers-work-and-retains-pictures-location", () =>
+            {
+                var personal = new OneDriveFolder("Generated personal", Path.Combine(profile, "OneDrive-personal"));
+                var work = new OneDriveFolder("Generated work", Path.Combine(profile, "OneDrive-work"), WorkOrSchool: true);
+                var pictures = Path.Combine(profile, "Pictures");
+                if (OneDriveFolders.GetDefaultCaptureFolder([personal, work], pictures) != Path.Combine(work.Path, "Pictures", "Hotshot") ||
+                    OneDriveFolders.GetDefaultCaptureFolder([personal], pictures) != Path.Combine(personal.Path, "Pictures", "Hotshot") ||
+                    OneDriveFolders.GetDefaultCaptureFolder([], pictures) != Path.Combine(pictures, "Hotshot") ||
+                    OneDriveFolders.GetDefaultCaptureFolder([work], Path.Combine(work.Path, "Localized-pictures")) != Path.Combine(work.Path, "Localized-pictures", "Hotshot"))
+                    throw new InvalidDataException("Capture defaults must prefer work OneDrive, then personal, preserving a redirected Pictures folder.");
+                return Task.CompletedTask;
+            });
             await report.CheckAsync("native-full-window-snap-targets", CheckWindowSnapAsync);
+            await report.CheckAsync("capture-overlay-native-escape-cancellation", OverlayKeyboardChecks.RunAsync);
+            await report.CheckAsync("recording-countdown-zero-and-compact-timer", () => CheckRecordingTimerAsync(app, settings, paths.SettingsFile, output));
             await report.CheckAsync("copilot-native-sign-in-consent-cancellation-and-failure", () =>
                 CheckCopilotSignInAsync(settings, app, accountClients, browserVisits));
             var scale = ((FrameworkElement)settings.Content).XamlRoot.RasterizationScale;
@@ -105,7 +120,7 @@ internal static class ProductAcceptance
             var before = GeneratedImage(false);
             var after = GeneratedImage(true);
             await report.CheckAsync("derived-capture-source-and-ai-exclusion-policy", () => CheckDerivativePolicyAsync(app, before));
-            var first = await AddImageAsync(app, "fixture-before", before);
+            var first = await AddImageAsync(app, "fixture-before-" + new string('W', 80), before);
             var second = await AddImageAsync(app, "fixture-after", after);
             await File.WriteAllBytesAsync(Path.Combine(paths.OriginalsDirectory, first.Id + ".png"), await ImageCodec.EncodePngAsync(before));
             var document = new AnnotationDocument(before.Width, before.Height);
@@ -117,9 +132,40 @@ internal static class ProductAcceptance
             var canvas = Find<CanvasControl>(workspace.Content, "AnnotationCanvas");
             canvas.ForceSoftwareRenderer = Program.SoftwareRenderer;
             workspace.Show();
+            await report.CheckAsync("first-launch-native-workspace-without-an-automatic-tour", async () =>
+            {
+                if (AppController.GetStartupCommand(new CommandLine(false, AppCommand.None), true, false) != AppCommand.History ||
+                    AppController.GetStartupCommand(new CommandLine(true, AppCommand.None), true, true) != AppCommand.None ||
+                    AppController.GetStartupCommand(new CommandLine(false, AppCommand.None), false, false) != AppCommand.None ||
+                    AppController.GetStartupCommand(new CommandLine(false, AppCommand.None), true, true) != AppCommand.Settings ||
+                    AppController.GetStartupCommand(new CommandLine(true, AppCommand.Region), true, true) != AppCommand.Region)
+                    throw new InvalidDataException("Startup must respect explicit commands, quiet background launches and shortcut attention without a tour.");
+                await ReadyAsync(workspace);
+                if (!workspace.AppWindow.IsVisible || workspace.HasUnsavedEdits || workspace.IsBusy ||
+                    settings.IsQuickStartActive || settings.IsQuickStartBusy || settings.QuickStartState is not null)
+                    throw new InvalidDataException("First launch must show a ready workspace without starting guided setup.");
+                Console.WriteLine("PASS first launch: ready workspace, no automatic tour, quiet background startup and explicit commands preserved.");
+            });
             await report.CheckAsync("workspace-native-history-editor-draw-and-generated-export", async () =>
             {
                 await ReadyAsync(workspace);
+                var workspaceHandle = WinRT.Interop.WindowNative.GetWindowHandle(workspace);
+                var settingsHandle = WinRT.Interop.WindowNative.GetWindowHandle(settings);
+                if (NativeProductWindow.CaptureAffinity(workspaceHandle) != Win32.WDA_NONE ||
+                    NativeProductWindow.CaptureAffinity(settingsHandle) != Win32.WDA_NONE)
+                    throw new InvalidDataException("The editor and Settings must remain visible in screenshots.");
+                using var controls = new SnapFixture("Hotshot.EditorCapture.Controls", "Generated capture controls", 20, 20, 160, 80);
+                Win32.ShowWindow(controls.Handle, Win32.SW_SHOW);
+                var ownProcess = (uint)Environment.ProcessId;
+                var feedbackTargets = WindowEnumerator.GetVisibleWindows(ownProcess, settingsHandle, ownProcess, workspaceHandle);
+                if (!feedbackTargets.Any(window => window.Handle == workspaceHandle) ||
+                    !feedbackTargets.Any(window => window.Handle == settingsHandle) ||
+                    feedbackTargets.Any(window => window.Handle != workspaceHandle && window.Handle != settingsHandle))
+                    throw new InvalidDataException("Screenshot snapping must include the editor and Settings but exclude other Hotshot controls.");
+                var settingsOnly = WindowEnumerator.GetVisibleWindows(ownProcess, settingsHandle, ownProcess);
+                if (settingsOnly.Any(window => window.Handle == workspaceHandle))
+                    throw new InvalidDataException("Editor feedback capture must not expand the existing assistant window allowlist.");
+                Console.WriteLine("PASS editor screenshot feedback: native capture visibility, editor/Settings snap targets, other controls excluded and assistant allowlist unchanged.");
                 var editor = Descendants(workspace.Content).OfType<EditorView>().Single();
                 var editorFailures = new List<string>();
                 editor.Failed += editorFailures.Add;
@@ -147,6 +193,7 @@ internal static class ProductAcceptance
                         throw new InvalidDataException("Native history selection did not follow the requested generated item.");
                     await workspace.SelectAsync(first);
                     if (editorFailures.Count > 0) throw new InvalidOperationException(string.Join("; ", editorFailures));
+                    await CheckWorkspaceTitleAsync(workspace, first.FileName, output);
                     await RenderAsync(workspace, Path.Combine(output, "workspace-native.png"));
                 }
                 finally { editor.Failed -= editorFailures.Add; }
@@ -251,6 +298,146 @@ internal static class ProductAcceptance
         }
     }
 
+    private static async Task CheckWorkspaceTitleAsync(WorkspaceWindow workspace, string filename, string output)
+    {
+        var root = (Grid)workspace.Content;
+        var title = Find<TextBlock>(root, "WorkspaceTitle");
+        var commands = Find<CommandBar>(root, "WorkspaceCommands");
+        NativeProductWindow.AllowPublicationSize(WinRT.Interop.WindowNative.GetWindowHandle(workspace));
+        var initialSize = workspace.AppWindow.Size;
+        var initialTheme = root.RequestedTheme;
+        var initialBackground = root.Background;
+        try
+        {
+            foreach (var theme in new[] { ElementTheme.Light, ElementTheme.Dark })
+            {
+                root.RequestedTheme = theme;
+                root.Background = new SolidColorBrush(theme == ElementTheme.Dark
+                    ? Windows.UI.Color.FromArgb(255, 32, 32, 32) : Windows.UI.Color.FromArgb(255, 249, 249, 249));
+                foreach (var width in new[] { 520, 700, 1120 })
+                {
+                    var scale = root.XamlRoot.RasterizationScale;
+                    workspace.AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(width * scale), (int)(780 * scale)));
+                    await ReadyAsync(workspace);
+                    var end = title.ContentEnd.GetCharacterRect(Microsoft.UI.Xaml.Documents.LogicalDirection.Backward);
+                    var titleOrigin = title.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                    var commandsOrigin = commands.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                    Console.WriteLine($"Editor filename at {width} DIPs ({theme}): root={root.ActualWidth:F1}, " +
+                        $"title={title.ActualWidth:F1}x{title.ActualHeight:F1}, trimmed={title.IsTextTrimmed}, end={end}, " +
+                        $"toolbar={commandsOrigin.X:F1},{commandsOrigin.Y:F1}/{commands.ActualWidth:F1}.");
+                    if (Math.Abs(root.ActualWidth - width) > 24 || title.Text != filename ||
+                        title.TextWrapping != TextWrapping.Wrap || title.TextTrimming != TextTrimming.None ||
+                        title.MaxLines != 0 || title.IsTextTrimmed || end.Width < 0 || end.Height <= 0 ||
+                        end.Right > title.ActualWidth + 0.5 || end.Bottom > title.ActualHeight + 0.5 ||
+                        title.ActualHeight <= title.FontSize || commandsOrigin.Y < titleOrigin.Y + title.ActualHeight ||
+                        commandsOrigin.X + commands.ActualWidth > root.ActualWidth - root.Padding.Right + 0.5)
+                        throw new InvalidDataException($"The full editor filename or toolbar is clipped at {width} DIPs ({theme}).");
+                    Console.WriteLine($"PASS full editor filename at {width} DIPs ({theme}): " +
+                        $"{filename.Length} characters, title={title.ActualWidth:F1}x{title.ActualHeight:F1}, " +
+                        $"last glyph={end.X:F1},{end.Y:F1}/{end.Width:F1}x{end.Height:F1}, toolbarY={commandsOrigin.Y:F1}.");
+                    if (width is 520 or 1120)
+                        await RenderAsync(workspace, Path.Combine(output, $"editor-full-filename-{width}-{theme.ToString().ToLowerInvariant()}.png"),
+                            preserveAspectRatio: true);
+                }
+            }
+        }
+        finally
+        {
+            root.RequestedTheme = initialTheme;
+            root.Background = initialBackground;
+            workspace.AppWindow.Resize(initialSize);
+            await ReadyAsync(workspace);
+        }
+    }
+
+    private static async Task CheckRecordingTimerAsync(AppServices app, SettingsWindow settings, string settingsFile, string output)
+    {
+        var size = app.Settings.Recording.TimerSize;
+        var corner = app.Settings.Recording.TimerPlacement;
+        settings.SelectPage(SettingsPage.Recording);
+        await ReadyAsync(settings);
+        var sizeChoice = Descendants(settings.Content).OfType<ComboBox>()
+            .Single(control => AutomationProperties.GetName(control) == "Timer size");
+        var cornerChoice = Descendants(settings.Content).OfType<ComboBox>()
+            .Single(control => AutomationProperties.GetName(control) == "Timer corner");
+        var stopCount = 0;
+        var monitor = Monitors.GetAll().First(display => display.IsPrimary);
+        var window = new RecordingWindow(app, () => { stopCount++; return Task.CompletedTask; }, monitor);
+        try
+        {
+            var countdown = window.CountdownAsync(1, CancellationToken.None);
+            await Task.Delay(100);
+            if (window.CountdownValue != 1 || !window.AppWindow.IsVisible)
+                throw new InvalidDataException("The native countdown did not show its starting value.");
+            await UntilAsync(() => window.CountdownValue == 0, "The native countdown never reached zero.");
+            if (!window.AppWindow.IsVisible || Find<TextBlock>(window.Content, "RecordingStatus").Text != "0")
+                throw new InvalidDataException("Zero must be visible before the countdown leaves the screen.");
+            await countdown;
+            if (window.CountdownValue != 0 || window.AppWindow.IsVisible)
+                throw new InvalidDataException("The native countdown must reach zero and leave the screen.");
+            foreach (var timerSize in Enum.GetValues<RecordingTimerSize>())
+            foreach (var placement in Enum.GetValues<RecordingTimerPlacement>())
+            {
+                sizeChoice.SelectedItem = sizeChoice.Items.Cast<ComboBoxItem>().Single(item => Equals(item.Tag, timerSize));
+                cornerChoice.SelectedItem = cornerChoice.Items.Cast<ComboBoxItem>().Single(item => Equals(item.Tag, placement));
+                await settings.SavePendingAsync();
+                var persisted = new SettingsStore(settingsFile).Load().Recording;
+                if (app.Settings.Recording.TimerSize != timerSize || app.Settings.Recording.TimerPlacement != placement ||
+                    persisted.TimerSize != timerSize || persisted.TimerPlacement != placement ||
+                    !Equals(((ComboBoxItem)cornerChoice.SelectedItem).Content, RecordingTimerLayout.PlacementName(placement)))
+                    throw new InvalidDataException("Native timer choices did not preserve their friendly labels and saved values.");
+                window.ShowTimer(TimeSpan.FromSeconds(65), paused: false);
+                await ReadyAsync(window, minimumWidth: 64, minimumHeight: 16);
+                var expected = RecordingTimerLayout.Place(monitor.WorkArea.X, monitor.WorkArea.Y,
+                    monitor.WorkArea.Width, monitor.WorkArea.Height, monitor.Scale, timerSize, placement);
+                var actual = window.AppWindow;
+                var status = Find<TextBlock>(window.Content, "RecordingStatus");
+                var clock = Find<Button>(window.Content, "RecordingTimer");
+                if (NativeProductWindow.CaptureAffinity(WinRT.Interop.WindowNative.GetWindowHandle(window)) != Win32.WDA_EXCLUDEFROMCAPTURE)
+                    throw new InvalidDataException("The recording timer must remain excluded from capture.");
+                Console.WriteLine($"Recording timer {timerSize}/{placement}: expected={expected}, " +
+                    $"actual={actual.Position.X},{actual.Position.Y}/{actual.Size.Width}x{actual.Size.Height}, " +
+                    $"time={status.Text}, root children={((Grid)window.Content).Children.Count}, " +
+                    $"topmost={(actual.Presenter as Microsoft.UI.Windowing.OverlappedPresenter)?.IsAlwaysOnTop}, " +
+                    $"resizable={(actual.Presenter as Microsoft.UI.Windowing.OverlappedPresenter)?.IsResizable}.");
+                if (status.Text != "00:01:05" || actual.Size.Width != expected.Width || actual.Size.Height != expected.Height ||
+                    actual.Position.X != expected.X || actual.Position.Y != expected.Y ||
+                    ((Grid)window.Content).Children.Count != 1 || actual.Presenter is not Microsoft.UI.Windowing.OverlappedPresenter { IsAlwaysOnTop: true, IsResizable: false })
+                    throw new InvalidDataException($"Native {timerSize}/{placement} timer has incorrect text, bounds or visible controls.");
+                if (status.ActualWidth <= 0 || status.ActualHeight <= 0 ||
+                    status.DesiredSize.Width > clock.ActualWidth - clock.Padding.Left - clock.Padding.Right ||
+                    status.DesiredSize.Height > clock.ActualHeight - clock.Padding.Top - clock.Padding.Bottom)
+                    throw new InvalidDataException($"Native {timerSize} timer clips its elapsed time.");
+                Console.WriteLine($"Recording timer {timerSize}/{placement}: {actual.Position.X},{actual.Position.Y} " +
+                    $"{actual.Size.Width}x{actual.Size.Height}; time={status.Text}, text={status.ActualWidth:F1}x{status.ActualHeight:F1} DIPs.");
+                if (placement == RecordingTimerPlacement.TopRight)
+                    await RenderAsync(window, Path.Combine(output, $"recording-timer-{timerSize.ToString().ToLowerInvariant()}.png"), nativeSize: true);
+                window.ShowTimer(TimeSpan.FromSeconds(65), paused: true);
+                Console.WriteLine($"Paused timer {timerSize}/{placement}: time={status.Text}, opacity={status.Opacity:R}.");
+                if (status.Text != "00:01:05" || Math.Abs(status.Opacity - 0.6) > 0.000001)
+                    throw new InvalidDataException($"Paused timer changed its time or lost its paused feedback: time={status.Text}, opacity={status.Opacity:R}.");
+            }
+            var timer = Find<Button>(window.Content, "RecordingTimer");
+            if (timer.Flyout is not Flyout { Content: StackPanel actions } ||
+                actions.Children.OfType<StackPanel>().Single().Children.OfType<Button>().Count() != 2)
+                throw new InvalidDataException("Pause and stop must remain available from the compact timer.");
+            var opened = false;
+            timer.Flyout.Opened += (_, _) => opened = true;
+            Invoke(timer);
+            await UntilAsync(() => opened && actions.IsLoaded, "Clicking the timer did not open the native recording controls.");
+            window.HideForSaving();
+            if (window.AppWindow.IsVisible || stopCount != 0)
+                throw new InvalidDataException("Hiding the compact timer should not stop or mutate a recording.");
+        }
+        finally
+        {
+            sizeChoice.SelectedItem = sizeChoice.Items.Cast<ComboBoxItem>().Single(item => Equals(item.Tag, size));
+            cornerChoice.SelectedItem = cornerChoice.Items.Cast<ComboBoxItem>().Single(item => Equals(item.Tag, corner));
+            await settings.SavePendingAsync();
+            window.Close();
+        }
+    }
+
     private static async Task CheckWindowSnapAsync()
     {
         using var back = new SnapFixture("Hotshot.Snap.Back", "Generated background", 80, 120, 720, 480);
@@ -342,7 +529,7 @@ internal static class ProductAcceptance
                 {
                     navigation.IsPaneOpen = paneOpen;
                     await Task.Delay(250);
-                    foreach (var page in new[] { SettingsPage.Gif, SettingsPage.Recording, SettingsPage.Naming })
+                    foreach (var page in new[] { SettingsPage.General, SettingsPage.Capture, SettingsPage.Gif, SettingsPage.Recording, SettingsPage.Naming })
                     {
                         settings.SelectPage(page);
                         await ReadyAsync(settings);
@@ -352,11 +539,13 @@ internal static class ProductAcceptance
                         var panel = scroll.Content as StackPanel ?? throw new InvalidDataException("Settings have no page panel.");
                         var container = VisualTreeHelper.GetParent(scroll) as Grid
                             ?? throw new InvalidDataException("Settings have no padded content grid.");
+                        var host = VisualTreeHelper.GetParent(container) as FrameworkElement
+                            ?? throw new InvalidDataException("Settings have no content-area host.");
                         var scrollOrigin = scroll.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
                         var panelOrigin = panel.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                        var containerOrigin = container.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
-                        var expectedLeft = containerOrigin.X + container.Padding.Left;
-                        var expectedWidth = Math.Min(920, container.ActualWidth - container.Padding.Left - container.Padding.Right);
+                        var hostOrigin = host.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point());
+                        var expectedWidth = Math.Min(920, host.ActualWidth - container.Padding.Left - container.Padding.Right);
+                        var expectedLeft = hostOrigin.X + (host.ActualWidth - expectedWidth) / 2;
                         Console.WriteLine($"Settings {page} at {width} DIPs ({theme}, paneOpen={paneOpen}): root={root.ActualWidth:F1}, expected={expectedLeft:F1}/{expectedWidth:F1}, scroll={scrollOrigin.X:F1}/{scroll.ActualWidth:F1}, panel={panelOrigin.X:F1}/{panel.ActualWidth:F1}.");
                         if (Math.Abs(scrollOrigin.X - expectedLeft) > 1 || Math.Abs(panelOrigin.X - expectedLeft) > 1 ||
                             Math.Abs(scroll.ActualWidth - expectedWidth) > 1)
@@ -372,8 +561,8 @@ internal static class ProductAcceptance
                                 Math.Abs(card.ActualWidth - (panel.ActualWidth - panel.Padding.Left - panel.Padding.Right)) > 1)
                                 throw new InvalidDataException("A settings card does not align with or fill the page panel.");
                         }
-                        if (page == SettingsPage.Gif && width == 1920 && paneOpen)
-                            await RenderAsync(settings, Path.Combine(output, $"gif-settings-{theme.ToString().ToLowerInvariant()}.png"),
+                        if (page is SettingsPage.General or SettingsPage.Gif && width == 1920 && paneOpen)
+                            await RenderAsync(settings, Path.Combine(output, $"centered-{page.ToString().ToLowerInvariant()}-{theme.ToString().ToLowerInvariant()}.png"),
                                 preserveAspectRatio: true);
                     }
                 }
@@ -581,11 +770,12 @@ internal static class ProductAcceptance
         return new CapturedImage(width, height, pixels);
     }
 
-    private static async Task ReadyAsync(Window window)
+    private static async Task ReadyAsync(Window window, double minimumWidth = 100, double minimumHeight = 100)
     {
         window.SystemBackdrop = null;
         window.Activate();
-        await UntilAsync(() => window.Content is FrameworkElement { IsLoaded: true, ActualWidth: > 100, ActualHeight: > 100, XamlRoot: not null },
+        await UntilAsync(() => window.Content is FrameworkElement { IsLoaded: true, XamlRoot: not null } root &&
+            root.ActualWidth > minimumWidth && root.ActualHeight > minimumHeight,
             "The native WinUI window did not load/measure. An interactive desktop and native renderer are required.");
         if (window.Content is Panel { Background: null } panel)
             panel.Background = new SolidColorBrush(panel.ActualTheme == ElementTheme.Dark
@@ -593,13 +783,15 @@ internal static class ProductAcceptance
         await Task.Delay(150);
     }
 
-    private static async Task RenderAsync(Window window, string path, bool preserveAspectRatio = false)
+    private static async Task RenderAsync(Window window, string path, bool preserveAspectRatio = false, bool nativeSize = false)
     {
         var root = (FrameworkElement)window.Content;
-        var height = preserveAspectRatio ? (int)Math.Round(960 * root.ActualHeight / root.ActualWidth) : 720;
+        var width = nativeSize ? (int)Math.Ceiling(root.ActualWidth * root.XamlRoot.RasterizationScale) : 960;
+        var height = nativeSize ? (int)Math.Ceiling(root.ActualHeight * root.XamlRoot.RasterizationScale)
+            : preserveAspectRatio ? (int)Math.Round(960 * root.ActualHeight / root.ActualWidth) : 720;
         var bitmap = new RenderTargetBitmap();
-        await bitmap.RenderAsync(root, 960, height);
-        if (bitmap.PixelWidth < 100 || bitmap.PixelHeight < 100)
+        await bitmap.RenderAsync(root, width, height);
+        if (bitmap.PixelWidth < (nativeSize ? 1 : 100) || bitmap.PixelHeight < (nativeSize ? 1 : 100))
             throw new InvalidDataException("Native XAML rendering returned an empty surface.");
         var pixels = (await bitmap.GetPixelsAsync()).ToArray();
         if (pixels.Length != checked(bitmap.PixelWidth * bitmap.PixelHeight * 4) ||

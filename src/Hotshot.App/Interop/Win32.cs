@@ -94,6 +94,7 @@ internal static unsafe partial class Win32
     public const uint WM_COPYDATA = 0x004A;
     public const uint WM_CONTEXTMENU = 0x007B;
     public const uint WM_NCHITTEST = 0x0084;
+    public const uint WM_GETDLGCODE = 0x0087;
     public const uint WM_KEYDOWN = 0x0100;
     public const uint WM_KEYUP = 0x0101;
     public const uint WM_SYSKEYDOWN = 0x0104;
@@ -132,6 +133,7 @@ internal static unsafe partial class Win32
 
     public const int IDC_ARROW = 32512;
     public const int IDC_CROSS = 32515;
+    public const int IDC_HAND = 32649;
 
     public const int GWLP_USERDATA = -21;
 
@@ -149,6 +151,8 @@ internal static unsafe partial class Win32
     public const int VK_DOWN = 0x28;
     public const int VK_LWIN = 0x5B;
     public const int VK_RWIN = 0x5C;
+
+    public const int DLGC_WANTALLKEYS = 0x0004;
 
     public const uint MF_STRING = 0x0000;
     public const uint MF_GRAYED = 0x0001;

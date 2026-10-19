@@ -21,6 +21,82 @@ async function expectTouchTargets(locator) {
   }
 }
 
+for (const width of [320, 390, 1280]) {
+  for (const theme of ['light', 'dark']) {
+    test(`workflow search overlay covers sample text at ${width}px in ${theme} theme`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`?scoutTheme=${theme}`);
+      await page.evaluate(() => document.fonts.ready);
+      await page.getByRole('tab', { name: 'Find', exact: true }).click();
+      const panel = page.locator('#demo-panel-2');
+      await panel.scrollIntoViewIfNeeded();
+      await expect(panel.locator('.demo-result strong')).toHaveText(['homepage-review.png', 'settings-update.png']);
+      const coverage = await panel.evaluate(element => {
+        const overlay = element.querySelector('.demo-search');
+        const bounds = overlay.getBoundingClientRect();
+        const points = [...element.querySelectorAll('.sample-art > p, .sample-caption')].flatMap(sample => {
+          const sampleBounds = sample.getBoundingClientRect();
+          const left = Math.max(sampleBounds.left, bounds.left);
+          const top = Math.max(sampleBounds.top, bounds.top);
+          const right = Math.min(sampleBounds.right, bounds.right);
+          const bottom = Math.min(sampleBounds.bottom, bounds.bottom);
+          if (right - left < 4 || bottom - top < 4) return [];
+          return [{ x: (left + right) / 2, y: (top + bottom) / 2 }];
+        });
+        return {
+          tested: points.length,
+          uncovered: points.filter(point => !overlay.contains(document.elementFromPoint(point.x, point.y))),
+        };
+      });
+      await page.locator('.workflow-demo').screenshot({ path: testInfo.outputPath(`workflow-find-${width}-${theme}.png`) });
+      expect(coverage.tested).toBeGreaterThan(0);
+      expect(coverage.uncovered, 'Sample text must stay behind the opaque Find preview').toEqual([]);
+      await expectPageFits(page);
+    });
+
+    test(`workflow comparison reveals distinct designs at ${width}px in ${theme} theme`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`?scoutTheme=${theme}`);
+      await page.evaluate(() => document.fonts.ready);
+      await page.getByRole('tab', { name: 'Compare', exact: true }).click();
+      const comparison = page.locator('.comparison-images');
+      const before = comparison.locator('> .sample-window');
+      const after = comparison.locator('.sample-updated');
+      await expect(before.locator('.sample-art > p')).toHaveText('Good ideas.Clearly captured.');
+      await expect(after.locator('.sample-art > p')).toHaveText('Good ideas.Big impact.');
+      expect(await before.locator('.sample-art').evaluate(element => getComputedStyle(element).backgroundColor))
+        .not.toBe(await after.locator('.sample-art').evaluate(element => getComputedStyle(element).backgroundColor));
+      expect(await comparison.locator('.demo-compare').evaluate(element => getComputedStyle(element).opacity)).toBe('1');
+      const slider = page.getByRole('slider', { name: 'Comparison swipe position' });
+      for (const value of [0, 50, 100]) {
+        await slider.evaluate((element, position) => {
+          element.value = String(position);
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+        }, value);
+        await comparison.scrollIntoViewIfNeeded();
+        const geometry = await comparison.evaluate(element => {
+          const bounds = element.getBoundingClientRect();
+          const divider = element.querySelector('.compare-divider').getBoundingClientRect();
+          const beforeBounds = element.querySelector(':scope > .sample-window').getBoundingClientRect();
+          const afterBounds = element.querySelector('.sample-updated').getBoundingClientRect();
+          return { position: (divider.left + divider.width / 2 - bounds.left) / bounds.width * 100,
+            beforeWidth: beforeBounds.width, afterWidth: afterBounds.width,
+            beforeHeight: beforeBounds.height, afterHeight: afterBounds.height,
+            clip: getComputedStyle(element.querySelector('.demo-compare')).clipPath };
+        });
+        expect(geometry.position).toBeCloseTo(value, 1);
+        expect(geometry.beforeWidth).toBeCloseTo(geometry.afterWidth, 1);
+        expect(geometry.beforeHeight).toBeCloseTo(geometry.afterHeight, 1);
+        expect(geometry.clip).toContain(`${value}%`);
+        await page.locator('.workflow-demo').screenshot({ path: testInfo.outputPath(`workflow-compare-${width}-${theme}-${value}.png`) });
+      }
+      const accessibility = await new AxeBuilder({ page }).include('#demo-panel-3').withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
+      expect(accessibility.violations).toEqual([]);
+      await expectPageFits(page);
+    });
+  }
+}
+
 for (const viewport of viewports) {
     test.describe(`phone ${viewport.width}x${viewport.height}`, () => {
       test.use({ viewport, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
@@ -62,17 +138,22 @@ for (const viewport of viewports) {
         });
       }
 
-      test('walkthrough waits for playback instead of downloading on mobile page load', async ({ page }) => {
-        const videoRequests = [];
-        page.on('request', request => {
-          if (request.url().endsWith('/workflow.mp4')) videoRequests.push(request.url());
-        });
+      test('walkthrough plays directly with native mobile controls and no download actions', async ({ page }) => {
         await page.goto('');
         await page.evaluate(() => document.fonts.ready);
         await page.locator('#in-action video').scrollIntoViewIfNeeded();
         await page.waitForTimeout(150);
         await expect(page.locator('video')).toHaveAttribute('preload', 'none');
-        expect(videoRequests).toEqual([]);
+        await expect(page.locator('video')).toHaveAttribute('controlslist', 'nodownload');
+        await expect(page.locator('video source')).toHaveAttribute('src', /workflow\.mp4$/);
+        await expect(page.locator('[data-video-play], a[href$="workflow.mp4"]')).toHaveCount(0);
+        const video = page.locator('video');
+        await expect(video).not.toHaveAttribute('autoplay', /.*/);
+        expect(await video.evaluate(element => element.paused && element.currentTime === 0)).toBe(true);
+        await video.tap();
+        await video.evaluate(element => element.play());
+        await expect.poll(() => video.evaluate(element => element.currentTime)).toBeGreaterThan(0);
+        await video.evaluate(element => element.pause());
       });
     });
 }

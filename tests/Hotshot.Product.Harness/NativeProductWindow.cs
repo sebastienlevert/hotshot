@@ -24,6 +24,23 @@ internal static unsafe partial class NativeProductWindow
     [LibraryImport("user32.dll", EntryPoint = "GetUserObjectInformationW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetDesktopInputInformation(nint handle, int index, out int receivesInput, uint length, out uint needed);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetWindowDisplayAffinity(nint window, out uint affinity);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetFocus();
+    [LibraryImport("user32.dll")]
+    public static partial nint GetCapture();
+    [LibraryImport("user32.dll")]
+    public static partial uint GetWindowThreadProcessId(nint window, out uint processId);
+
+    public static uint CaptureAffinity(nint window)
+    {
+        if (!GetWindowDisplayAffinity(window, out var affinity))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError(), "Cannot query this fixture window's capture visibility.");
+        return affinity;
+    }
 
     public static bool IsInteractiveWindowStation()
     {

@@ -35,7 +35,7 @@ Open the [latest release](https://github.com/sebastienlevert/hotshot/releases/la
 
 Not sure which one you need? Check **Windows Settings > System > About > System type**.
 
-Run the installer and launch Hotshot. Installation is for your Windows user and does not require administrator privileges. The first launch opens Settings; closing that window keeps Hotshot running in the tray.
+Run the installer and launch Hotshot. Installation is for your Windows user and does not require administrator privileges. The first launch opens the editor and history, ready to capture. Closing it keeps Hotshot running in the tray.
 
 ### Core or Full?
 
@@ -56,12 +56,16 @@ For the portable version, extract the **entire ZIP** to a permanent, writable fo
 
 1. Start Hotshot. Look for its amber-and-coral lightning icon near the Windows clock; it may be under **Show hidden icons**.
 2. Press **Print Screen**. Drag to select a region, or click a window.
-3. Paste into another app with **Ctrl+V**. By default, the screenshot is also saved under **Hotshot in your Pictures folder**, with date-based subfolders.
+3. Paste into another app with **Ctrl+V**. Screenshots also save to **Pictures\Hotshot in OneDrive** (work/school first, then personal), or local Pictures without OneDrive.
 4. Click the tray icon when you want to review or edit it. Choose its filename to load it into the editor.
 
 **No window appears after a screenshot. That is intentional.** Capturing, copying, and saving happen without opening the editor or changing its selection.
 
-The first-run guide walks through folder readiness, registered shortcuts, output choices, OneDrive status, privacy, and an optional generated-image agent test. Choices apply on **Finish**; Cancel or a settings handoff discards staged choices. Skipping a check does not invent a successful result or enable a permission. Reopen the guide from **About Hotshot > Quick-start guide**.
+No first-run tour or setup is required. Clipboard copying, file saving and window
+snapping are on; Copilot descriptions and assistant access stay off. Available
+OneDrive is used for settings automatically. New installs also prefer OneDrive
+for captures; existing folder choices are kept.
+An optional setup check is available under **About Hotshot > Set up Hotshot**.
 
 If Print Screen opens Snipping Tool instead, see [Troubleshooting](#troubleshooting).
 
@@ -103,7 +107,9 @@ The hamburger navigation button and search box both sit inside the Settings titl
 For most captures, use the shortcuts above. Under **Screenshots**, you can add a delay of up to 30 seconds to make time for opening a menu or preparing a window.
 
 **Window captures:** hover over a window to highlight it fully, then click.
-Drag instead to select an area. **Snap to windows** is on by default.
+The bold outline and **Window** label show the target; the magnifier is hidden.
+Start dragging to switch to an area selection and its magnifier.
+**Snap to windows** is on by default.
 **Capture covered windows** captures the whole selected window even if another
 window overlaps it, without moving or focusing it. Windows may show a capture
 border. Hidden, minimized, protected, or changed targets can fail explicitly;
@@ -111,11 +117,16 @@ Hotshot never silently substitutes a desktop screenshot.
 
 **Scrolling captures:** choose **Scrolling capture** from the tray or workspace. Select the content, scroll it yourself, and add overlapping frames. Exclude fixed headers and keep the capture area in the same position and size. Hotshot rejects ambiguous overlaps rather than stitching a misleading result. This is guided capture, not automatic scrolling.
 
-You can capture Hotshot's own Settings window for feedback. The editor and recording controls are excluded from capture.
+To capture Hotshot's editor or Settings for feedback, leave the window open and
+use your screenshot shortcut. Window snapping works here too. Recording controls
+stay out of captures.
 
 ## Edit, organize, and compare
 
 Click the tray icon and select a filename. The workspace opens with an empty editor until you choose a capture; arrow keys move between filenames and load the selected item directly.
+
+The full filename appears above the editor controls. Long names wrap instead of
+being cut off.
 
 ### Edit and export
 
@@ -173,10 +184,13 @@ Open **Library** to clean up storage, back up or restore files, locate missing f
 ## Record video and make GIFs
 
 1. Press **Ctrl+Shift+Print Screen** or use the tray recording command to choose a window or a region on one monitor.
-2. Use the recording controls to pause/resume, mute microphone/system audio, and watch audio levels.
-3. Stop with the shortcut or recording controls. Hotshot saves an H.264 MP4. Closing the recording controls also stops and saves.
+2. The countdown reaches zero and disappears. A tiny timer stays in a corner; click it to pause/resume, mute audio, or stop.
+3. Stop with the shortcut or choose **Stop and save** from the timer. Hotshot saves an MP4.
 
 Turn both audio options off under **Screen recording** for a silent video. Closing the recorded target ends the recording, even while paused. Recording regions cannot span monitors.
+
+Under **Screen recording > Recording timer**, choose **Mini** or **Small** and
+any corner. The default is **Mini, top right** on the screen being recorded.
 
 Select a video in the workspace to play it, extract a frame, or trim it to a **separate MP4** using the start/end sliders. If recording was interrupted, the recovery action can recover a finalized, playable MP4; unreadable or unfinalized data is preserved and reported rather than claimed recovered.
 
@@ -184,7 +198,10 @@ For a GIF, select an MP4 and choose **Convert to GIF**, enable automatic GIF cre
 
 ## Choose folders and filenames
 
-The default location is **Hotshot in your Pictures folder**. Change it under **General > Captures folder**. Canceling the picker keeps the current location.
+New installs use **Pictures\Hotshot in work/school OneDrive**, or personal OneDrive
+if no work/school account is available. Without OneDrive, captures stay in local
+**Pictures\Hotshot**. Existing folder choices and files are never moved.
+Change it under **General > Captures folder**; canceling the picker keeps the current location.
 
 Under **File naming**, set separate patterns for screenshots and recordings/GIFs. The live preview shows the result; the token dropdown includes examples and inserts a token at the cursor.
 
@@ -228,6 +245,10 @@ On your other Windows machines, sign into the same OneDrive account, let that fo
 | Local-OCR preference, AI exclusion list, export presets, saved searches | Cloud-AI enable/review choices, all coding-agent permissions, project baseline IDs |
 
 **This syncs settings, not captures or history.** Hotshot does not share a folder with other people or change OneDrive permissions. The OneDrive desktop client handles uploads/downloads; seeing a local file does not prove cloud transfer is complete.
+
+The default capture folder is inside OneDrive when available, so OneDrive can
+upload those saved images and recordings. History, private originals and sign-ins
+remain on this device; their folders are not part of the capture-folder default.
 
 Under **General > Settings across devices**, choose another OneDrive root, reload shared preferences, or select **Use local preferences only**. The page shows the exact file paths and status. Local-only mode does not delete the shared file.
 

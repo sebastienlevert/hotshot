@@ -13,6 +13,29 @@ public sealed class OneDriveSettingsTests : IDisposable
     private RoamingSettingsStore Store(string machine) => new(Local(machine), () => _cloud);
 
     [Fact]
+    public void FreshProfileIsReadyToCaptureAndUsesOneDriveWithoutSetupOrPermissionGrants()
+    {
+        var store = Store("fresh");
+        var settings = store.Load();
+        Assert.Equal(SettingsSyncMode.Automatic, store.Mode);
+        Assert.NotNull(store.SharedFilePath);
+        Assert.True(File.Exists(store.SharedFilePath));
+        Assert.True(settings.General.CopyToClipboard);
+        Assert.True(settings.General.SaveToFile);
+        Assert.False(settings.General.ShowPreview);
+        Assert.False(settings.General.OpenEditorAfterCapture);
+        Assert.True(settings.Capture.SnapToWindows);
+        Assert.Equal(AppTheme.System, settings.General.Theme);
+        Assert.Equal(RecordingTimerSize.Mini, settings.Recording.TimerSize);
+        Assert.Equal(RecordingTimerPlacement.TopRight, settings.Recording.TimerPlacement);
+        Assert.False(settings.General.DescribeScreenshots);
+        Assert.False(settings.General.RecognizeScreenshotText);
+        Assert.False(settings.Agents.Enabled);
+        Assert.False(settings.Agents.AllowHistoryAccess);
+        Assert.Equal(AppPaths.DefaultSaveFolder, settings.General.SaveFolder);
+    }
+
+    [Fact]
     public void MigratesPortablePreferencesAndNeverUploadsDeviceDataOrPermissions()
     {
         var settings = new AppSettings();

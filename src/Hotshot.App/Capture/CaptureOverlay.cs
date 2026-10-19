@@ -11,7 +11,7 @@ internal enum OverlayMode
 }
 
 internal sealed record OverlayOptions(OverlayMode Mode, bool SnapToWindows, bool ShowMagnifier, bool ShowCrosshair,
-    nint CapturableWindow = 0);
+    nint CapturableWindow = 0, nint CapturableEditor = 0);
 
 internal abstract record OverlaySelection(PixelRect Rect);
 
@@ -33,7 +33,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
     private static readonly uint Accent = Win32.Rgb(255, 84, 72);
     private static readonly uint PillColor = Win32.Rgb(24, 24, 27);
 
-    private readonly ScreenSnapshot _snapshot;
+    private readonly GdiBitmap _bitmap;
     private readonly OverlayOptions _options;
     private readonly GdiBitmap _dim;
     private readonly GdiBitmap _back;
@@ -57,38 +57,43 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
     private Frame _frame;
     private CancellationTokenRegistration _cancellation;
 
-    private CaptureOverlay(ScreenSnapshot snapshot, OverlayOptions options)
+    private CaptureOverlay(GdiBitmap bitmap, PixelRect bounds, OverlayOptions options)
     {
-        _snapshot = snapshot;
+        _bitmap = bitmap;
+        Origin = bounds;
         _options = options;
         _monitors = Monitors.GetAll();
         _windows = options.SnapToWindows
-            ? WindowEnumerator.GetVisibleWindows((uint)Environment.ProcessId, options.CapturableWindow) : [];
-        _dim = snapshot.Bitmap.CreateDimmedCopy(118);
-        _back = new GdiBitmap(snapshot.Bounds.Width, snapshot.Bounds.Height);
+            ? WindowEnumerator.GetVisibleWindows((uint)Environment.ProcessId, options.CapturableWindow,
+                includeAdditionalWindow: options.CapturableEditor) : [];
+        _dim = bitmap.CreateDimmedCopy(118);
+        _back = new GdiBitmap(bounds.Width, bounds.Height);
         _accentBrush = Win32.CreateSolidBrush(Accent);
         _pillBrush = Win32.CreateSolidBrush(PillColor);
         _whiteBrush = Win32.CreateSolidBrush(Win32.Rgb(255, 255, 255));
         _blackBrush = Win32.CreateSolidBrush(Win32.Rgb(0, 0, 0));
 
         Native.GetCursorPos(out var pt);
-        UpdateHover(pt.X - snapshot.Bounds.X, pt.Y - snapshot.Bounds.Y);
+        UpdateHover(pt.X - bounds.X, pt.Y - bounds.Y);
         _frame = BuildFrame();
 
-        var b = snapshot.Bounds;
+        var b = bounds;
         CreateHandle(ClassName, Win32.WS_EX_TOPMOST | Win32.WS_EX_TOOLWINDOW, Win32.WS_POPUP, b.X, b.Y, b.Width, b.Height,
             "Hotshot capture", Win32.IDC_CROSS);
     }
 
-    public static Task<OverlaySelection?> SelectAsync(ScreenSnapshot snapshot, OverlayOptions options, CancellationToken token = default)
+    public static Task<OverlaySelection?> SelectAsync(ScreenSnapshot snapshot, OverlayOptions options, CancellationToken token = default) =>
+        SelectAsync(snapshot.Bitmap, snapshot.Bounds, options, token);
+
+    internal static Task<OverlaySelection?> SelectAsync(GdiBitmap bitmap, PixelRect bounds, OverlayOptions options, CancellationToken token = default)
     {
-        var overlay = new CaptureOverlay(snapshot, options);
+        var overlay = new CaptureOverlay(bitmap, bounds, options);
         overlay.Show();
         overlay._cancellation = token.Register(() => Win32.PostMessage(overlay.Handle, Win32.WM_CLOSE, 0, 0));
         return overlay._result.Task;
     }
 
-    private PixelRect Origin => _snapshot.Bounds;
+    private PixelRect Origin { get; }
 
     private void Show()
     {
@@ -143,12 +148,16 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
                 return 1;
 
             case Win32.WM_SETCURSOR:
-                Win32.SetCursor(Win32.LoadCursor(0, Win32.IDC_CROSS));
+                SetSelectionCursor();
                 return 1;
 
             case Win32.WM_DPICHANGED:
                 // The overlay spans monitors in physical pixels; never let Windows rescale it.
                 return 0;
+
+            case Win32.WM_GETDLGCODE:
+                // Keep Escape, Enter and arrows out of dialog-navigation preprocessing.
+                return Win32.DLGC_WANTALLKEYS;
 
             case Win32.WM_MOUSEMOVE:
                 OnMouseMove(Win32.LoWord(lParam), Win32.HiWord(lParam));
@@ -324,7 +333,11 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         }
 
         _frame = next;
+        SetSelectionCursor();
     }
+
+    private void SetSelectionCursor() =>
+        Win32.SetCursor(Win32.LoadCursor(0, !_dragging && _hoverWindow is not null ? Win32.IDC_HAND : Win32.IDC_CROSS));
 
     private void UpdateHover(int x, int y)
     {
@@ -379,7 +392,6 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         var monitor = MonitorAt(_cx, _cy);
         var scale = Math.Max(1.0, monitor.Scale);
         var mon = monitor.Bounds.Offset(-Origin.X, -Origin.Y);
-        var border = Math.Max(2, (int)Math.Round(2 * scale));
 
         PixelRect selection;
         if (_dragging)
@@ -395,13 +407,9 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
             selection = mon;
         }
 
-        // Size label
-        var labelText = $"{selection.Width} × {selection.Height}";
-        if (!_dragging && _hoverWindow is { Title.Length: > 0 } hovered)
-        {
-            var title = hovered.Title.Length > 48 ? hovered.Title[..47] + "…" : hovered.Title;
-            labelText = $"{title}  ·  {labelText}";
-        }
+        var feedback = CaptureTargetFeedback.Create(_dragging, _hoverWindow, selection, _options.ShowMagnifier, _options.ShowCrosshair);
+        var border = Math.Max(2, (int)Math.Round((feedback.WindowTarget ? 4 : 2) * scale));
+        var labelText = feedback.Label;
 
         var labelSize = MeasureText(labelText, scale, out _);
         var pad = (int)(8 * scale);
@@ -419,7 +427,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         // Magnifier
         PixelRect magnifier = default, magInfo = default;
         var magText = string.Empty;
-        if (_options.ShowMagnifier)
+        if (feedback.Magnifier)
         {
             var zoom = Math.Max(6, (int)Math.Round(8 * scale));
             var size = MagnifierCells * zoom;
@@ -450,12 +458,12 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         }
 
         return new Frame(selection, border, label, labelText, magnifier, magInfo, magText, hint, hintText,
-            _cx, _cy, _options.ShowCrosshair, Origin.Width, Origin.Height, scale);
+            _cx, _cy, feedback.Crosshair, Origin.Width, Origin.Height, scale);
     }
 
     private (byte R, byte G, byte B) PixelAt(int x, int y)
     {
-        var bmp = _snapshot.Bitmap;
+        var bmp = _bitmap;
         if (x < 0 || y < 0 || x >= bmp.Width || y >= bmp.Height)
         {
             return default;
@@ -511,7 +519,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         var s = f.Selection;
         if (!s.IsEmpty)
         {
-            Native.BitBlt(dc, s.X, s.Y, s.Width, s.Height, _snapshot.Bitmap.Dc, s.X, s.Y, Native.SRCCOPY);
+            Native.BitBlt(dc, s.X, s.Y, s.Width, s.Height, _bitmap.Dc, s.X, s.Y, Native.SRCCOPY);
         }
 
         if (f.Crosshair)
@@ -546,7 +554,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         var m = f.Magnifier;
         var zoom = m.Width / MagnifierCells;
         RequireGdiResult(Native.SetStretchBltMode(dc, Native.COLORONCOLOR), "configuring the magnifier");
-        Native.StretchBlt(dc, m.X, m.Y, m.Width, m.Height, _snapshot.Bitmap.Dc,
+        Native.StretchBlt(dc, m.X, m.Y, m.Width, m.Height, _bitmap.Dc,
             f.CursorX - MagnifierCells / 2, f.CursorY - MagnifierCells / 2, MagnifierCells, MagnifierCells, Native.SRCCOPY);
 
         var center = new PixelRect(m.X + MagnifierCells / 2 * zoom, m.Y + MagnifierCells / 2 * zoom, zoom, zoom);

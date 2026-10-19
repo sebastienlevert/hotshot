@@ -8,7 +8,8 @@ using Hotshot.Recording;
 namespace Hotshot.CaptureFlow;
 
 /// <summary>Runs the screenshot flows (region / monitor / all monitors / repeat last region).</summary>
-internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipeline, Func<nint>? capturableWindow = null) : IDisposable
+internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipeline, Func<nint>? capturableWindow = null,
+    Func<nint>? capturableEditor = null) : IDisposable
 {
     private bool _busy;
     private PixelRect? _lastRegion;
@@ -69,7 +70,8 @@ internal sealed class CaptureCoordinator(AppServices app, OutputPipeline pipelin
         var capture = app.Settings.Capture;
         using var snapshot = ScreenSnapshot.Take();
         var overlayTask = CaptureOverlay.SelectAsync(snapshot, new OverlayOptions(OverlayMode.Screenshot,
-            capture.SnapToWindows, capture.ShowMagnifier, capture.ShowCrosshair, capturableWindow?.Invoke() ?? 0), _shutdown.Token);
+            capture.SnapToWindows, capture.ShowMagnifier, capture.ShowCrosshair,
+            capturableWindow?.Invoke() ?? 0, capturableEditor?.Invoke() ?? 0), _shutdown.Token);
         Log.Info($"Region overlay shown in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} ms");
 
         var selection = await overlayTask;

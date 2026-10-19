@@ -59,7 +59,8 @@ internal sealed partial class AppController : IDisposable
         _pipeline = new OutputPipeline(_app);
         _app.Output = _pipeline;
         _capture = new CaptureCoordinator(_app, _pipeline,
-            () => _settingsWindow is { } settings ? WinRT.Interop.WindowNative.GetWindowHandle(settings) : 0);
+            () => _settingsWindow is { } settings ? WinRT.Interop.WindowNative.GetWindowHandle(settings) : 0,
+            () => _historyWindow is { } editor ? WinRT.Interop.WindowNative.GetWindowHandle(editor) : 0);
         _actions = new CaptureActions(_app);
         _agentServer = new AgentCaptureServer(_app, _capture,
             () => _exiting || IsRecording || _startTask is not null || _stopTask is not null,
@@ -114,14 +115,16 @@ internal sealed partial class AppController : IDisposable
 
         var firstRun = !_app.Settings.General.FirstRunCompleted;
         Log.Info($"Started (first run: {firstRun}, args: {commandLine})");
+        var startupCommand = GetStartupCommand(commandLine, firstRun,
+            commandLine.Command == AppCommand.None && !commandLine.Background && PrintScreenNeedsAttention());
 
-        if (commandLine.Command is not AppCommand.None)
+        if (commandLine.Command == AppCommand.None && startupCommand == AppCommand.Settings)
         {
-            Execute(commandLine.Command, secondInstance: false);
+            ShowSettings(SettingsPage.Hotkeys);
         }
-        else if (firstRun || (!commandLine.Background && PrintScreenNeedsAttention()))
+        else if (startupCommand is not AppCommand.None)
         {
-            ShowSettings(firstRun ? SettingsPage.General : SettingsPage.Hotkeys);
+            Execute(startupCommand, secondInstance: false);
         }
         else if (!commandLine.Background)
         {
@@ -129,7 +132,7 @@ internal sealed partial class AppController : IDisposable
         }
 
         ReportHotkeyConflicts();
-        if (firstRun && _settingsWindow is { } firstSettings) Launch(firstSettings.ShowQuickStartAsync, "Guided setup failed");
+        if (firstRun) Launch(MarkFirstRunCompletedAsync, "Could not save startup settings");
         _updates.Start();
         _agentServer.Start();
         Program.MarkReady();
@@ -141,6 +144,14 @@ internal sealed partial class AppController : IDisposable
             if (_app.Settings.General.DescribeScreenshots) Launch(() => _descriptions.EnqueueAsync(item), "Screenshot description failed");
             else Launch(() => Task.Run(() => _app.History.SetDescriptionPending(item.Id, false)), "Could not update pending description");
         }
+    }
+
+    internal static AppCommand GetStartupCommand(CommandLine commandLine, bool firstRun, bool printScreenNeedsAttention)
+    {
+        if (commandLine.Command is not AppCommand.None) return commandLine.Command;
+        if (commandLine.Background) return AppCommand.None;
+        if (printScreenNeedsAttention) return AppCommand.Settings;
+        return firstRun ? AppCommand.History : AppCommand.None;
     }
 
     private async Task MarkFirstRunCompletedAsync()

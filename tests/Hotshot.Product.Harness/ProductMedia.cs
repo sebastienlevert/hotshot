@@ -83,9 +83,14 @@ internal static class ProductMedia
             app.History.Add(first);
             File.Copy(plain.Path, Path.Combine(app.Paths.OriginalsDirectory, first.Id + ".png"));
             var annotation = new AnnotationDocument(1200, 760);
-            annotation.Add(new ArrowAnnotation { Start = new Vector2(880, 520), End = new Vector2(720, 370), Color = RgbaColor.Red, StrokeWidth = 5 });
-            annotation.Add(new RectangleAnnotation { Rect = new RectF(625, 312, 410, 118), Color = RgbaColor.Red, StrokeWidth = 4 });
-            annotation.Add(new TextAnnotation { Position = new Vector2(650, 452), Text = "Make this action clearer", FontSize = 26, Color = RgbaColor.Red });
+            var arrow = new ArrowAnnotation { Start = new Vector2(880, 520), End = new Vector2(720, 370), Color = RgbaColor.Red, StrokeWidth = 5 };
+            var label = new TextAnnotation { Position = new Vector2(640, 556), Text = "Make this action clearer", FontSize = 26, Color = RgbaColor.Red };
+            if (label.GetVisualBounds().Y < arrow.GetVisualBounds().Bottom + 20 ||
+                label.GetVisualBounds().Right > annotation.ImageWidth || label.GetVisualBounds().Bottom > annotation.ImageHeight)
+                throw new InvalidDataException("Publication annotation text must fit below the arrow without overlap.");
+            annotation.Add(arrow);
+            annotation.Add(new RectangleAnnotation { Rect = new RectF(640, 325, 190, 80), Color = RgbaColor.Red, StrokeWidth = 4 });
+            annotation.Add(label);
             await File.WriteAllTextAsync(Path.Combine(app.Paths.OriginalsDirectory, first.Id + ".json"), annotation.ToJson());
 
             workspace = new WorkspaceWindow(app, new CaptureActions(app), _ => throw new InvalidOperationException("This media fixture cannot trigger desktop capture."));
@@ -93,7 +98,8 @@ internal static class ProductMedia
             PrepareWindow(workspace);
             await workspace.SelectAsync(first);
             await Task.Delay(1200);
-            await ScreenshotAsync(workspace, Path.Combine(output, "editor.png"));
+            var editorImage = await ScreenshotAsync(workspace, Path.Combine(output, "editor.png"));
+            var duration = TimeSpan.Zero;
             await using (var recorder = await ScreenRecorder.StartAsync(new RecordingOptions
             {
                 Target = new WindowTarget(WinRT.Interop.WindowNative.GetWindowHandle(workspace)),
@@ -107,6 +113,7 @@ internal static class ProductMedia
                 await workspace.SelectAsync(first);
                 await Task.Delay(4500);
                 var video = await recorder.StopAsync();
+                duration = video.Duration;
                 if (video.HasAudio || video.Duration.TotalSeconds < 10 || video.FileSize == 0)
                     throw new InvalidDataException("Product video did not meet its silent, real-window recording requirements.");
                 Console.WriteLine($"PASS real WinUI workspace recording: {video.Duration.TotalSeconds:F1}s, no audio.");
@@ -120,8 +127,10 @@ internal static class ProductMedia
             await Task.Delay(1200);
             await CheckSettingsHeaderAsync(settings);
             PrepareWindow(settings);
+            settings.SelectPage(SettingsPage.Naming);
+            ((Grid)settings.Content).Children.OfType<NavigationView>().Single().IsPaneOpen = true;
             await Task.Delay(300);
-            await ScreenshotAsync(settings, Path.Combine(output, "settings.png"));
+            var settingsImage = await ScreenshotAsync(settings, Path.Combine(output, "settings.png"));
             await CheckSetupAsync(settings, app);
             settings.Close();
             settings = null;
@@ -130,7 +139,7 @@ internal static class ProductMedia
             comparison.Activate();
             PrepareWindow(comparison);
             await Task.Delay(1000);
-            await ScreenshotAsync(comparison, Path.Combine(output, "comparison.png"));
+            var comparisonImage = await ScreenshotAsync(comparison, Path.Combine(output, "comparison.png"));
             comparison.Close();
             comparison = null;
 
@@ -139,10 +148,22 @@ internal static class ProductMedia
                 schemaVersion = 1,
                 collectedAt = DateTimeOffset.UtcNow,
                 applicationVersion = typeof(AppServices).Assembly.GetName().Version?.ToString(),
+                applicationInformationalVersion = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(
+                    typeof(AppServices).Assembly)?.InformationalVersion,
+                sourceCommit = Environment.GetEnvironmentVariable("GITHUB_SHA"),
                 windowsBuild = Environment.OSVersion.Version.ToString(),
                 processArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
+                publicationSizeDips = new { width = 1100, height = 800 },
+                screenshots = new Dictionary<string, object>
+                {
+                    ["editor.png"] = new { width = editorImage.Width, height = editorImage.Height },
+                    ["settings.png"] = new { width = settingsImage.Width, height = settingsImage.Height },
+                    ["comparison.png"] = new { width = comparisonImage.Width, height = comparisonImage.Height },
+                },
+                walkthrough = new { durationSeconds = duration.TotalSeconds, hasAudio = false },
+                annotationPlacement = new { arrow = arrow.GetVisualBounds(), text = label.GetVisualBounds(), minimumGap = 20 },
                 monitors = Monitors.GetAll().Select(monitor => new { width = monitor.Bounds.Width, height = monitor.Bounds.Height, scale = monitor.Scale, primary = monitor.IsPrimary }),
-                passed = new[] { "real WinUI isolated-profile rendering", "native title-bar navigation and responsive search", "WGC screenshots of own native windows", "silent native workspace recording", "filename selection", "annotation sidecar loading", "native comparison rendering" },
+                passed = new[] { "real WinUI isolated-profile rendering", "native title-bar navigation and responsive search", "WGC screenshots of own native windows", "silent native workspace recording", "filename selection", "annotation sidecar loading", "text below arrow without overlap", "native comparison rendering" },
                 notVerified = new[] { "physical ARM64 execution", "mixed-scale multi-monitor movement", "HDR display fidelity", "Narrator usability" },
                 privacy = "Generated library only; captures target this harness's windows. No desktop, clipboard, microphone, real profile, OneDrive, or provider access.",
             };
@@ -299,16 +320,18 @@ internal static class ProductMedia
         NativeProductWindow.AllowPublicationSize(handle);
         if (!Win32.SetWindowDisplayAffinity(handle, Win32.WDA_NONE))
             throw new InvalidOperationException("Cannot make this fixture-owned window capturable.");
-        window.AppWindow.MoveAndResize(new RectInt32(20, 80, 2200, 1500));
+        var scale = Monitors.FromWindow(handle).Scale;
+        window.AppWindow.MoveAndResize(new RectInt32(20, 40, (int)Math.Round(1100 * scale), (int)Math.Round(800 * scale)));
     }
 
-    private static async Task ScreenshotAsync(Window window, string path)
+    private static async Task<CapturedImage> ScreenshotAsync(Window window, string path)
     {
         var captured = await WindowScreenshot.CaptureAsync(WinRT.Interop.WindowNative.GetWindowHandle(window));
         if (captured.Image.Width < 480 || captured.Image.Height < 360)
             throw new InvalidDataException($"Native product window is too small to document: {captured.Image.Width}x{captured.Image.Height}.");
         await ImageCodec.SavePngAsync(captured.Image, path);
         Console.WriteLine($"PASS real native window media: {Path.GetFileName(path)}, {captured.Image.Width}x{captured.Image.Height}.");
+        return captured.Image;
     }
 
     private static async Task<(string Path, CapturedImage Image)> GenerateAsync(string path, bool improved)

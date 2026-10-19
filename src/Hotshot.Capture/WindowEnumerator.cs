@@ -14,7 +14,8 @@ public static unsafe class WindowEnumerator
     };
 
     /// <summary>Visible, non-cloaked top-level windows in z-order (topmost first).</summary>
-    public static IReadOnlyList<WindowInfo> GetVisibleWindows(uint? excludeProcessId = null, nint includeWindow = 0, uint? onlyProcessId = null)
+    public static IReadOnlyList<WindowInfo> GetVisibleWindows(uint? excludeProcessId = null, nint includeWindow = 0,
+        uint? onlyProcessId = null, nint includeAdditionalWindow = 0)
     {
         using var awareness = new DpiAwarenessScope();
         var handles = new List<nint>(256);
@@ -43,7 +44,8 @@ public static unsafe class WindowEnumerator
             }
 
             Native.GetWindowThreadProcessId(hwnd, out var pid);
-            if (excludeProcessId == pid && hwnd != includeWindow || onlyProcessId is { } included && pid != included)
+            if (excludeProcessId == pid && hwnd != includeWindow && hwnd != includeAdditionalWindow ||
+                onlyProcessId is { } included && pid != included)
             {
                 continue;
             }
