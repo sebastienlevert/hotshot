@@ -35,9 +35,10 @@ public sealed class RoamingSettingsStore
     public event Action? StatusChanged;
     public event Action<string>? Failed;
 
-    public RoamingSettingsStore(string localPath, Func<string?>? discoverRoot = null, bool forceLocal = false)
+    public RoamingSettingsStore(string localPath, Func<string?>? discoverRoot = null, bool forceLocal = false,
+        string? defaultSaveFolder = null)
     {
-        _local = new SettingsStore(localPath);
+        _local = new SettingsStore(localPath, defaultSaveFolder);
         _configurationPath = Path.Combine(Path.GetDirectoryName(localPath)!, "settings-sync.json");
         _discoverRoot = discoverRoot ?? (() => null);
         _forceLocal = forceLocal;

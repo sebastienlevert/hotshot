@@ -11,6 +11,7 @@ using Hotshot.Editor;
 using Hotshot.Editor.Model;
 using Hotshot.Interop;
 using Hotshot.Shell;
+using Hotshot.Settings;
 using Hotshot.Views;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Dispatching;
@@ -96,7 +97,20 @@ internal static class ProductAcceptance
             await report.CheckAsync("settings-native-responsive-header", () => ProductMedia.CheckSettingsHeaderAsync(settings));
             await report.CheckAsync("settings-native-plain-language-default-pages", () => CheckSettingsCopyAsync(settings, output));
             await report.CheckAsync("settings-native-centered-responsive-pages", () => CheckSettingsAlignmentAsync(settings, output));
+            await report.CheckAsync("onedrive-capture-default-prefers-work-and-retains-pictures-location", () =>
+            {
+                var personal = new OneDriveFolder("Generated personal", Path.Combine(profile, "OneDrive-personal"));
+                var work = new OneDriveFolder("Generated work", Path.Combine(profile, "OneDrive-work"), WorkOrSchool: true);
+                var pictures = Path.Combine(profile, "Pictures");
+                if (OneDriveFolders.GetDefaultCaptureFolder([personal, work], pictures) != Path.Combine(work.Path, "Pictures", "Hotshot") ||
+                    OneDriveFolders.GetDefaultCaptureFolder([personal], pictures) != Path.Combine(personal.Path, "Pictures", "Hotshot") ||
+                    OneDriveFolders.GetDefaultCaptureFolder([], pictures) != Path.Combine(pictures, "Hotshot") ||
+                    OneDriveFolders.GetDefaultCaptureFolder([work], Path.Combine(work.Path, "Localized-pictures")) != Path.Combine(work.Path, "Localized-pictures", "Hotshot"))
+                    throw new InvalidDataException("Capture defaults must prefer work OneDrive, then personal, preserving a redirected Pictures folder.");
+                return Task.CompletedTask;
+            });
             await report.CheckAsync("native-full-window-snap-targets", CheckWindowSnapAsync);
+            await report.CheckAsync("capture-overlay-native-escape-cancellation", OverlayKeyboardChecks.RunAsync);
             await report.CheckAsync("recording-countdown-zero-and-compact-timer", () => CheckRecordingTimerAsync(app, settings, paths.SettingsFile, output));
             await report.CheckAsync("copilot-native-sign-in-consent-cancellation-and-failure", () =>
                 CheckCopilotSignInAsync(settings, app, accountClients, browserVisits));

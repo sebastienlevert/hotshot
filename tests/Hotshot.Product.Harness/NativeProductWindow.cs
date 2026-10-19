@@ -28,6 +28,13 @@ internal static unsafe partial class NativeProductWindow
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool GetWindowDisplayAffinity(nint window, out uint affinity);
 
+    [LibraryImport("user32.dll")]
+    public static partial nint GetFocus();
+    [LibraryImport("user32.dll")]
+    public static partial nint GetCapture();
+    [LibraryImport("user32.dll")]
+    public static partial uint GetWindowThreadProcessId(nint window, out uint processId);
+
     public static uint CaptureAffinity(nint window)
     {
         if (!GetWindowDisplayAffinity(window, out var affinity))

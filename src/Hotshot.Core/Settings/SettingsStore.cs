@@ -12,11 +12,15 @@ internal sealed partial class SettingsJsonContext : JsonSerializerContext;
 public sealed class SettingsStore
 {
     private readonly string _path;
+    private readonly string? _defaultSaveFolder;
     private readonly Lock _gate = new();
 
-    public SettingsStore(string path)
+    public SettingsStore(string path, string? defaultSaveFolder = null)
     {
+        if (defaultSaveFolder is not null && !Path.IsPathFullyQualified(defaultSaveFolder))
+            throw new ArgumentException("The default captures folder must be an absolute path.", nameof(defaultSaveFolder));
         _path = path;
+        _defaultSaveFolder = defaultSaveFolder;
     }
 
     public event EventHandler<AppSettings>? Saved;
@@ -42,14 +46,21 @@ public sealed class SettingsStore
             }
             catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
             {
-                return new AppSettings().Normalize();
+                return CreateDefaults();
             }
             catch (Exception ex) when (ex is JsonException or NotSupportedException)
             {
                 File.Copy(_path, _path + ".corrupt", overwrite: true);
-                return new AppSettings().Normalize();
+                return CreateDefaults();
             }
         }
+    }
+
+    private AppSettings CreateDefaults()
+    {
+        var settings = new AppSettings();
+        if (_defaultSaveFolder is not null) settings.General.SaveFolder = _defaultSaveFolder;
+        return settings.Normalize();
     }
 
     public void Save(AppSettings settings)

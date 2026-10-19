@@ -20,6 +20,12 @@ read only this fixture's window flags; they do not capture desktop pixels.
 Window snapping checks use generated windows from this process only: full
 physical-pixel bounds, topmost selection and hidden-window filtering. They do
 not capture the desktop or move the user's pointer.
+Capture-overlay checks draw a generated bitmap, then queue window-local keyboard
+and mouse messages through the native message loop. Escape must cancel both
+screenshot and recording selection before and during a drag, without returning
+a selection or retaining keyboard/mouse capture. Dialog-key ownership is also
+checked so keyboard navigation cannot swallow Escape, Enter or arrow keys.
+These checks never capture desktop pixels or inject global input.
 The recording timer fixture checks countdown through zero, hiding before
 startup, timer-only Mini/Small layouts in all four corners, elapsed/pause
 feedback and retained pause/stop controls without starting a recorder.
@@ -48,6 +54,9 @@ XAML compilation. UIA queries stay scoped to this harness's own HWND/process.
 First-launch checks verify a ready workspace with no automatic tour, quiet
 background startup, explicit commands and shortcut-attention handling. Guided
 setup is exercised only as an optional, manually opened settings feature.
+Capture-default checks use supplied synthetic account paths: work/school
+OneDrive before personal, a redirected Pictures folder when applicable, and
+local Pictures without OneDrive. They never query the user's OneDrive accounts.
 
 Build and execute **on the matching native architecture**, using a task-owned
 output directory (local validation uses the session's C-drive artifact area):

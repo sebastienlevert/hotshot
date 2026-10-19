@@ -56,14 +56,15 @@ For the portable version, extract the **entire ZIP** to a permanent, writable fo
 
 1. Start Hotshot. Look for its amber-and-coral lightning icon near the Windows clock; it may be under **Show hidden icons**.
 2. Press **Print Screen**. Drag to select a region, or click a window.
-3. Paste into another app with **Ctrl+V**. By default, the screenshot is also saved under **Hotshot in your Pictures folder**, with date-based subfolders.
+3. Paste into another app with **Ctrl+V**. Screenshots also save to **Pictures\Hotshot in OneDrive** (work/school first, then personal), or local Pictures without OneDrive.
 4. Click the tray icon when you want to review or edit it. Choose its filename to load it into the editor.
 
 **No window appears after a screenshot. That is intentional.** Capturing, copying, and saving happen without opening the editor or changing its selection.
 
 No first-run tour or setup is required. Clipboard copying, file saving and window
 snapping are on; Copilot descriptions and assistant access stay off. Available
-OneDrive is used for settings automatically, without changing your captures folder.
+OneDrive is used for settings automatically. New installs also prefer OneDrive
+for captures; existing folder choices are kept.
 An optional setup check is available under **About Hotshot > Set up Hotshot**.
 
 If Print Screen opens Snipping Tool instead, see [Troubleshooting](#troubleshooting).
@@ -197,7 +198,10 @@ For a GIF, select an MP4 and choose **Convert to GIF**, enable automatic GIF cre
 
 ## Choose folders and filenames
 
-The default location is **Hotshot in your Pictures folder**. Change it under **General > Captures folder**. Canceling the picker keeps the current location.
+New installs use **Pictures\Hotshot in work/school OneDrive**, or personal OneDrive
+if no work/school account is available. Without OneDrive, captures stay in local
+**Pictures\Hotshot**. Existing folder choices and files are never moved.
+Change it under **General > Captures folder**; canceling the picker keeps the current location.
 
 Under **File naming**, set separate patterns for screenshots and recordings/GIFs. The live preview shows the result; the token dropdown includes examples and inserts a token at the cursor.
 
@@ -241,6 +245,10 @@ On your other Windows machines, sign into the same OneDrive account, let that fo
 | Local-OCR preference, AI exclusion list, export presets, saved searches | Cloud-AI enable/review choices, all coding-agent permissions, project baseline IDs |
 
 **This syncs settings, not captures or history.** Hotshot does not share a folder with other people or change OneDrive permissions. The OneDrive desktop client handles uploads/downloads; seeing a local file does not prove cloud transfer is complete.
+
+The default capture folder is inside OneDrive when available, so OneDrive can
+upload those saved images and recordings. History, private originals and sign-ins
+remain on this device; their folders are not part of the capture-folder default.
 
 Under **General > Settings across devices**, choose another OneDrive root, reload shared preferences, or select **Use local preferences only**. The page shows the exact file paths and status. Local-only mode does not delete the shared file.
 
