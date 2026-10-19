@@ -50,7 +50,7 @@ jobs:
     env:
       NATIVE_UI_ROOT: C:\HotshotNativeUi\${{ github.run_id }}-${{ github.run_attempt }}\${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v4
         id: sdk
         with:
