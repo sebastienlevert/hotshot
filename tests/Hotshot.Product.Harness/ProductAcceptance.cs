@@ -111,6 +111,7 @@ internal static class ProductAcceptance
             });
             await report.CheckAsync("native-full-window-snap-targets", CheckWindowSnapAsync);
             await report.CheckAsync("capture-overlay-native-escape-cancellation", OverlayKeyboardChecks.RunAsync);
+            await report.CheckAsync("capture-overlay-native-region-first-pointer-and-window-clicks", OverlayKeyboardChecks.RunPointerAsync);
             await report.CheckAsync("recording-countdown-zero-and-compact-timer", () => CheckRecordingTimerAsync(app, settings, paths.SettingsFile, output));
             await report.CheckAsync("copilot-native-sign-in-consent-cancellation-and-failure", () =>
                 CheckCopilotSignInAsync(settings, app, accountClients, browserVisits));

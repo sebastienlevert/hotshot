@@ -442,7 +442,7 @@ internal sealed partial class SettingsWindow : Window
                 panel.Children.Add(new Expander { Header = "Advanced", Content = advanced,
                     HorizontalAlignment = HorizontalAlignment.Stretch });
                 Section(panel, "Selection");
-                Toggle(panel, "Snap to windows", "Hover to select a whole window. Drag to capture an area.", _draft.Capture.SnapToWindows, v => _draft.Capture.SnapToWindows = v);
+                Toggle(panel, "Snap to windows", "Drag to select an area, or click a highlighted window.", _draft.Capture.SnapToWindows, v => _draft.Capture.SnapToWindows = v);
                 Toggle(panel, "Show magnifier", "Inspect individual pixels while selecting a region.", _draft.Capture.ShowMagnifier, v => _draft.Capture.ShowMagnifier = v);
                 Toggle(panel, "Show crosshair", "Align the selection precisely.", _draft.Capture.ShowCrosshair, v => _draft.Capture.ShowCrosshair = v);
                 Toggle(panel, "Include cursor", "Include the mouse pointer in the saved screenshot.", _draft.Capture.IncludeCursor, v => _draft.Capture.IncludeCursor = v);

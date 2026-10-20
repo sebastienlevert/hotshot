@@ -2,7 +2,7 @@ using Hotshot.Interop;
 
 namespace Hotshot.Capture;
 
-internal readonly record struct CaptureTargetFeedback(bool WindowTarget, bool Magnifier, bool Crosshair, string Label)
+internal readonly record struct CaptureTargetFeedback(bool WindowTarget, bool Magnifier, bool Crosshair, string Label, string Hint)
 {
     public static CaptureTargetFeedback Create(bool dragging, WindowInfo? window, PixelRect selection, bool magnifier, bool crosshair)
     {
@@ -14,6 +14,9 @@ internal readonly record struct CaptureTargetFeedback(bool WindowTarget, bool Ma
             var title = window.Title.Length > 48 ? window.Title[..47] + "…" : window.Title;
             label = $"Window: {title}  ·  {size}";
         }
-        return new(windowTarget, magnifier && !windowTarget, crosshair && !windowTarget, label);
+        var hint = windowTarget
+            ? "Drag to select an area  ·  Click for window  ·  Space = screen  ·  Esc = cancel"
+            : "Drag to select an area  ·  Space = screen  ·  Esc = cancel";
+        return new(windowTarget, magnifier, crosshair, label, hint);
     }
 }

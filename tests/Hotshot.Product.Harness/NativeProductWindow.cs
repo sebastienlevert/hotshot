@@ -33,6 +33,8 @@ internal static unsafe partial class NativeProductWindow
     [LibraryImport("user32.dll")]
     public static partial nint GetCapture();
     [LibraryImport("user32.dll")]
+    public static partial nint GetCursor();
+    [LibraryImport("user32.dll")]
     public static partial uint GetWindowThreadProcessId(nint window, out uint processId);
 
     public static uint CaptureAffinity(nint window)

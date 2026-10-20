@@ -8,13 +8,14 @@ public sealed class CaptureTargetFeedbackTests
     private static readonly WindowInfo Window = new(1, WindowBounds, "Example app", "Window", 1);
 
     [Fact]
-    public void HoverShowsAWholeWindowTargetWithoutPixelSelectionTools()
+    public void WindowHoverKeepsRegionSelectionToolsAndDragFirstGuidance()
     {
         var feedback = CaptureTargetFeedback.Create(false, Window, WindowBounds, true, true);
         Assert.True(feedback.WindowTarget);
-        Assert.False(feedback.Magnifier);
-        Assert.False(feedback.Crosshair);
+        Assert.True(feedback.Magnifier);
+        Assert.True(feedback.Crosshair);
         Assert.Equal("Window: Example app  ·  720 × 480", feedback.Label);
+        Assert.Equal("Drag to select an area  ·  Click for window  ·  Space = screen  ·  Esc = cancel", feedback.Hint);
     }
 
     [Fact]
@@ -28,12 +29,18 @@ public sealed class CaptureTargetFeedbackTests
         Assert.Equal("Area  ·  200 × 140", feedback.Label);
     }
 
-    [Fact]
-    public void RegionFeedbackKeepsMagnifierAndCrosshairOptOut()
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public void SelectionToolsRespectPreferencesOverWindowsAndWhileDragging(bool dragging, bool magnifier, bool crosshair)
     {
-        var feedback = CaptureTargetFeedback.Create(true, null, new PixelRect(0, 0, 200, 100), false, false);
-        Assert.False(feedback.Magnifier);
-        Assert.False(feedback.Crosshair);
+        var feedback = CaptureTargetFeedback.Create(dragging, Window, new PixelRect(0, 0, 200, 100), magnifier, crosshair);
+        Assert.Equal(magnifier, feedback.Magnifier);
+        Assert.Equal(crosshair, feedback.Crosshair);
     }
 
     [Fact]
@@ -41,7 +48,8 @@ public sealed class CaptureTargetFeedbackTests
     {
         var feedback = CaptureTargetFeedback.Create(false, Window with { Title = "" }, WindowBounds, true, true);
         Assert.Equal("Window  ·  720 × 480", feedback.Label);
-        Assert.False(feedback.Magnifier);
+        Assert.True(feedback.Magnifier);
+        Assert.True(feedback.Crosshair);
     }
 
     [Fact]
@@ -50,5 +58,8 @@ public sealed class CaptureTargetFeedbackTests
         var feedback = CaptureTargetFeedback.Create(false, null, new PixelRect(0, 0, 1920, 1080), true, true);
         Assert.Equal("Screen  ·  1920 × 1080", feedback.Label);
         Assert.False(feedback.WindowTarget);
+        Assert.True(feedback.Magnifier);
+        Assert.True(feedback.Crosshair);
+        Assert.Equal("Drag to select an area  ·  Space = screen  ·  Esc = cancel", feedback.Hint);
     }
 }
