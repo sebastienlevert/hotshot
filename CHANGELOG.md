@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.21](https://github.com/sebastienlevert/hotshot/compare/v0.1.20...v0.1.21) (2026-10-20)
+
+
+### Bug Fixes
+
+* **capture:** keep region selection clear over windows ([364b3a0](https://github.com/sebastienlevert/hotshot/commit/364b3a07aa313f2757bad225ad7252edbb3f073b))
+
 ## [0.1.20](https://github.com/sebastienlevert/hotshot/compare/v0.1.19...v0.1.20) (2026-10-19)
 
 
