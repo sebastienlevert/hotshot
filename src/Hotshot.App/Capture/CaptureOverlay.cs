@@ -531,7 +531,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
 
         if (!s.IsEmpty)
         {
-            DrawFrame(dc, s.Inflate(f.Border), f.Border, _accentBrush);
+            DrawFrame(dc, s, f.Border, _accentBrush);
         }
 
         DrawPill(dc, f.Label, f.LabelText, f.Scale);
@@ -564,6 +564,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
 
     private static void DrawFrame(nint dc, PixelRect r, int thickness, nint brush)
     {
+        thickness = Math.Min(thickness, Math.Min(r.Width, r.Height));
         var top = new RECT(r.Left, r.Top, r.Right, r.Top + thickness);
         var bottom = new RECT(r.Left, r.Bottom - thickness, r.Right, r.Bottom);
         var left = new RECT(r.Left, r.Top, r.Left + thickness, r.Bottom);
