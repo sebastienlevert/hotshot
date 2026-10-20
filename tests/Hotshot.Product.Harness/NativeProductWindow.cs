@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace Hotshot.ProductHarness;
 
@@ -36,6 +37,44 @@ internal static unsafe partial class NativeProductWindow
     public static partial nint GetCursor();
     [LibraryImport("user32.dll")]
     public static partial uint GetWindowThreadProcessId(nint window, out uint processId);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetDC(nint window);
+    [LibraryImport("user32.dll")]
+    private static partial int ReleaseDC(nint window, nint dc);
+    [LibraryImport("gdi32.dll")]
+    private static partial uint GetPixel(nint dc, int x, int y);
+
+    public static uint ReadWindowPixel(nint window, int x, int y)
+    {
+        _ = GetWindowThreadProcessId(window, out var processId);
+        if (window == 0 || processId != (uint)Environment.ProcessId)
+            throw new InvalidOperationException("Pixel checks may only read this harness's generated windows.");
+        using var dc = new WindowDcHandle(window);
+        var color = GetPixel(dc.DangerousGetHandle(), x, y);
+        if (color == uint.MaxValue)
+            throw new InvalidOperationException("Cannot read a generated window's rendered pixel.");
+        return color;
+    }
+
+    private sealed class WindowDcHandle : SafeHandleZeroOrMinusOneIsInvalid
+    {
+        private readonly nint _window;
+
+        public WindowDcHandle(nint window) : base(ownsHandle: true)
+        {
+            _window = window;
+            SetHandle(GetDC(window));
+            if (IsInvalid) throw new InvalidOperationException("Cannot access the generated window's device context.");
+        }
+
+        protected override bool ReleaseHandle()
+        {
+            var released = ReleaseDC(_window, handle) == 1;
+            if (!released) System.Diagnostics.Trace.TraceWarning("Cannot release the generated window's device context.");
+            return released;
+        }
+    }
 
     public static uint CaptureAffinity(nint window)
     {

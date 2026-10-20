@@ -107,7 +107,8 @@ The hamburger navigation button and search box both sit inside the Settings titl
 For most captures, use the shortcuts above. Under **Screenshots**, you can add a delay of up to 30 seconds to make time for opening a menu or preparing a window.
 
 **Window captures:** hover over a window to highlight it fully, then click.
-The bold outline and **Window** label show the click target. The pointer stays
+The bold outline stays inside the window so it remains visible at screen edges.
+The **Window** label shows the click target. The pointer stays
 a crosshair, and the magnifier and crosshair guides stay visible when enabled:
 drag anywhere to select an area instead, including across monitors for screenshots.
 **Snap to windows** is on by default.
