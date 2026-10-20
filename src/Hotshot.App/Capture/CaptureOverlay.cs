@@ -102,6 +102,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         Win32.SetForegroundWindow(Handle);
         Win32.BringWindowToTop(Handle);
         Win32.SetFocus(Handle);
+        SetSelectionCursor();
         Win32.UpdateWindow(Handle);
     }
 
@@ -336,8 +337,8 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         SetSelectionCursor();
     }
 
-    private void SetSelectionCursor() =>
-        Win32.SetCursor(Win32.LoadCursor(0, !_dragging && _hoverWindow is not null ? Win32.IDC_HAND : Win32.IDC_CROSS));
+    private static void SetSelectionCursor() =>
+        Win32.SetCursor(Win32.LoadCursor(0, Win32.IDC_CROSS));
 
     private void UpdateHover(int x, int y)
     {
@@ -448,9 +449,7 @@ internal sealed unsafe class CaptureOverlay : NativeWindow
         var hintText = string.Empty;
         if (!_mouseDown)
         {
-            hintText = _hoverWindow is not null
-                ? "Click = whole window  ·  drag = area  ·  Space = screen  ·  Esc = cancel"
-                : "Drag = area  ·  Space = screen  ·  Esc = cancel";
+            hintText = feedback.Hint;
             var hintSize = MeasureText(hintText, scale, out _);
             var hw = hintSize.Width + pad * 3;
             var hh = hintSize.Height + (int)(12 * scale);
