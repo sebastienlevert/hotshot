@@ -1,6 +1,6 @@
 {
   "name": "hotshot",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Native Windows screenshots, visual verification and capture-library search through Hotshot.",
   "author": {
     "name": "Sebastien Levert"

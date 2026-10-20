@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.22](https://github.com/sebastienlevert/hotshot/compare/v0.1.21...v0.1.22) (2026-10-20)
+
+
+### Bug Fixes
+
+* **capture:** keep selection borders visible at screen edges ([46ed934](https://github.com/sebastienlevert/hotshot/commit/46ed934a9040b10fc9c51fb5a4574e23ccda1c39))
+
 ## [0.1.21](https://github.com/sebastienlevert/hotshot/compare/v0.1.20...v0.1.21) (2026-10-20)
 
 
