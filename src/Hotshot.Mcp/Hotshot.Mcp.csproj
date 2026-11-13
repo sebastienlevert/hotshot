@@ -13,6 +13,6 @@
     </AssemblyAttribute>
     <ProjectReference Include="..\Hotshot.Core\Hotshot.Core.csproj" />
     <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="11.0.0" />
   </ItemGroup>
 </Project>
